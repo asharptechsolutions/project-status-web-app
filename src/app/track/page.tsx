@@ -20,7 +20,7 @@ function TrackInner() {
       if (!p) setError("Project not found. The link may be invalid.");
       else setProject(p);
       setLoading(false);
-    }).catch(() => { setError("Failed to load project."); setLoading(false); });
+    }).catch((err) => { setError(err.message || "Failed to load project."); setLoading(false); });
   }, [searchParams]);
 
   if (loading) return <div className="flex items-center justify-center min-h-[100dvh]"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" /></div>;

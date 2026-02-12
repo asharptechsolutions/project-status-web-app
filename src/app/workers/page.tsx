@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Plus, Trash2, UserCircle } from "lucide-react";
+import { toast } from "sonner";
 
 function WorkersInner() {
   const { user } = useAuth();
@@ -20,13 +21,18 @@ function WorkersInner() {
   const [role, setRole] = useState("");
   const [loading, setLoading] = useState(true);
 
-  const load = useCallback(async () => { if (user) { setWorkers(await getWorkers(user.uid)); setLoading(false); } }, [user]);
+  const load = useCallback(async () => {
+    if (!user) return;
+    try { setWorkers(await getWorkers(user.uid)); } catch (error: any) { toast.error(error.message || "Failed to load workers"); } finally { setLoading(false); }
+  }, [user]);
   useEffect(() => { load(); }, [load]);
 
   const handleCreate = async () => {
     if (!user || !name.trim()) return;
-    await createWorker({ name, role: role || undefined, userId: user.uid });
-    setName(""); setRole(""); setShowNew(false); load();
+    try {
+      await createWorker({ name, role: role || undefined, userId: user.uid });
+      setName(""); setRole(""); setShowNew(false); toast.success("Worker added"); load();
+    } catch (error: any) { toast.error(error.message || "Failed to add worker"); }
   };
 
   if (loading) return <div className="flex items-center justify-center p-8"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" /></div>;
@@ -50,7 +56,7 @@ function WorkersInner() {
                   <p className="font-medium truncate">{w.name}</p>
                   {w.role && <p className="text-sm text-muted-foreground truncate">{w.role}</p>}
                 </div>
-                <Button variant="ghost" size="sm" onClick={() => { deleteWorker(w.id); load(); }}>
+                <Button variant="ghost" size="sm" onClick={async () => { try { await deleteWorker(w.id); toast.success("Worker removed"); load(); } catch (error: any) { toast.error(error.message || "Failed to delete worker"); } }}>
                   <Trash2 className="h-4 w-4" />
                 </Button>
               </CardContent>

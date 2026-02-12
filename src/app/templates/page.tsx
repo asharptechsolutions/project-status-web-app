@@ -12,6 +12,7 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Plus, Trash2, ChevronRight } from "lucide-react";
 import { nanoid } from "nanoid";
+import { toast } from "sonner";
 
 const SAMPLE_TEMPLATES = [
   { name: "Standard Manufacturing", nodes: ["Process Order", "Order Supplies", "Metal Cutting", "Painting Station", "Final Prep", "Shipping"] },
@@ -27,7 +28,10 @@ function TemplatesInner() {
   const [stages, setStages] = useState<string[]>([""]);
   const [loading, setLoading] = useState(true);
 
-  const load = useCallback(async () => { if (user) { setTemplates(await getTemplates(user.uid)); setLoading(false); } }, [user]);
+  const load = useCallback(async () => {
+    if (!user) return;
+    try { setTemplates(await getTemplates(user.uid)); } catch (error: any) { toast.error(error.message || "Failed to load templates"); } finally { setLoading(false); }
+  }, [user]);
   useEffect(() => { load(); }, [load]);
 
   const handleCreate = async () => {
@@ -36,16 +40,20 @@ function TemplatesInner() {
     if (!validStages.length) return;
     const nodes: Omit<WorkflowNode, "status" | "startedAt" | "completedAt">[] = validStages.map((s) => ({ id: nanoid(8), label: s }));
     const edges: WorkflowEdge[] = nodes.slice(0, -1).map((n, i) => ({ id: nanoid(8), source: n.id, target: nodes[i + 1].id }));
-    await createTemplate({ name, description: "", nodes, edges, userId: user.uid, createdAt: new Date().toISOString() });
-    setName(""); setStages([""]); setShowNew(false); load();
+    try {
+      await createTemplate({ name, description: "", nodes, edges, userId: user.uid, createdAt: new Date().toISOString() });
+      setName(""); setStages([""]); setShowNew(false); toast.success("Template created"); load();
+    } catch (error: any) { toast.error(error.message || "Failed to create template"); }
   };
 
   const handleUseSample = async (sample: typeof SAMPLE_TEMPLATES[0]) => {
     if (!user) return;
     const nodes: Omit<WorkflowNode, "status" | "startedAt" | "completedAt">[] = sample.nodes.map((s) => ({ id: nanoid(8), label: s }));
     const edges: WorkflowEdge[] = nodes.slice(0, -1).map((n, i) => ({ id: nanoid(8), source: n.id, target: nodes[i + 1].id }));
-    await createTemplate({ name: sample.name, description: "", nodes, edges, userId: user.uid, createdAt: new Date().toISOString() });
-    load();
+    try {
+      await createTemplate({ name: sample.name, description: "", nodes, edges, userId: user.uid, createdAt: new Date().toISOString() });
+      toast.success("Template added"); load();
+    } catch (error: any) { toast.error(error.message || "Failed to add template"); }
   };
 
   if (loading) return <div className="flex items-center justify-center p-8"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" /></div>;
@@ -92,7 +100,7 @@ function TemplatesInner() {
                   ))}
                 </div>
               </div>
-              <Button variant="ghost" size="sm" onClick={() => { deleteTemplate(t.id); load(); }}>
+              <Button variant="ghost" size="sm" onClick={async () => { try { await deleteTemplate(t.id); toast.success("Template deleted"); load(); } catch (error: any) { toast.error(error.message || "Failed to delete template"); } }}>
                 <Trash2 className="h-4 w-4" />
               </Button>
             </CardContent>

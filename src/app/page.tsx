@@ -10,12 +10,13 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { FolderOpen, Clock, CheckCircle2, AlertCircle } from "lucide-react";
 import Link from "next/link";
+import { toast } from "sonner";
 function Dashboard() {
   const { user } = useAuth();
   const [projects, setProjects] = useState<Project[]>([]);
 
   useEffect(() => {
-    if (user) getProjects(user.uid).then(setProjects);
+    if (user) getProjects(user.uid).then(setProjects).catch((err: any) => toast.error(err.message || "Failed to load projects"));
   }, [user]);
 
   const active = projects.filter((p) => p.status === "active");

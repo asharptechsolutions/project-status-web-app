@@ -16,6 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Plus, Trash2, ArrowLeft, Play, CheckCircle2, Link2, Copy, ChevronRight } from "lucide-react";
 import { nanoid } from "nanoid";
 import basePath from "@/lib/base-path";
+import { toast } from "sonner";
 
 function ProjectsList() {
   const { user } = useAuth();
@@ -35,11 +36,16 @@ function ProjectsList() {
 
   const load = useCallback(async () => {
     if (!user) return;
-    const [p, t, w] = await Promise.all([getProjects(user.uid), getTemplates(user.uid), getWorkers(user.uid)]);
-    setProjects(p);
-    setTemplates(t);
-    setWorkers(w);
-    setLoading(false);
+    try {
+      const [p, t, w] = await Promise.all([getProjects(user.uid), getTemplates(user.uid), getWorkers(user.uid)]);
+      setProjects(p);
+      setTemplates(t);
+      setWorkers(w);
+    } catch (error: any) {
+      toast.error(error.message || "Failed to load data");
+    } finally {
+      setLoading(false);
+    }
   }, [user]);
 
   useEffect(() => { load(); }, [load]);
@@ -64,15 +70,20 @@ function ProjectsList() {
         edges = [...tmpl.edges];
       }
     }
-    const id = await createProject({
-      name: newName, clientName: newClient, clientEmail: newClientEmail,
-      nodes, edges, shareToken: nanoid(12), status: "active",
-      createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), userId: user.uid,
-    });
-    setNewName(""); setNewClient(""); setNewClientEmail(""); setSelectedTemplate(""); setShowNew(false);
-    await load();
-    const created = (await getProjects(user.uid)).find((p) => p.id === id);
-    if (created) setSelectedProject(created);
+    try {
+      const id = await createProject({
+        name: newName, clientName: newClient, clientEmail: newClientEmail,
+        nodes, edges, shareToken: nanoid(12), status: "active",
+        createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), userId: user.uid,
+      });
+      setNewName(""); setNewClient(""); setNewClientEmail(""); setSelectedTemplate(""); setShowNew(false);
+      toast.success("Project created");
+      await load();
+      const created = (await getProjects(user.uid)).find((p) => p.id === id);
+      if (created) setSelectedProject(created);
+    } catch (error: any) {
+      toast.error(error.message || "Failed to create project");
+    }
   };
 
   const addNode = async () => {
@@ -82,10 +93,14 @@ function ProjectsList() {
     const newEdges = [...selectedProject.edges];
     if (lastNode) newEdges.push({ id: nanoid(8), source: lastNode.id, target: newNode.id });
     const updated = { ...selectedProject, nodes: [...selectedProject.nodes, newNode], edges: newEdges };
-    await updateProject(selectedProject.id, { nodes: updated.nodes, edges: updated.edges });
-    setSelectedProject(updated);
-    setNewNodeLabel("");
-    load();
+    try {
+      await updateProject(selectedProject.id, { nodes: updated.nodes, edges: updated.edges });
+      setSelectedProject(updated);
+      setNewNodeLabel("");
+      load();
+    } catch (error: any) {
+      toast.error(error.message || "Failed to add stage");
+    }
   };
 
   const updateNodeStatus = async (nodeId: string, status: WorkflowNode["status"]) => {
@@ -94,25 +109,37 @@ function ProjectsList() {
       n.id === nodeId ? { ...n, status, ...(status === "in-progress" ? { startedAt: new Date().toISOString() } : {}), ...(status === "completed" ? { completedAt: new Date().toISOString() } : {}) } : n
     );
     const allDone = nodes.every((n) => n.status === "completed");
-    await updateProject(selectedProject.id, { nodes, status: allDone ? "completed" : "active" });
-    setSelectedProject({ ...selectedProject, nodes, status: allDone ? "completed" : "active" });
-    load();
+    try {
+      await updateProject(selectedProject.id, { nodes, status: allDone ? "completed" : "active" });
+      setSelectedProject({ ...selectedProject, nodes, status: allDone ? "completed" : "active" });
+      load();
+    } catch (error: any) {
+      toast.error(error.message || "Failed to update stage");
+    }
   };
 
   const assignWorker = async (nodeId: string, workerId: string) => {
     if (!selectedProject) return;
     const nodes = selectedProject.nodes.map((n) => n.id === nodeId ? { ...n, assignedTo: workerId || undefined } : n);
-    await updateProject(selectedProject.id, { nodes });
-    setSelectedProject({ ...selectedProject, nodes });
+    try {
+      await updateProject(selectedProject.id, { nodes });
+      setSelectedProject({ ...selectedProject, nodes });
+    } catch (error: any) {
+      toast.error(error.message || "Failed to assign worker");
+    }
   };
 
   const removeNode = async (nodeId: string) => {
     if (!selectedProject) return;
     const nodes = selectedProject.nodes.filter((n) => n.id !== nodeId);
     const edges = selectedProject.edges.filter((e) => e.source !== nodeId && e.target !== nodeId);
-    await updateProject(selectedProject.id, { nodes, edges });
-    setSelectedProject({ ...selectedProject, nodes, edges });
-    load();
+    try {
+      await updateProject(selectedProject.id, { nodes, edges });
+      setSelectedProject({ ...selectedProject, nodes, edges });
+      load();
+    } catch (error: any) {
+      toast.error(error.message || "Failed to remove stage");
+    }
   };
 
   const copyShareLink = () => {
@@ -124,9 +151,14 @@ function ProjectsList() {
   };
 
   const handleDelete = async (id: string) => {
-    await deleteProject(id);
-    setSelectedProject(null);
-    load();
+    try {
+      await deleteProject(id);
+      setSelectedProject(null);
+      toast.success("Project deleted");
+      load();
+    } catch (error: any) {
+      toast.error(error.message || "Failed to delete project");
+    }
   };
 
   if (loading) return <div className="flex items-center justify-center p-8"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" /></div>;
