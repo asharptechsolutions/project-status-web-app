@@ -131,6 +131,17 @@ function ProjectsList() {
 
   const updateNodeStatus = async (nodeId: string, status: WorkflowNode["status"]) => {
     if (!selectedProject) return;
+    // Parallel workflow validation: check all predecessors are completed before starting
+    if (status === "in-progress") {
+      const incomingEdges = selectedProject.edges.filter((e) => e.target === nodeId);
+      const incomplete = incomingEdges
+        .map((e) => selectedProject.nodes.find((n) => n.id === e.source))
+        .filter((n) => n && n.status !== "completed");
+      if (incomplete.length > 0) {
+        toast.error(`Cannot start: waiting on ${incomplete.map((n) => n!.label).join(", ")}`);
+        return;
+      }
+    }
     const nodes = selectedProject.nodes.map((n) =>
       n.id === nodeId ? { ...n, status, ...(status === "in-progress" ? { startedAt: new Date().toISOString() } : {}), ...(status === "completed" ? { completedAt: new Date().toISOString() } : {}) } : n
     );

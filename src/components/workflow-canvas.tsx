@@ -20,11 +20,12 @@ import {
   type NodeProps,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import type { WorkflowNode, WorkflowEdge, Worker } from "@/lib/types";
+import type { WorkflowNode as WorkflowNodeType, WorkflowEdge, Worker } from "@/lib/types";
+type WorkflowNode = WorkflowNodeType;
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Play, CheckCircle2, Trash2, Clock, Loader2, User, Plus, LayoutGrid } from "lucide-react";
+import { Play, CheckCircle2, Trash2, Clock, Loader2, User, Plus, LayoutGrid, Lock, Unlock } from "lucide-react";
 import Dagre from "@dagrejs/dagre";
 import { Input } from "@/components/ui/input";
 import {
@@ -41,6 +42,8 @@ interface StageNodeData {
   assignedTo?: string;
   workers: Worker[];
   readOnly?: boolean;
+  blocked?: boolean;
+  blockedBy?: string[];
   onStatusChange: (nodeId: string, status: WorkflowNode["status"]) => void;
   onAssignWorker: (nodeId: string, workerId: string) => void;
   onRemove: (nodeId: string) => void;
@@ -61,6 +64,8 @@ function StageNode({ id, data }: NodeProps<Node<StageNodeData>>) {
       ? "border-green-500"
       : data.status === "in-progress"
       ? "border-blue-500"
+      : data.blocked
+      ? "border-amber-400"
       : "border-border";
   const bgColor =
     data.status === "completed"
@@ -124,9 +129,22 @@ function StageNode({ id, data }: NodeProps<Node<StageNodeData>>) {
             </SelectContent>
           </Select>
         )}
+        {/* Blocked indicator */}
+        {data.blocked && data.status === "pending" && (
+          <div className="flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 px-2 py-1 rounded">
+            <Lock className="h-3 w-3 shrink-0" />
+            <span className="truncate">Waiting on: {data.blockedBy?.join(", ")}</span>
+          </div>
+        )}
+        {!data.blocked && data.status === "pending" && !data.readOnly && (
+          <div className="flex items-center gap-1.5 text-xs text-green-600 dark:text-green-400">
+            <Unlock className="h-3 w-3" />
+            <span>Ready to start</span>
+          </div>
+        )}
         {/* Actions */}
         <div className="flex items-center gap-1">
-          {data.status === "pending" && !data.readOnly && (
+          {data.status === "pending" && !data.readOnly && !data.blocked && (
             <Button
               size="sm"
               variant="outline"
@@ -134,6 +152,16 @@ function StageNode({ id, data }: NodeProps<Node<StageNodeData>>) {
               onClick={() => data.onStatusChange(id, "in-progress")}
             >
               <Play className="h-3 w-3 mr-1" /> Start
+            </Button>
+          )}
+          {data.status === "pending" && !data.readOnly && data.blocked && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 text-xs flex-1 opacity-50 cursor-not-allowed"
+              disabled
+            >
+              <Lock className="h-3 w-3 mr-1" /> Blocked
             </Button>
           )}
           {data.status === "in-progress" && !data.readOnly && (
@@ -148,8 +176,11 @@ function StageNode({ id, data }: NodeProps<Node<StageNodeData>>) {
           {data.status === "completed" && (
             <span className="text-xs text-green-600 font-medium flex-1 text-center">✓ Done</span>
           )}
-          {data.status === "pending" && data.readOnly && (
-            <span className="text-xs text-muted-foreground font-medium flex-1 text-center">Pending</span>
+          {data.status === "pending" && data.readOnly && data.blocked && (
+            <span className="text-xs text-amber-600 font-medium flex-1 text-center">⏳ Blocked</span>
+          )}
+          {data.status === "pending" && data.readOnly && !data.blocked && (
+            <span className="text-xs text-muted-foreground font-medium flex-1 text-center">Ready</span>
           )}
           {data.status === "in-progress" && data.readOnly && (
             <span className="text-xs text-blue-500 font-medium flex-1 text-center">In Progress</span>
@@ -227,6 +258,25 @@ export function WorkflowCanvas({
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [addPosition, setAddPosition] = useState<{ x: number; y: number }>({ x: 250, y: 100 });
   const [newStageLabel, setNewStageLabel] = useState("");
+  // Compute which nodes are blocked (predecessors not all completed)
+  const blockedMap = useMemo(() => {
+    const map: Record<string, { blocked: boolean; blockedBy: string[] }> = {};
+    for (const n of wfNodes) {
+      const incomingEdges = wfEdges.filter((e) => e.target === n.id);
+      if (incomingEdges.length === 0) {
+        map[n.id] = { blocked: false, blockedBy: [] };
+      } else {
+        const predecessors = incomingEdges.map((e) => wfNodes.find((wn) => wn.id === e.source)).filter(Boolean) as WorkflowNode[];
+        const incomplete = predecessors.filter((p) => p.status !== "completed");
+        map[n.id] = {
+          blocked: incomplete.length > 0,
+          blockedBy: incomplete.map((p) => p.label),
+        };
+      }
+    }
+    return map;
+  }, [wfNodes, wfEdges]);
+
   const rfNodes: Node<StageNodeData>[] = useMemo(
     () =>
       wfNodes.map((n, i) => ({
@@ -239,12 +289,14 @@ export function WorkflowCanvas({
           assignedTo: n.assignedTo,
           workers,
           readOnly,
+          blocked: blockedMap[n.id]?.blocked ?? false,
+          blockedBy: blockedMap[n.id]?.blockedBy ?? [],
           onStatusChange,
           onAssignWorker,
           onRemove: onRemoveNode,
         },
       })),
-    [wfNodes, workers, onStatusChange, onAssignWorker, onRemoveNode]
+    [wfNodes, workers, onStatusChange, onAssignWorker, onRemoveNode, blockedMap]
   );
 
   const rfEdges: Edge[] = useMemo(
