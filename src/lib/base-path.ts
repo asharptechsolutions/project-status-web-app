@@ -1,2 +1,2 @@
-const basePath = process.env.NODE_ENV === 'production' ? '/workflowz' : '';
+const basePath = '';
 export default basePath;

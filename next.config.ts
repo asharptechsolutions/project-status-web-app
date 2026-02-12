@@ -4,8 +4,8 @@ const isProd = process.env.NODE_ENV === 'production';
 
 const nextConfig: NextConfig = {
   output: 'export',
-  basePath: isProd ? '/workflowz' : '',
-  assetPrefix: isProd ? '/workflowz/' : '',
+  basePath: '',
+  assetPrefix: '',
   images: { unoptimized: true },
   trailingSlash: true,
 };
