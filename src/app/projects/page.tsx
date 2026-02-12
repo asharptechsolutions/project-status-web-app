@@ -89,10 +89,11 @@ function ProjectsList() {
     }
     try {
       const initialContacts: ProjectContact[] = newClientEmail.trim()
-        ? [{ name: newClient.trim(), email: newClientEmail.trim().toLowerCase() }]
+        ? newClientEmail.split(",").map(e => e.trim()).filter(e => e).map(email => ({ name: newClient.trim(), email: email.toLowerCase() }))
         : [];
+      const primaryEmail = initialContacts.length > 0 ? initialContacts[0].email : "";
       const id = await createProject({
-        name: newName, clientName: newClient, clientEmail: newClientEmail, clientPhone: newClientPhone.trim() || undefined,
+        name: newName, clientName: newClient, clientEmail: primaryEmail, clientPhone: newClientPhone.trim() || undefined,
         description: newDescription.trim() || undefined,
         nodes, edges, contacts: initialContacts, shareToken: nanoid(12), status: "active",
         createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), userId: user.uid,
@@ -484,7 +485,7 @@ function ProjectsList() {
             <div className="space-y-4">
               <div><Label>Project Name</Label><Input value={editName} onChange={(e) => setEditName(e.target.value)} /></div>
               <div><Label>Client Name</Label><Input value={editClient} onChange={(e) => setEditClient(e.target.value)} /></div>
-              <div><Label>Client Email (optional)</Label><Input type="email" value={editClientEmail} onChange={(e) => setEditClientEmail(e.target.value)} /></div>
+              <div><Label>Approved Contacts (optional)</Label><Input value={editClientEmail} onChange={(e) => setEditClientEmail(e.target.value)} placeholder="email1@example.com, email2@example.com" /><p className="text-xs text-muted-foreground mt-1">Comma-separated emails</p></div>
               <div><Label>Client Phone (optional)</Label><Input type="tel" value={editClientPhone} onChange={(e) => setEditClientPhone(e.target.value)} /></div>
               <div><Label>Description (optional)</Label><Textarea value={editDescription} onChange={(e) => setEditDescription(e.target.value)} placeholder="Brief description of the project scope and goals" rows={3} /></div>
               <Button onClick={handleEdit} className="w-full" disabled={!editName.trim() || !editClient.trim()}>Save Changes</Button>
@@ -610,7 +611,7 @@ function ProjectsList() {
           <div className="space-y-4">
             <div><Label>Project Name</Label><Input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="e.g. Custom Gear Assembly" /></div>
             <div><Label>Client Name</Label><Input value={newClient} onChange={(e) => setNewClient(e.target.value)} placeholder="e.g. Acme Corp" /></div>
-            <div><Label>Client Email (optional)</Label><Input type="email" value={newClientEmail} onChange={(e) => setNewClientEmail(e.target.value)} placeholder="client@example.com" /></div>
+            <div><Label>Approved Contacts (optional)</Label><Input value={newClientEmail} onChange={(e) => setNewClientEmail(e.target.value)} placeholder="email1@example.com, email2@example.com" /><p className="text-xs text-muted-foreground mt-1">Comma-separated emails — auto-added to approved contacts</p></div>
             <div><Label>Client Phone (optional)</Label><Input type="tel" value={newClientPhone} onChange={(e) => setNewClientPhone(e.target.value)} placeholder="(555) 123-4567" /></div>
             <div><Label>Description (optional)</Label><Textarea value={newDescription} onChange={(e) => setNewDescription(e.target.value)} placeholder="Brief description of the project scope and goals" rows={3} /></div>
             {templates.length > 0 && (
