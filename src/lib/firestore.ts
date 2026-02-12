@@ -5,7 +5,7 @@ import {
 } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
 import { storage } from "./firebase";
-import type { Project, WorkflowTemplate, Worker, ProjectContact, ProjectFile } from "./types";
+import type { Project, WorkflowTemplate, Worker, ProjectContact, ProjectFile, ProjectMessage } from "./types";
 
 const PREFIX = "wfz_";
 
@@ -293,5 +293,31 @@ export async function deleteProjectFile(fileId: string, projectId: string, fileN
     await deleteDoc(doc(db, PREFIX + "files", fileId));
   } catch (error) {
     handleFirestoreError("deleting file", error);
+  }
+}
+
+// Messages
+export async function getProjectMessages(projectId: string): Promise<ProjectMessage[]> {
+  try {
+    const q = query(
+      collection(db, PREFIX + "messages"),
+      where("projectId", "==", projectId),
+      orderBy("createdAt", "asc")
+    );
+    const snap = await getDocs(q);
+    return snap.docs.map((d) => ({ id: d.id, ...d.data() } as ProjectMessage));
+  } catch (error) {
+    handleFirestoreError("loading messages", error);
+  }
+}
+
+export async function sendProjectMessage(
+  data: Omit<ProjectMessage, "id">
+): Promise<string> {
+  try {
+    const ref = await addDoc(collection(db, PREFIX + "messages"), data);
+    return ref.id;
+  } catch (error) {
+    handleFirestoreError("sending message", error);
   }
 }

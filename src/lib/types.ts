@@ -55,6 +55,16 @@ export interface Worker {
   userId: string;
 }
 
+export interface ProjectMessage {
+  id: string;
+  projectId: string;
+  senderEmail: string;
+  senderName: string;
+  senderRole: "manager" | "client";
+  text: string;
+  createdAt: string;
+}
+
 export interface ProjectFile {
   id: string;
   projectId: string;

@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Workflow, ArrowLeft, Mail, ShieldCheck, LogOut, Link2 } from "lucide-react";
 import { WorkflowCanvas } from "@/components/workflow-canvas";
 import { FileUpload } from "@/components/file-upload";
+import { ProjectChat } from "@/components/project-chat";
 import { getProjectFiles } from "@/lib/firestore";
 import type { ProjectFile } from "@/lib/types";
 
@@ -406,6 +407,19 @@ function TrackInner() {
               uploaderEmail={verifiedEmail}
               files={files}
               onFilesChange={setFiles}
+            />
+          </div>
+
+          <div className="mt-6">
+            <ProjectChat
+              projectId={selectedProject.id}
+              senderEmail={verifiedEmail}
+              senderName={
+                (selectedProject.contacts || []).find(
+                  (c) => c.email.toLowerCase() === verifiedEmail.toLowerCase()
+                )?.name || verifiedEmail
+              }
+              senderRole="client"
             />
           </div>
         </main>

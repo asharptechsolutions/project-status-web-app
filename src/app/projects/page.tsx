@@ -15,12 +15,13 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Trash2, ArrowLeft, Play, CheckCircle2, Link2, Copy, ChevronRight, Pencil, Search, X, ArrowUpDown, Archive, ArchiveRestore, Bell, BellOff, Users, UserPlus } from "lucide-react";
+import { Plus, Trash2, ArrowLeft, Play, CheckCircle2, Link2, Copy, ChevronRight, Pencil, Search, X, ArrowUpDown, Archive, ArchiveRestore, Bell, BellOff, Users, UserPlus, MessageCircle } from "lucide-react";
 import { nanoid } from "nanoid";
 import basePath from "@/lib/base-path";
 import { toast } from "sonner";
 import { WorkflowCanvas } from "@/components/workflow-canvas";
 import { FileUpload } from "@/components/file-upload";
+import { ProjectChat } from "@/components/project-chat";
 import { notifyStageChange } from "@/lib/notifications";
 
 function ProjectsList() {
@@ -496,6 +497,15 @@ function ProjectsList() {
             onFilesChange={setProjectFiles}
             readOnly
             canDelete
+          />
+        </div>
+
+        <div className="mt-8">
+          <ProjectChat
+            projectId={selectedProject.id}
+            senderEmail={user?.email || "manager"}
+            senderName="Project Manager"
+            senderRole="manager"
           />
         </div>
 
