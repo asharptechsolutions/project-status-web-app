@@ -14,7 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Trash2, ArrowLeft, Play, CheckCircle2, Link2, Copy, ChevronRight, Pencil, Search, X } from "lucide-react";
+import { Plus, Trash2, ArrowLeft, Play, CheckCircle2, Link2, Copy, ChevronRight, Pencil, Search, X, ArrowUpDown } from "lucide-react";
 import { nanoid } from "nanoid";
 import basePath from "@/lib/base-path";
 import { toast } from "sonner";
@@ -41,6 +41,7 @@ function ProjectsList() {
   const [editClientEmail, setEditClientEmail] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [sortBy, setSortBy] = useState<string>("newest");
 
   const load = useCallback(async () => {
     if (!user) return;
@@ -326,6 +327,20 @@ function ProjectsList() {
     const matchesSearch = !q || p.name.toLowerCase().includes(q) || p.clientName.toLowerCase().includes(q);
     const matchesStatus = statusFilter === "all" || p.status === statusFilter;
     return matchesSearch && matchesStatus;
+  }).sort((a, b) => {
+    switch (sortBy) {
+      case "newest": return (b.createdAt || "").localeCompare(a.createdAt || "");
+      case "oldest": return (a.createdAt || "").localeCompare(b.createdAt || "");
+      case "name-asc": return a.name.localeCompare(b.name);
+      case "name-desc": return b.name.localeCompare(a.name);
+      case "client": return a.clientName.localeCompare(b.clientName);
+      case "progress": {
+        const progA = a.nodes.length ? a.nodes.filter(n => n.status === "completed").length / a.nodes.length : 0;
+        const progB = b.nodes.length ? b.nodes.filter(n => n.status === "completed").length / b.nodes.length : 0;
+        return progB - progA;
+      }
+      default: return 0;
+    }
   });
 
   return (
@@ -359,6 +374,20 @@ function ProjectsList() {
               <SelectItem value="all">All statuses</SelectItem>
               <SelectItem value="active">Active</SelectItem>
               <SelectItem value="completed">Completed</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={sortBy} onValueChange={setSortBy}>
+            <SelectTrigger className="w-full sm:w-[160px]">
+              <ArrowUpDown className="h-4 w-4 mr-2" />
+              <SelectValue placeholder="Sort by" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="newest">Newest first</SelectItem>
+              <SelectItem value="oldest">Oldest first</SelectItem>
+              <SelectItem value="name-asc">Name A–Z</SelectItem>
+              <SelectItem value="name-desc">Name Z–A</SelectItem>
+              <SelectItem value="client">Client</SelectItem>
+              <SelectItem value="progress">Progress</SelectItem>
             </SelectContent>
           </Select>
         </div>
