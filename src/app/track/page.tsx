@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
-import { getProjectByToken } from "@/lib/firestore";
+import { getProject, getProjectByToken } from "@/lib/firestore";
 import type { Project } from "@/lib/types";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -14,9 +14,11 @@ function TrackInner() {
   const [error, setError] = useState("");
 
   useEffect(() => {
+    const id = searchParams.get("id");
     const token = searchParams.get("token");
-    if (!token) { setError("No tracking token provided."); setLoading(false); return; }
-    getProjectByToken(token).then((p) => {
+    if (!id && !token) { setError("No tracking link provided."); setLoading(false); return; }
+    const loadProject = id ? getProject(id) : getProjectByToken(token!);
+    loadProject.then((p) => {
       if (!p) setError("Project not found. The link may be invalid.");
       else setProject(p);
       setLoading(false);

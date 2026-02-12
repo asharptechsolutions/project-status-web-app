@@ -148,7 +148,7 @@ function ProjectsList() {
 
   const copyShareLink = () => {
     if (!selectedProject) return;
-    const url = `${window.location.origin}${basePath}/track/?token=${selectedProject.shareToken}`;
+    const url = `${window.location.origin}${basePath}/track/?id=${selectedProject.id}`;
     navigator.clipboard.writeText(url);
     setCopyMsg("Copied!");
     setTimeout(() => setCopyMsg(""), 2000);
