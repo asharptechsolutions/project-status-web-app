@@ -8,6 +8,7 @@ import { getProjects, createProject, updateProject, deleteProject, getTemplates,
 import type { Project, WorkflowNode, WorkflowEdge, WorkflowTemplate, Worker } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -31,6 +32,7 @@ function ProjectsList() {
   const [newName, setNewName] = useState("");
   const [newClient, setNewClient] = useState("");
   const [newClientEmail, setNewClientEmail] = useState("");
+  const [newDescription, setNewDescription] = useState("");
   const [selectedTemplate, setSelectedTemplate] = useState<string>("");
   const [newNodeLabel, setNewNodeLabel] = useState("");
   const [copyMsg, setCopyMsg] = useState("");
@@ -39,6 +41,7 @@ function ProjectsList() {
   const [editName, setEditName] = useState("");
   const [editClient, setEditClient] = useState("");
   const [editClientEmail, setEditClientEmail] = useState("");
+  const [editDescription, setEditDescription] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [sortBy, setSortBy] = useState<string>("newest");
@@ -82,10 +85,11 @@ function ProjectsList() {
     try {
       const id = await createProject({
         name: newName, clientName: newClient, clientEmail: newClientEmail,
+        description: newDescription.trim() || undefined,
         nodes, edges, shareToken: nanoid(12), status: "active",
         createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), userId: user.uid,
       });
-      setNewName(""); setNewClient(""); setNewClientEmail(""); setSelectedTemplate(""); setShowNew(false);
+      setNewName(""); setNewClient(""); setNewClientEmail(""); setNewDescription(""); setSelectedTemplate(""); setShowNew(false);
       toast.success("Project created");
       await load();
       const created = (await getProjects(user.uid)).find((p) => p.id === id);
@@ -188,6 +192,7 @@ function ProjectsList() {
     setEditName(selectedProject.name);
     setEditClient(selectedProject.clientName);
     setEditClientEmail(selectedProject.clientEmail || "");
+    setEditDescription(selectedProject.description || "");
     setShowEdit(true);
   };
 
@@ -198,9 +203,10 @@ function ProjectsList() {
         name: editName.trim(),
         clientName: editClient.trim(),
         clientEmail: editClientEmail.trim(),
+        description: editDescription.trim() || undefined,
         updatedAt: new Date().toISOString(),
       });
-      setSelectedProject({ ...selectedProject, name: editName.trim(), clientName: editClient.trim(), clientEmail: editClientEmail.trim() });
+      setSelectedProject({ ...selectedProject, name: editName.trim(), clientName: editClient.trim(), clientEmail: editClientEmail.trim(), description: editDescription.trim() || undefined });
       setShowEdit(false);
       toast.success("Project updated");
       load();
@@ -223,6 +229,7 @@ function ProjectsList() {
           <div>
             <h1 className="text-2xl font-bold">{selectedProject.name}</h1>
             <p className="text-muted-foreground">Client: {selectedProject.clientName}</p>
+            {selectedProject.description && <p className="text-sm text-muted-foreground mt-1">{selectedProject.description}</p>}
           </div>
           <div className="flex items-center gap-2">
             <Badge variant={selectedProject.status === "completed" ? "default" : "secondary"}>{selectedProject.status}</Badge>
@@ -314,6 +321,7 @@ function ProjectsList() {
               <div><Label>Project Name</Label><Input value={editName} onChange={(e) => setEditName(e.target.value)} /></div>
               <div><Label>Client Name</Label><Input value={editClient} onChange={(e) => setEditClient(e.target.value)} /></div>
               <div><Label>Client Email (optional)</Label><Input type="email" value={editClientEmail} onChange={(e) => setEditClientEmail(e.target.value)} /></div>
+              <div><Label>Description (optional)</Label><Textarea value={editDescription} onChange={(e) => setEditDescription(e.target.value)} placeholder="Brief description of the project scope and goals" rows={3} /></div>
               <Button onClick={handleEdit} className="w-full" disabled={!editName.trim() || !editClient.trim()}>Save Changes</Button>
             </div>
           </DialogContent>
@@ -408,6 +416,7 @@ function ProjectsList() {
                     <div>
                       <p className="font-medium">{p.name}</p>
                       <p className="text-sm text-muted-foreground">Client: {p.clientName} • {p.nodes.length} stages</p>
+                      {p.description && <p className="text-xs text-muted-foreground mt-1 line-clamp-1">{p.description}</p>}
                     </div>
                     <div className="flex items-center gap-2">
                       <Badge variant={p.status === "completed" ? "default" : "secondary"}>{prog}%</Badge>
@@ -431,6 +440,7 @@ function ProjectsList() {
             <div><Label>Project Name</Label><Input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="e.g. Custom Gear Assembly" /></div>
             <div><Label>Client Name</Label><Input value={newClient} onChange={(e) => setNewClient(e.target.value)} placeholder="e.g. Acme Corp" /></div>
             <div><Label>Client Email (optional)</Label><Input type="email" value={newClientEmail} onChange={(e) => setNewClientEmail(e.target.value)} placeholder="client@example.com" /></div>
+            <div><Label>Description (optional)</Label><Textarea value={newDescription} onChange={(e) => setNewDescription(e.target.value)} placeholder="Brief description of the project scope and goals" rows={3} /></div>
             {templates.length > 0 && (
               <div>
                 <Label>Template (optional)</Label>
