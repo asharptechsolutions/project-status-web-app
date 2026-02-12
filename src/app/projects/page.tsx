@@ -15,11 +15,12 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Trash2, ArrowLeft, Play, CheckCircle2, Link2, Copy, ChevronRight, Pencil, Search, X, ArrowUpDown, Archive, ArchiveRestore } from "lucide-react";
+import { Plus, Trash2, ArrowLeft, Play, CheckCircle2, Link2, Copy, ChevronRight, Pencil, Search, X, ArrowUpDown, Archive, ArchiveRestore, Bell, BellOff } from "lucide-react";
 import { nanoid } from "nanoid";
 import basePath from "@/lib/base-path";
 import { toast } from "sonner";
 import { WorkflowCanvas } from "@/components/workflow-canvas";
+import { notifyStageChange } from "@/lib/notifications";
 
 function ProjectsList() {
   const { user } = useAuth();
@@ -149,6 +150,11 @@ function ProjectsList() {
     try {
       await updateProject(selectedProject.id, { nodes, status: allDone ? "completed" : "active" });
       setSelectedProject({ ...selectedProject, nodes, status: allDone ? "completed" : "active" });
+      // Send email notification to client if they have an email
+      const changedNode = nodes.find((n) => n.id === nodeId);
+      if (changedNode) {
+        notifyStageChange(selectedProject, changedNode, status, allDone);
+      }
       load();
     } catch (error: any) {
       toast.error(error.message || "Failed to update stage");
@@ -263,7 +269,18 @@ function ProjectsList() {
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
           <div>
             <h1 className="text-2xl font-bold">{selectedProject.name}</h1>
-            <p className="text-muted-foreground">Client: {selectedProject.clientName}</p>
+            <p className="text-muted-foreground flex items-center gap-2">
+              Client: {selectedProject.clientName}
+              {selectedProject.clientEmail ? (
+                <span className="inline-flex items-center gap-1 text-xs text-green-600 dark:text-green-400" title={`Notifications → ${selectedProject.clientEmail}`}>
+                  <Bell className="h-3 w-3" /> Email alerts on
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 text-xs text-muted-foreground" title="Add client email to enable notifications">
+                  <BellOff className="h-3 w-3" /> No email set
+                </span>
+              )}
+            </p>
             {selectedProject.description && <p className="text-sm text-muted-foreground mt-1">{selectedProject.description}</p>}
           </div>
           <div className="flex items-center gap-2">
