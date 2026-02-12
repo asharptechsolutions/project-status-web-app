@@ -15,7 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Trash2, ArrowLeft, Play, CheckCircle2, Link2, Copy, ChevronRight, Pencil, Search, X, ArrowUpDown } from "lucide-react";
+import { Plus, Trash2, ArrowLeft, Play, CheckCircle2, Link2, Copy, ChevronRight, Pencil, Search, X, ArrowUpDown, Archive, ArchiveRestore } from "lucide-react";
 import { nanoid } from "nanoid";
 import basePath from "@/lib/base-path";
 import { toast } from "sonner";
@@ -43,7 +43,7 @@ function ProjectsList() {
   const [editClientEmail, setEditClientEmail] = useState("");
   const [editDescription, setEditDescription] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [statusFilter, setStatusFilter] = useState<string>("active-completed");
   const [sortBy, setSortBy] = useState<string>("newest");
 
   const load = useCallback(async () => {
@@ -187,6 +187,30 @@ function ProjectsList() {
     }
   };
 
+  const handleArchive = async (id: string) => {
+    try {
+      await updateProject(id, { status: "archived" });
+      setSelectedProject(null);
+      toast.success("Project archived");
+      load();
+    } catch (error: any) {
+      toast.error(error.message || "Failed to archive project");
+    }
+  };
+
+  const handleRestore = async (id: string) => {
+    if (!selectedProject) return;
+    const allDone = selectedProject.nodes.length > 0 && selectedProject.nodes.every((n) => n.status === "completed");
+    try {
+      await updateProject(id, { status: allDone ? "completed" : "active" });
+      setSelectedProject({ ...selectedProject, status: allDone ? "completed" : "active" });
+      toast.success("Project restored");
+      load();
+    } catch (error: any) {
+      toast.error(error.message || "Failed to restore project");
+    }
+  };
+
   const openEdit = () => {
     if (!selectedProject) return;
     setEditName(selectedProject.name);
@@ -239,6 +263,33 @@ function ProjectsList() {
             <Button variant="outline" size="sm" onClick={copyShareLink}>
               <Link2 className="h-4 w-4 mr-1" /> {copyMsg || "Share Link"}
             </Button>
+            {selectedProject.status === "archived" ? (
+              <Button variant="outline" size="sm" onClick={() => handleRestore(selectedProject.id)}>
+                <ArchiveRestore className="h-4 w-4 mr-1" /> Restore
+              </Button>
+            ) : (
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button variant="outline" size="sm">
+                    <Archive className="h-4 w-4 mr-1" /> Archive
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Archive Project</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Archive &quot;{selectedProject.name}&quot;? It will be hidden from the default view but can be restored anytime.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction onClick={() => handleArchive(selectedProject.id)}>
+                      Archive
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            )}
             <AlertDialog>
               <AlertDialogTrigger asChild>
                 <Button variant="destructive" size="sm">
@@ -249,13 +300,13 @@ function ProjectsList() {
                 <AlertDialogHeader>
                   <AlertDialogTitle>Delete Project</AlertDialogTitle>
                   <AlertDialogDescription>
-                    Are you sure you want to delete &quot;{selectedProject.name}&quot;? This action cannot be undone and all workflow data will be permanently removed.
+                    Are you sure you want to permanently delete &quot;{selectedProject.name}&quot;? This action cannot be undone. Consider archiving instead.
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
                   <AlertDialogCancel>Cancel</AlertDialogCancel>
                   <AlertDialogAction onClick={() => handleDelete(selectedProject.id)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-                    Delete
+                    Delete Forever
                   </AlertDialogAction>
                 </AlertDialogFooter>
               </AlertDialogContent>
@@ -333,7 +384,7 @@ function ProjectsList() {
   const filteredProjects = projects.filter((p) => {
     const q = searchQuery.toLowerCase();
     const matchesSearch = !q || p.name.toLowerCase().includes(q) || p.clientName.toLowerCase().includes(q);
-    const matchesStatus = statusFilter === "all" || p.status === statusFilter;
+    const matchesStatus = statusFilter === "all" ? true : statusFilter === "active-completed" ? p.status !== "archived" : p.status === statusFilter;
     return matchesSearch && matchesStatus;
   }).sort((a, b) => {
     switch (sortBy) {
@@ -379,9 +430,11 @@ function ProjectsList() {
               <SelectValue placeholder="All statuses" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All statuses</SelectItem>
+              <SelectItem value="active-completed">Active & Completed</SelectItem>
+              <SelectItem value="all">All (incl. Archived)</SelectItem>
               <SelectItem value="active">Active</SelectItem>
               <SelectItem value="completed">Completed</SelectItem>
+              <SelectItem value="archived">Archived</SelectItem>
             </SelectContent>
           </Select>
           <Select value={sortBy} onValueChange={setSortBy}>
@@ -419,7 +472,11 @@ function ProjectsList() {
                       {p.description && <p className="text-xs text-muted-foreground mt-1 line-clamp-1">{p.description}</p>}
                     </div>
                     <div className="flex items-center gap-2">
-                      <Badge variant={p.status === "completed" ? "default" : "secondary"}>{prog}%</Badge>
+                      {p.status === "archived" ? (
+                        <Badge variant="outline"><Archive className="h-3 w-3 mr-1" />Archived</Badge>
+                      ) : (
+                        <Badge variant={p.status === "completed" ? "default" : "secondary"}>{prog}%</Badge>
+                      )}
                       <ChevronRight className="h-4 w-4 text-muted-foreground" />
                     </div>
                   </div>
