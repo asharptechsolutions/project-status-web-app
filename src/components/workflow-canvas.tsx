@@ -50,6 +50,7 @@ interface StageNodeData {
   onRemove: (nodeId: string) => void;
   onEstimatedCompletionChange: (nodeId: string, date: string) => void;
   direction?: "TB" | "LR";
+  isSource?: boolean;
   [key: string]: unknown;
 }
 
@@ -85,7 +86,7 @@ function StageNode({ id, data }: NodeProps<Node<StageNodeData>>) {
 
   return (
     <div className={`rounded-lg border-2 ${borderColor} ${bgColor} min-w-[220px] max-w-[270px] shadow-md overflow-hidden`}>
-      <Handle type="target" position={data.direction === "LR" ? Position.Left : Position.Top} className="!bg-primary !w-3 !h-3" />
+      {!data.isSource && <Handle type="target" position={data.direction === "LR" ? Position.Left : Position.Top} className="!bg-primary !w-3 !h-3" />}
       {/* Header with status stripe */}
       <div className={`${headerBg} px-3 py-2 flex items-center justify-between gap-2`}>
         <div className="flex items-center gap-1.5 min-w-0">
@@ -331,6 +332,7 @@ export function WorkflowCanvas({
           direction,
           blocked: blockedMap[n.id]?.blocked ?? false,
           blockedBy: blockedMap[n.id]?.blockedBy ?? [],
+          isSource: !wfEdges.some((e) => e.target === n.id),
           onStatusChange,
           onAssignWorker,
           onRemove: onRemoveNode,

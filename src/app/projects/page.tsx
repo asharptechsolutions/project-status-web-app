@@ -87,6 +87,10 @@ function ProjectsList() {
         edges = [...tmpl.edges];
       }
     }
+    // Auto-create initial "Order Planning" source node if no template selected
+    if (nodes.length === 0) {
+      nodes = [{ id: nanoid(8), label: "Order Planning", status: "pending", position: { x: 250, y: 50 } }];
+    }
     try {
       const initialContacts: ProjectContact[] = newClientEmail.trim()
         ? newClientEmail.split(",").map(e => e.trim()).filter(e => e).map(email => ({ name: newClient.trim(), email: email.toLowerCase() }))
