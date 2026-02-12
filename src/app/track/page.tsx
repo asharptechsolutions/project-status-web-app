@@ -1,14 +1,14 @@
 "use client";
 import { useEffect, useState, Suspense, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
-import { getProjectsForContact, createAccessCode, verifyAccessCode, sendAccessCodeEmail } from "@/lib/firestore";
+import { getProject, getProjectsForContact, createAccessCode, verifyAccessCode } from "@/lib/firestore";
 import type { Project } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Workflow, ArrowLeft, Mail, ShieldCheck, LogOut } from "lucide-react";
+import { Workflow, ArrowLeft, Mail, ShieldCheck, LogOut, Link2 } from "lucide-react";
 import { WorkflowCanvas } from "@/components/workflow-canvas";
 
 const SESSION_KEY = "wfz_contact_session";
@@ -31,7 +31,7 @@ function getSession(): { email: string; expiresAt: number } | null {
 function setSession(email: string) {
   sessionStorage.setItem(SESSION_KEY, JSON.stringify({
     email,
-    expiresAt: Date.now() + 60 * 60 * 1000, // 1 hour
+    expiresAt: Date.now() + 60 * 60 * 1000,
   }));
 }
 
@@ -44,6 +44,7 @@ function TrackInner() {
   const [step, setStep] = useState<"loading" | "email" | "code" | "projects" | "detail">("loading");
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
+  const [generatedCode, setGeneratedCode] = useState("");
   const [error, setError] = useState("");
   const [sending, setSending] = useState(false);
   const [verifying, setVerifying] = useState(false);
@@ -51,6 +52,7 @@ function TrackInner() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [loadingProjects, setLoadingProjects] = useState(false);
+  const [tokenMode, setTokenMode] = useState(false);
 
   const loadProjects = useCallback(async (contactEmail: string) => {
     setLoadingProjects(true);
@@ -59,8 +61,8 @@ function TrackInner() {
       setProjects(p.filter((proj) => proj.status !== "archived"));
       setVerifiedEmail(contactEmail);
       setStep("projects");
-    } catch (err: any) {
-      setError(err.message || "Failed to load projects");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to load projects");
       setStep("email");
     } finally {
       setLoadingProjects(false);
@@ -68,19 +70,44 @@ function TrackInner() {
   }, []);
 
   useEffect(() => {
-    // Check existing session
+    const token = searchParams.get("token");
+    const projectId = searchParams.get("id");
+
+    // Token-based direct access (no verification needed)
+    if (token && projectId) {
+      setTokenMode(true);
+      (async () => {
+        try {
+          const project = await getProject(projectId);
+          if (project && project.shareToken === token) {
+            setSelectedProject(project);
+            setStep("detail");
+          } else {
+            setError("Invalid or expired tracking link. Please request a new one from the project owner.");
+            setStep("email");
+          }
+        } catch {
+          setError("Unable to load project. The link may be invalid.");
+          setStep("email");
+        }
+      })();
+      return;
+    }
+
+    // Check existing session for email-based access
     const session = getSession();
     if (session) {
       loadProjects(session.email);
     } else {
       setStep("email");
     }
-  }, [loadProjects]);
+  }, [loadProjects, searchParams]);
 
-  // If a project ID is in the URL and we're verified, auto-select it
+  // If a project ID is in the URL (without token) and we're verified, auto-select it
   useEffect(() => {
     const id = searchParams.get("id");
-    if (id && projects.length > 0 && step === "projects") {
+    const token = searchParams.get("token");
+    if (id && !token && projects.length > 0 && step === "projects") {
       const found = projects.find((p) => p.id === id);
       if (found) {
         setSelectedProject(found);
@@ -95,10 +122,10 @@ function TrackInner() {
     setSending(true);
     try {
       const accessCode = await createAccessCode(email);
-      await sendAccessCodeEmail(email, accessCode);
+      setGeneratedCode(accessCode);
       setStep("code");
-    } catch (err: any) {
-      setError(err.message || "Failed to send verification code");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to send verification code");
     } finally {
       setSending(false);
     }
@@ -117,8 +144,8 @@ function TrackInner() {
       }
       setSession(email);
       await loadProjects(email);
-    } catch (err: any) {
-      setError(err.message || "Verification failed");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Verification failed");
     } finally {
       setVerifying(false);
     }
@@ -131,6 +158,8 @@ function TrackInner() {
     setSelectedProject(null);
     setEmail("");
     setCode("");
+    setGeneratedCode("");
+    setTokenMode(false);
     setStep("email");
   };
 
@@ -198,7 +227,10 @@ function TrackInner() {
             </div>
             <CardTitle className="text-xl">Enter Verification Code</CardTitle>
             <p className="text-sm text-muted-foreground mt-1">
-              We sent a 6-digit code to <strong>{email}</strong>. Check your inbox.
+              Your verification code is: <strong className="text-foreground text-lg tracking-widest">{generatedCode}</strong>
+            </p>
+            <p className="text-xs text-muted-foreground mt-2">
+              (Email delivery coming soon — for now, enter the code shown above)
             </p>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -222,12 +254,8 @@ function TrackInner() {
               {verifying ? "Verifying..." : "Verify & View Projects"}
             </Button>
             <div className="text-center">
-              <Button variant="link" size="sm" onClick={() => { setStep("email"); setCode(""); setError(""); }}>
+              <Button variant="link" size="sm" onClick={() => { setStep("email"); setCode(""); setError(""); setGeneratedCode(""); }}>
                 Use a different email
-              </Button>
-              <span className="text-muted-foreground mx-1">•</span>
-              <Button variant="link" size="sm" onClick={handleSendCode} disabled={sending}>
-                {sending ? "Sending..." : "Resend code"}
               </Button>
             </div>
           </CardContent>
@@ -252,18 +280,22 @@ function TrackInner() {
               <span className="font-bold">Workflowz</span>
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground hidden sm:inline">{verifiedEmail}</span>
-              <Button variant="ghost" size="sm" onClick={handleLogout}>
-                <LogOut className="h-4 w-4" />
-              </Button>
+              {verifiedEmail && <span className="text-sm text-muted-foreground hidden sm:inline">{verifiedEmail}</span>}
+              {!tokenMode && (
+                <Button variant="ghost" size="sm" onClick={handleLogout}>
+                  <LogOut className="h-4 w-4" />
+                </Button>
+              )}
             </div>
           </div>
         </header>
 
         <main className="p-4 max-w-4xl mx-auto">
-          <Button variant="ghost" className="mb-4" onClick={() => { setSelectedProject(null); setStep("projects"); }}>
-            <ArrowLeft className="h-4 w-4 mr-2" /> Back to Projects
-          </Button>
+          {!tokenMode && (
+            <Button variant="ghost" className="mb-4" onClick={() => { setSelectedProject(null); setStep("projects"); }}>
+              <ArrowLeft className="h-4 w-4 mr-2" /> Back to Projects
+            </Button>
+          )}
 
           <div className="mb-6">
             <h1 className="text-2xl font-bold">{selectedProject.name}</h1>

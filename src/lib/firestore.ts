@@ -220,15 +220,8 @@ export async function getProjectsForContact(email: string): Promise<Project[]> {
 }
 
 // Send verification email via notifications collection (processed by Cloud Functions)
+// NOTE: Email delivery not yet configured — code is shown directly to user for now
 export async function sendAccessCodeEmail(email: string, code: string): Promise<void> {
-  try {
-    await addDoc(collection(db, PREFIX + "notifications"), {
-      type: "access_code",
-      email: email.toLowerCase().trim(),
-      code,
-      createdAt: new Date().toISOString(),
-    });
-  } catch (error) {
-    handleFirestoreError("sending verification email", error);
-  }
+  // No-op until Cloud Functions are set up for email delivery
+  return;
 }
