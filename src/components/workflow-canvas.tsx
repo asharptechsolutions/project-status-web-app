@@ -24,7 +24,8 @@ import type { WorkflowNode, WorkflowEdge, Worker } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Play, CheckCircle2, Trash2, Clock, Loader2, User, Plus } from "lucide-react";
+import { Play, CheckCircle2, Trash2, Clock, Loader2, User, Plus, LayoutGrid } from "lucide-react";
+import Dagre from "@dagrejs/dagre";
 import { Input } from "@/components/ui/input";
 import {
   Dialog,
@@ -172,6 +173,32 @@ function StageNode({ id, data }: NodeProps<Node<StageNodeData>>) {
 
 const nodeTypes: NodeTypes = { stage: StageNode };
 
+function getLayoutedElements(
+  nodes: Node<StageNodeData>[],
+  edges: Edge[],
+  direction: "TB" | "LR" = "TB"
+) {
+  const g = new Dagre.graphlib.Graph().setDefaultEdgeLabel(() => ({}));
+  g.setGraph({ rankdir: direction, nodesep: 60, ranksep: 100 });
+
+  nodes.forEach((node) => {
+    g.setNode(node.id, { width: 250, height: 160 });
+  });
+
+  edges.forEach((edge) => {
+    g.setEdge(edge.source, edge.target);
+  });
+
+  Dagre.layout(g);
+
+  const layoutedNodes = nodes.map((node) => {
+    const pos = g.node(node.id);
+    return { ...node, position: { x: pos.x - 125, y: pos.y - 80 } };
+  });
+
+  return layoutedNodes;
+}
+
 interface WorkflowCanvasProps {
   nodes: WorkflowNode[];
   edges: WorkflowEdge[];
@@ -303,6 +330,17 @@ export function WorkflowCanvas({
     setShowAddDialog(false);
   }, [newStageLabel, addPosition, onAddNode]);
 
+  const handleAutoLayout = useCallback(() => {
+    const layouted = getLayoutedElements(flowNodes, flowEdges, "TB");
+    setFlowNodes(layouted);
+    // Persist positions back
+    const wfUpdated = wfNodes.map((wn) => {
+      const rfNode = layouted.find((u) => u.id === wn.id);
+      return rfNode ? { ...wn, position: rfNode.position } : wn;
+    });
+    onNodesUpdate(wfUpdated);
+  }, [flowNodes, flowEdges, wfNodes, onNodesUpdate]);
+
   const handleToolbarAdd = useCallback(() => {
     if (!onAddNode) return;
     // Place new node below existing nodes
@@ -342,15 +380,27 @@ export function WorkflowCanvas({
           }}
         />
       </ReactFlow>
-      {/* Floating add button */}
-      {!readOnly && onAddNode && (
-        <Button
-          size="sm"
-          className="absolute top-3 right-3 z-10 shadow-md"
-          onClick={handleToolbarAdd}
-        >
-          <Plus className="h-4 w-4 mr-1" /> Add Stage
-        </Button>
+      {/* Floating toolbar */}
+      {!readOnly && (
+        <div className="absolute top-3 right-3 z-10 flex gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            className="shadow-md"
+            onClick={handleAutoLayout}
+          >
+            <LayoutGrid className="h-4 w-4 mr-1" /> Auto Layout
+          </Button>
+          {onAddNode && (
+            <Button
+              size="sm"
+              className="shadow-md"
+              onClick={handleToolbarAdd}
+            >
+              <Plus className="h-4 w-4 mr-1" /> Add Stage
+            </Button>
+          )}
+        </div>
       )}
       {/* Add stage dialog */}
       <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
