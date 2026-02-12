@@ -5,6 +5,7 @@ export interface WorkflowNode {
   status: "pending" | "in-progress" | "completed";
   startedAt?: string;
   completedAt?: string;
+  position?: { x: number; y: number };
 }
 
 export interface WorkflowEdge {

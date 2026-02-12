@@ -17,6 +17,7 @@ import { Plus, Trash2, ArrowLeft, Play, CheckCircle2, Link2, Copy, ChevronRight,
 import { nanoid } from "nanoid";
 import basePath from "@/lib/base-path";
 import { toast } from "sonner";
+import { WorkflowCanvas } from "@/components/workflow-canvas";
 
 function ProjectsList() {
   const { user } = useAuth();
@@ -231,48 +232,35 @@ function ProjectsList() {
         </div>
 
         <h2 className="text-lg font-semibold mb-3">Workflow Stages</h2>
-        <div className="space-y-3 mb-6">
-          {selectedProject.nodes.map((node, i) => (
-            <Card key={node.id} className={node.status === "completed" ? "border-green-500/50 bg-green-500/5" : node.status === "in-progress" ? "border-blue-500/50 bg-blue-500/5" : ""}>
-              <CardContent className="pt-4 pb-4">
-                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
-                  <div className="flex items-center gap-2 flex-1 min-w-0">
-                    <span className="text-sm font-medium text-muted-foreground w-6">{i + 1}.</span>
-                    <span className="font-medium truncate">{node.label}</span>
-                    <Badge variant={node.status === "completed" ? "default" : node.status === "in-progress" ? "secondary" : "outline"} className="shrink-0">
-                      {node.status}
-                    </Badge>
-                  </div>
-                  <div className="flex items-center gap-2 w-full sm:w-auto">
-                    <Select value={node.assignedTo || ""} onValueChange={(v) => assignWorker(node.id, v)}>
-                      <SelectTrigger className="w-full sm:w-[140px] h-8 text-xs">
-                        <SelectValue placeholder="Assign worker" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {workers.map((w) => <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                    {node.status === "pending" && (
-                      <Button size="sm" variant="outline" onClick={() => updateNodeStatus(node.id, "in-progress")}>
-                        <Play className="h-3 w-3 mr-1" /> Start
-                      </Button>
-                    )}
-                    {node.status === "in-progress" && (
-                      <Button size="sm" onClick={() => updateNodeStatus(node.id, "completed")}>
-                        <CheckCircle2 className="h-3 w-3 mr-1" /> Done
-                      </Button>
-                    )}
-                    <Button size="sm" variant="ghost" onClick={() => removeNode(node.id)}>
-                      <Trash2 className="h-3 w-3" />
-                    </Button>
-                  </div>
-                </div>
-                {i < selectedProject.nodes.length - 1 && (
-                  <div className="flex justify-center mt-2"><ChevronRight className="h-4 w-4 text-muted-foreground rotate-90" /></div>
-                )}
-              </CardContent>
-            </Card>
-          ))}
+        <div className="mb-6">
+          {selectedProject.nodes.length > 0 ? (
+            <WorkflowCanvas
+              nodes={selectedProject.nodes}
+              edges={selectedProject.edges}
+              workers={workers}
+              onNodesUpdate={async (nodes) => {
+                try {
+                  await updateProject(selectedProject.id, { nodes });
+                  setSelectedProject({ ...selectedProject, nodes });
+                } catch (error: any) {
+                  toast.error(error.message || "Failed to save positions");
+                }
+              }}
+              onEdgesUpdate={async (edges) => {
+                try {
+                  await updateProject(selectedProject.id, { edges });
+                  setSelectedProject({ ...selectedProject, edges });
+                } catch (error: any) {
+                  toast.error(error.message || "Failed to save edges");
+                }
+              }}
+              onStatusChange={updateNodeStatus}
+              onAssignWorker={assignWorker}
+              onRemoveNode={removeNode}
+            />
+          ) : (
+            <Card><CardContent className="pt-6 text-center text-muted-foreground">No stages yet. Add your first one below!</CardContent></Card>
+          )}
         </div>
 
         <div className="flex gap-2">
