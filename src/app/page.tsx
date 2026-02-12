@@ -10,8 +10,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { FolderOpen, Clock, CheckCircle2, AlertCircle } from "lucide-react";
 import Link from "next/link";
-import basePath from "@/lib/base-path";
-
 function Dashboard() {
   const { user } = useAuth();
   const [projects, setProjects] = useState<Project[]>([]);
@@ -34,7 +32,7 @@ function Dashboard() {
       <main className="flex-1 p-4 max-w-6xl mx-auto w-full">
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-2xl font-bold">Dashboard</h1>
-          <Link href={basePath + "/projects/?new=1"}>
+          <Link href="/projects/?new=1">
             <Button>New Project</Button>
           </Link>
         </div>
@@ -75,7 +73,7 @@ function Dashboard() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {active.map((p) => (
-              <Link key={p.id} href={basePath + `/projects/?id=${p.id}`}>
+              <Link key={p.id} href={`/projects/?id=${p.id}`}>
                 <Card className="hover:shadow-md transition-shadow cursor-pointer">
                   <CardHeader className="pb-2">
                     <div className="flex items-center justify-between">

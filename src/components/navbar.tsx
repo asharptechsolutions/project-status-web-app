@@ -31,14 +31,14 @@ export function Navbar() {
   return (
     <header className="sticky top-0 z-40 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="flex h-14 items-center px-4">
-        <Link href={basePath + "/"} className="flex items-center gap-2 font-bold mr-6">
+        <Link href="/" className="flex items-center gap-2 font-bold mr-6">
           <Workflow className="h-5 w-5" />
           <span className="hidden sm:inline">Workflowz</span>
         </Link>
 
         <nav className="hidden md:flex items-center gap-1 flex-1 justify-center">
           {links.map((l) => (
-            <Link key={l.href} href={basePath + l.href} className={cn("px-3 py-2 text-sm rounded-md transition-colors", isActive(l.href) ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:text-foreground hover:bg-accent/50")}>
+            <Link key={l.href} href={l.href} className={cn("px-3 py-2 text-sm rounded-md transition-colors", isActive(l.href) ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:text-foreground hover:bg-accent/50")}>
               {l.label}
             </Link>
           ))}
@@ -66,7 +66,7 @@ export function Navbar() {
           </SheetHeader>
           <nav className="flex flex-col gap-2 mt-6">
             {links.map((l) => (
-              <Link key={l.href} href={basePath + l.href} onClick={() => setOpen(false)} className={cn("px-3 py-2 rounded-md text-sm", isActive(l.href) ? "bg-accent font-medium" : "text-muted-foreground hover:bg-accent/50")}>
+              <Link key={l.href} href={l.href} onClick={() => setOpen(false)} className={cn("px-3 py-2 rounded-md text-sm", isActive(l.href) ? "bg-accent font-medium" : "text-muted-foreground hover:bg-accent/50")}>
                 {l.label}
               </Link>
             ))}
