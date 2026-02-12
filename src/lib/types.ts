@@ -25,6 +25,7 @@ export interface Project {
   name: string;
   clientName: string;
   clientEmail?: string;
+  clientPhone?: string;
   description?: string;
   nodes: WorkflowNode[];
   edges: WorkflowEdge[];

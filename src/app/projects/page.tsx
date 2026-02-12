@@ -33,6 +33,7 @@ function ProjectsList() {
   const [newName, setNewName] = useState("");
   const [newClient, setNewClient] = useState("");
   const [newClientEmail, setNewClientEmail] = useState("");
+  const [newClientPhone, setNewClientPhone] = useState("");
   const [newDescription, setNewDescription] = useState("");
   const [selectedTemplate, setSelectedTemplate] = useState<string>("");
   const [newNodeLabel, setNewNodeLabel] = useState("");
@@ -42,6 +43,7 @@ function ProjectsList() {
   const [editName, setEditName] = useState("");
   const [editClient, setEditClient] = useState("");
   const [editClientEmail, setEditClientEmail] = useState("");
+  const [editClientPhone, setEditClientPhone] = useState("");
   const [editDescription, setEditDescription] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("active-completed");
@@ -90,12 +92,12 @@ function ProjectsList() {
         ? [{ name: newClient.trim(), email: newClientEmail.trim().toLowerCase() }]
         : [];
       const id = await createProject({
-        name: newName, clientName: newClient, clientEmail: newClientEmail,
+        name: newName, clientName: newClient, clientEmail: newClientEmail, clientPhone: newClientPhone.trim() || undefined,
         description: newDescription.trim() || undefined,
         nodes, edges, contacts: initialContacts, shareToken: nanoid(12), status: "active",
         createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), userId: user.uid,
       });
-      setNewName(""); setNewClient(""); setNewClientEmail(""); setNewDescription(""); setSelectedTemplate(""); setShowNew(false);
+      setNewName(""); setNewClient(""); setNewClientEmail(""); setNewClientPhone(""); setNewDescription(""); setSelectedTemplate(""); setShowNew(false);
       toast.success("Project created");
       await load();
       const created = (await getProjects(user.uid)).find((p) => p.id === id);
@@ -249,6 +251,7 @@ function ProjectsList() {
     setEditName(selectedProject.name);
     setEditClient(selectedProject.clientName);
     setEditClientEmail(selectedProject.clientEmail || "");
+    setEditClientPhone(selectedProject.clientPhone || "");
     setEditDescription(selectedProject.description || "");
     setShowEdit(true);
   };
@@ -260,10 +263,11 @@ function ProjectsList() {
         name: editName.trim(),
         clientName: editClient.trim(),
         clientEmail: editClientEmail.trim(),
+        clientPhone: editClientPhone.trim() || undefined,
         description: editDescription.trim() || undefined,
         updatedAt: new Date().toISOString(),
       });
-      setSelectedProject({ ...selectedProject, name: editName.trim(), clientName: editClient.trim(), clientEmail: editClientEmail.trim(), description: editDescription.trim() || undefined });
+      setSelectedProject({ ...selectedProject, name: editName.trim(), clientName: editClient.trim(), clientEmail: editClientEmail.trim(), clientPhone: editClientPhone.trim() || undefined, description: editDescription.trim() || undefined });
       setShowEdit(false);
       toast.success("Project updated");
       load();
@@ -322,6 +326,11 @@ function ProjectsList() {
               ) : (
                 <span className="inline-flex items-center gap-1 text-xs text-muted-foreground" title="Add client email to enable notifications">
                   <BellOff className="h-3 w-3" /> No email set
+                </span>
+              )}
+              {selectedProject.clientPhone && (
+                <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                  📞 {selectedProject.clientPhone}
                 </span>
               )}
             </p>
@@ -476,6 +485,7 @@ function ProjectsList() {
               <div><Label>Project Name</Label><Input value={editName} onChange={(e) => setEditName(e.target.value)} /></div>
               <div><Label>Client Name</Label><Input value={editClient} onChange={(e) => setEditClient(e.target.value)} /></div>
               <div><Label>Client Email (optional)</Label><Input type="email" value={editClientEmail} onChange={(e) => setEditClientEmail(e.target.value)} /></div>
+              <div><Label>Client Phone (optional)</Label><Input type="tel" value={editClientPhone} onChange={(e) => setEditClientPhone(e.target.value)} /></div>
               <div><Label>Description (optional)</Label><Textarea value={editDescription} onChange={(e) => setEditDescription(e.target.value)} placeholder="Brief description of the project scope and goals" rows={3} /></div>
               <Button onClick={handleEdit} className="w-full" disabled={!editName.trim() || !editClient.trim()}>Save Changes</Button>
             </div>
@@ -601,6 +611,7 @@ function ProjectsList() {
             <div><Label>Project Name</Label><Input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="e.g. Custom Gear Assembly" /></div>
             <div><Label>Client Name</Label><Input value={newClient} onChange={(e) => setNewClient(e.target.value)} placeholder="e.g. Acme Corp" /></div>
             <div><Label>Client Email (optional)</Label><Input type="email" value={newClientEmail} onChange={(e) => setNewClientEmail(e.target.value)} placeholder="client@example.com" /></div>
+            <div><Label>Client Phone (optional)</Label><Input type="tel" value={newClientPhone} onChange={(e) => setNewClientPhone(e.target.value)} placeholder="(555) 123-4567" /></div>
             <div><Label>Description (optional)</Label><Textarea value={newDescription} onChange={(e) => setNewDescription(e.target.value)} placeholder="Brief description of the project scope and goals" rows={3} /></div>
             {templates.length > 0 && (
               <div>
