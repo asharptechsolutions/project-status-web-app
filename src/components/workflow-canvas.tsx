@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ReactFlow,
   Background,
@@ -49,6 +49,7 @@ interface StageNodeData {
   onAssignWorker: (nodeId: string, workerId: string) => void;
   onRemove: (nodeId: string) => void;
   onEstimatedCompletionChange: (nodeId: string, date: string) => void;
+  direction?: "TB" | "LR";
   [key: string]: unknown;
 }
 
@@ -84,7 +85,7 @@ function StageNode({ id, data }: NodeProps<Node<StageNodeData>>) {
 
   return (
     <div className={`rounded-lg border-2 ${borderColor} ${bgColor} min-w-[220px] max-w-[270px] shadow-md overflow-hidden`}>
-      <Handle type="target" position={Position.Top} className="!bg-primary !w-3 !h-3" />
+      <Handle type="target" position={data.direction === "LR" ? Position.Left : Position.Top} className="!bg-primary !w-3 !h-3" />
       {/* Header with status stripe */}
       <div className={`${headerBg} px-3 py-2 flex items-center justify-between gap-2`}>
         <div className="flex items-center gap-1.5 min-w-0">
@@ -223,7 +224,7 @@ function StageNode({ id, data }: NodeProps<Node<StageNodeData>>) {
           )}
         </div>
       </div>
-      <Handle type="source" position={Position.Bottom} className="!bg-primary !w-3 !h-3" />
+      <Handle type="source" position={data.direction === "LR" ? Position.Right : Position.Bottom} className="!bg-primary !w-3 !h-3" />
     </div>
   );
 }
@@ -286,6 +287,15 @@ export function WorkflowCanvas({
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [addPosition, setAddPosition] = useState<{ x: number; y: number }>({ x: 250, y: 100 });
   const [newStageLabel, setNewStageLabel] = useState("");
+
+  // Responsive layout direction: horizontal (LR) on desktop, vertical (TB) on mobile
+  const [direction, setDirection] = useState<"TB" | "LR">("TB");
+  useEffect(() => {
+    const update = () => setDirection(window.innerWidth >= 768 ? "LR" : "TB");
+    update();
+    window.addEventListener("resize", update);
+    return () => window.removeEventListener("resize", update);
+  }, []);
   // Compute which nodes are blocked (predecessors not all completed)
   const blockedMap = useMemo(() => {
     const map: Record<string, { blocked: boolean; blockedBy: string[] }> = {};
@@ -318,6 +328,7 @@ export function WorkflowCanvas({
           estimatedCompletion: n.estimatedCompletion,
           workers,
           readOnly,
+          direction,
           blocked: blockedMap[n.id]?.blocked ?? false,
           blockedBy: blockedMap[n.id]?.blockedBy ?? [],
           onStatusChange,
@@ -326,7 +337,7 @@ export function WorkflowCanvas({
           onEstimatedCompletionChange,
         },
       })),
-    [wfNodes, workers, onStatusChange, onAssignWorker, onRemoveNode, onEstimatedCompletionChange, blockedMap]
+    [wfNodes, workers, onStatusChange, onAssignWorker, onRemoveNode, onEstimatedCompletionChange, blockedMap, direction]
   );
 
   const rfEdges: Edge[] = useMemo(
@@ -344,10 +355,10 @@ export function WorkflowCanvas({
   // Auto-layout nodes in readOnly mode for clean presentation
   const initialNodes = useMemo(() => {
     if (readOnly && rfNodes.length > 0) {
-      return getLayoutedElements(rfNodes, rfEdges, "TB");
+      return getLayoutedElements(rfNodes, rfEdges, direction);
     }
     return rfNodes;
-  }, [readOnly, rfNodes, rfEdges]);
+  }, [readOnly, rfNodes, rfEdges, direction]);
 
   const [flowNodes, setFlowNodes] = useState(initialNodes);
   const [flowEdges, setFlowEdges] = useState(rfEdges);
@@ -355,12 +366,12 @@ export function WorkflowCanvas({
   // Sync when props change
   useMemo(() => {
     if (readOnly && rfNodes.length > 0) {
-      setFlowNodes(getLayoutedElements(rfNodes, rfEdges, "TB"));
+      setFlowNodes(getLayoutedElements(rfNodes, rfEdges, direction));
     } else {
       setFlowNodes(rfNodes);
     }
     setFlowEdges(rfEdges);
-  }, [rfNodes, rfEdges, readOnly]);
+  }, [rfNodes, rfEdges, readOnly, direction]);
 
   const onNodesChange: OnNodesChange = useCallback(
     (changes) => {
@@ -425,7 +436,7 @@ export function WorkflowCanvas({
   }, [newStageLabel, addPosition, onAddNode]);
 
   const handleAutoLayout = useCallback(() => {
-    const layouted = getLayoutedElements(flowNodes, flowEdges, "TB");
+    const layouted = getLayoutedElements(flowNodes, flowEdges, direction);
     setFlowNodes(layouted);
     // Persist positions back
     const wfUpdated = wfNodes.map((wn) => {
@@ -433,7 +444,7 @@ export function WorkflowCanvas({
       return rfNode ? { ...wn, position: rfNode.position } : wn;
     });
     onNodesUpdate(wfUpdated);
-  }, [flowNodes, flowEdges, wfNodes, onNodesUpdate]);
+  }, [flowNodes, flowEdges, wfNodes, onNodesUpdate, direction]);
 
   const handleToolbarAdd = useCallback(() => {
     if (!onAddNode) return;
