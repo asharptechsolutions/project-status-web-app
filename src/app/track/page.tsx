@@ -44,7 +44,7 @@ function TrackInner() {
   const [step, setStep] = useState<"loading" | "email" | "code" | "projects" | "detail">("loading");
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
-  const [generatedCode, setGeneratedCode] = useState("");
+  const [fallbackCode, setFallbackCode] = useState("");
   const [error, setError] = useState("");
   const [sending, setSending] = useState(false);
   const [verifying, setVerifying] = useState(false);
@@ -147,8 +147,15 @@ function TrackInner() {
     setError("");
     setSending(true);
     try {
-      const accessCode = await createAccessCode(email);
-      setGeneratedCode(accessCode);
+      await createAccessCode(email);
+      // Check if fallback mode was used (Cloud Function not deployed)
+      const fb = sessionStorage.getItem("wfz_fallback_code");
+      if (fb) {
+        setFallbackCode(fb);
+        sessionStorage.removeItem("wfz_fallback_code");
+      } else {
+        setFallbackCode("");
+      }
       setStep("code");
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Failed to send verification code");
@@ -189,7 +196,7 @@ function TrackInner() {
     setSelectedProject(null);
     setEmail("");
     setCode("");
-    setGeneratedCode("");
+    setFallbackCode("");
     setTokenMode(false);
     setStep("email");
   };
@@ -257,12 +264,20 @@ function TrackInner() {
               </div>
             </div>
             <CardTitle className="text-xl">Enter Verification Code</CardTitle>
-            <p className="text-sm text-muted-foreground mt-1">
-              Your verification code is: <strong className="text-foreground text-lg tracking-widest">{generatedCode}</strong>
-            </p>
-            <p className="text-xs text-muted-foreground mt-2">
-              (Email delivery coming soon — for now, enter the code shown above)
-            </p>
+            {fallbackCode ? (
+              <>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Your verification code is: <strong className="text-foreground text-lg tracking-widest">{fallbackCode}</strong>
+                </p>
+                <p className="text-xs text-muted-foreground mt-2">
+                  (Email delivery is being set up — for now, enter the code shown above)
+                </p>
+              </>
+            ) : (
+              <p className="text-sm text-muted-foreground mt-1">
+                We sent a 6-digit verification code to <strong className="text-foreground">{email}</strong>. Check your inbox and enter it below.
+              </p>
+            )}
           </CardHeader>
           <CardContent className="space-y-4">
             <div>
@@ -285,7 +300,7 @@ function TrackInner() {
               {verifying ? "Verifying..." : "Verify & View Projects"}
             </Button>
             <div className="text-center">
-              <Button variant="link" size="sm" onClick={() => { setStep("email"); setCode(""); setError(""); setGeneratedCode(""); }}>
+              <Button variant="link" size="sm" onClick={() => { setStep("email"); setCode(""); setError(""); setFallbackCode(""); }}>
                 Use a different email
               </Button>
             </div>

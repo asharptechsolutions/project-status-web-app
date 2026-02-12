@@ -164,19 +164,28 @@ export async function deleteWorker(id: string): Promise<void> {
 }
 
 // Access Codes for contact verification
-export async function createAccessCode(email: string): Promise<string> {
+export async function createAccessCode(email: string): Promise<void> {
   try {
-    const code = Math.floor(100000 + Math.random() * 900000).toString();
-    await addDoc(collection(db, PREFIX + "access_codes"), {
-      email: email.toLowerCase().trim(),
-      code,
-      createdAt: new Date().toISOString(),
-      expiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(), // 15 min
-      used: false,
-    });
-    return code;
-  } catch (error) {
-    handleFirestoreError("creating access code", error);
+    const { httpsCallable } = await import("firebase/functions");
+    const { functions } = await import("./firebase");
+    const sendCode = httpsCallable(functions, "sendVerificationCode");
+    await sendCode({ email: email.toLowerCase().trim() });
+  } catch (error: unknown) {
+    // If Cloud Function is not deployed yet, fall back to local code generation
+    if (error instanceof Error && (error.message.includes("not-found") || error.message.includes("INTERNAL"))) {
+      const code = Math.floor(100000 + Math.random() * 900000).toString();
+      await addDoc(collection(db, PREFIX + "access_codes"), {
+        email: email.toLowerCase().trim(),
+        code,
+        createdAt: new Date().toISOString(),
+        expiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
+        used: false,
+      });
+      // Store code in sessionStorage so the UI can show it as fallback
+      sessionStorage.setItem("wfz_fallback_code", code);
+      return;
+    }
+    handleFirestoreError("sending verification code", error);
   }
 }
 
