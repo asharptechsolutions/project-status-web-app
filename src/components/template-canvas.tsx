@@ -249,7 +249,9 @@ export function TemplateCanvas({
       >
         <Background />
         <Controls />
-        <MiniMap nodeColor={() => "#6366f1"} />
+        <div className="hidden md:block">
+          <MiniMap nodeColor={() => "#6366f1"} />
+        </div>
       </ReactFlow>
       <div className="absolute top-3 right-3 z-10 flex gap-2">
         <Button size="sm" variant="outline" className="shadow-md" onClick={handleAutoLayout}>

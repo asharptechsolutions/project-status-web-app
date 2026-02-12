@@ -436,15 +436,17 @@ export function WorkflowCanvas({
         {!readOnly && (
           <>
             <Controls />
-            <MiniMap
-              nodeStrokeWidth={3}
-              nodeColor={(n) => {
-                const data = n.data as StageNodeData;
-                if (data.status === "completed") return "#22c55e";
-                if (data.status === "in-progress") return "#3b82f6";
-                return "#94a3b8";
-              }}
-            />
+            <div className="hidden md:block">
+              <MiniMap
+                nodeStrokeWidth={3}
+                nodeColor={(n) => {
+                  const data = n.data as StageNodeData;
+                  if (data.status === "completed") return "#22c55e";
+                  if (data.status === "in-progress") return "#3b82f6";
+                  return "#94a3b8";
+                }}
+              />
+            </div>
           </>
         )}
       </ReactFlow>
