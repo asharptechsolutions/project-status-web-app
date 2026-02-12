@@ -53,6 +53,7 @@ function TrackInner() {
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [loadingProjects, setLoadingProjects] = useState(false);
   const [tokenMode, setTokenMode] = useState(false);
+  const [pendingProject, setPendingProject] = useState<Project | null>(null);
 
   const loadProjects = useCallback(async (contactEmail: string) => {
     setLoadingProjects(true);
@@ -69,19 +70,44 @@ function TrackInner() {
     }
   }, []);
 
+  const verifyTokenAccess = useCallback(async (contactEmail: string, project: Project) => {
+    const contacts = project.contacts || [];
+    const isAuthorized = contacts.some(
+      (c: { email: string }) => c.email.toLowerCase() === contactEmail.toLowerCase()
+    );
+    if (isAuthorized) {
+      setSession(contactEmail);
+      setVerifiedEmail(contactEmail);
+      setSelectedProject(project);
+      setPendingProject(null);
+      setStep("detail");
+    } else {
+      setError("Your email is not authorized to view this project. Contact the project owner to add your email.");
+      setPendingProject(null);
+      setStep("email");
+    }
+  }, []);
+
   useEffect(() => {
     const token = searchParams.get("token");
     const projectId = searchParams.get("id");
 
-    // Token-based direct access (no verification needed)
+    // Token-based access — validate token, then require email verification
     if (token && projectId) {
       setTokenMode(true);
       (async () => {
         try {
           const project = await getProject(projectId);
           if (project && project.shareToken === token) {
-            setSelectedProject(project);
-            setStep("detail");
+            // Token valid — check if user already has a verified session
+            const session = getSession();
+            if (session) {
+              await verifyTokenAccess(session.email, project);
+            } else {
+              // Store project, require email verification
+              setPendingProject(project);
+              setStep("email");
+            }
           } else {
             setError("Invalid or expired tracking link. Please request a new one from the project owner.");
             setStep("email");
@@ -101,7 +127,7 @@ function TrackInner() {
     } else {
       setStep("email");
     }
-  }, [loadProjects, searchParams]);
+  }, [loadProjects, verifyTokenAccess, searchParams]);
 
   // If a project ID is in the URL (without token) and we're verified, auto-select it
   useEffect(() => {
@@ -143,7 +169,12 @@ function TrackInner() {
         return;
       }
       setSession(email);
-      await loadProjects(email);
+      // If we have a pending project from a share link, verify email against contacts
+      if (pendingProject) {
+        await verifyTokenAccess(email, pendingProject);
+      } else {
+        await loadProjects(email);
+      }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Verification failed");
     } finally {
