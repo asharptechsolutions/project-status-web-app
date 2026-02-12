@@ -36,7 +36,7 @@ export function LoginPage() {
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           <div className="flex justify-center mb-2"><Workflow className="h-10 w-10 text-primary" /></div>
-          <CardTitle className="text-2xl">Workflowz</CardTitle>
+          <CardTitle className="text-2xl">ProjectStatus</CardTitle>
           <CardDescription>{isSignUp ? "Create your account" : "Sign in to your account"}</CardDescription>
         </CardHeader>
         <CardContent>

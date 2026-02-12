@@ -8,13 +8,13 @@ import { Toaster } from "sonner";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Workflowz - Visual Workflow Tracking",
+  title: "ProjectStatus - Visual Workflow Tracking",
   description: "Track projects with visual workflow canvases and share real-time progress with clients",
   icons: { icon: "/workflowz/icon.svg" },
   openGraph: {
-    title: "Workflowz - Visual Workflow Tracking",
+    title: "ProjectStatus - Visual Workflow Tracking",
     description: "Track projects with visual workflow canvases and share real-time progress with clients",
-    siteName: "Workflowz",
+    siteName: "ProjectStatus",
     type: "website",
   },
 };

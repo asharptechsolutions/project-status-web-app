@@ -29,7 +29,7 @@ export function LandingPage() {
         <div className="max-w-6xl mx-auto flex items-center justify-between px-4 h-14">
           <div className="flex items-center gap-2">
             <Workflow className="h-6 w-6 text-primary" />
-            <span className="font-bold text-lg">Workflowz</span>
+            <span className="font-bold text-lg">ProjectStatus</span>
           </div>
           <div className="flex items-center gap-2">
             <Button variant="ghost" size="sm" onClick={() => setShowAuth(true)}>
@@ -179,7 +179,7 @@ export function LandingPage() {
         <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2 text-sm text-muted-foreground">
           <div className="flex items-center gap-2">
             <Workflow className="h-4 w-4" />
-            <span>Workflowz</span>
+            <span>ProjectStatus</span>
           </div>
           <p>&copy; {new Date().getFullYear()} SharpTech.ai. All rights reserved.</p>
         </div>

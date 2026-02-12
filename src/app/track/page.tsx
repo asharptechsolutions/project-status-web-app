@@ -323,7 +323,7 @@ function TrackInner() {
           <div className="max-w-4xl mx-auto flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Workflow className="h-5 w-5 text-primary" />
-              <span className="font-bold">Workflowz</span>
+              <span className="font-bold">ProjectStatus</span>
             </div>
             <div className="flex items-center gap-2">
               {verifiedEmail && <span className="text-sm text-muted-foreground hidden sm:inline">{verifiedEmail}</span>}
@@ -391,7 +391,7 @@ function TrackInner() {
         </main>
 
         <footer className="border-t py-4 px-4 mt-8">
-          <p className="text-center text-sm text-muted-foreground">Powered by Workflowz</p>
+          <p className="text-center text-sm text-muted-foreground">Powered by ProjectStatus</p>
         </footer>
       </div>
     );
@@ -404,7 +404,7 @@ function TrackInner() {
         <div className="max-w-4xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Workflow className="h-5 w-5 text-primary" />
-            <span className="font-bold">Workflowz</span>
+            <span className="font-bold">ProjectStatus</span>
           </div>
           <div className="flex items-center gap-2">
             <span className="text-sm text-muted-foreground hidden sm:inline">{verifiedEmail}</span>
@@ -462,7 +462,7 @@ function TrackInner() {
       </main>
 
       <footer className="border-t py-4 px-4 mt-8">
-        <p className="text-center text-sm text-muted-foreground">Powered by Workflowz</p>
+        <p className="text-center text-sm text-muted-foreground">Powered by ProjectStatus</p>
       </footer>
     </div>
   );

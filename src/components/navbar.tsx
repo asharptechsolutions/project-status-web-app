@@ -33,7 +33,7 @@ export function Navbar() {
       <div className="flex h-14 items-center px-4">
         <Link href="/" className="flex items-center gap-2 font-bold mr-6">
           <Workflow className="h-5 w-5" />
-          <span className="hidden sm:inline">Workflowz</span>
+          <span className="hidden sm:inline">ProjectStatus</span>
         </Link>
 
         <nav className="hidden md:flex items-center gap-1 flex-1 justify-center">
@@ -61,7 +61,7 @@ export function Navbar() {
       <Sheet open={open} onOpenChange={setOpen}>
         <SheetContent side="left">
           <SheetHeader>
-            <SheetTitle>Workflowz</SheetTitle>
+            <SheetTitle>ProjectStatus</SheetTitle>
             <SheetDescription>Navigate the app</SheetDescription>
           </SheetHeader>
           <nav className="flex flex-col gap-2 mt-6">
