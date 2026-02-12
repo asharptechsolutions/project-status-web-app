@@ -8,8 +8,15 @@ import { Toaster } from "sonner";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Workflowz - Machine Shop Workflow Tracking",
-  description: "Track machine shop projects and share progress with clients",
+  title: "Workflowz - Visual Workflow Tracking",
+  description: "Track projects with visual workflow canvases and share real-time progress with clients",
+  icons: { icon: "/workflowz/icon.svg" },
+  openGraph: {
+    title: "Workflowz - Visual Workflow Tracking",
+    description: "Track projects with visual workflow canvases and share real-time progress with clients",
+    siteName: "Workflowz",
+    type: "website",
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
