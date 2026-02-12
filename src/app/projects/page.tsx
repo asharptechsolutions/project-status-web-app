@@ -14,7 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Trash2, ArrowLeft, Play, CheckCircle2, Link2, Copy, ChevronRight, Pencil } from "lucide-react";
+import { Plus, Trash2, ArrowLeft, Play, CheckCircle2, Link2, Copy, ChevronRight, Pencil, Search, X } from "lucide-react";
 import { nanoid } from "nanoid";
 import basePath from "@/lib/base-path";
 import { toast } from "sonner";
@@ -39,6 +39,8 @@ function ProjectsList() {
   const [editName, setEditName] = useState("");
   const [editClient, setEditClient] = useState("");
   const [editClientEmail, setEditClientEmail] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
 
   const load = useCallback(async () => {
     if (!user) return;
@@ -319,6 +321,13 @@ function ProjectsList() {
     );
   }
 
+  const filteredProjects = projects.filter((p) => {
+    const q = searchQuery.toLowerCase();
+    const matchesSearch = !q || p.name.toLowerCase().includes(q) || p.clientName.toLowerCase().includes(q);
+    const matchesStatus = statusFilter === "all" || p.status === statusFilter;
+    return matchesSearch && matchesStatus;
+  });
+
   return (
     <div className="p-4 max-w-4xl mx-auto w-full">
       <div className="flex items-center justify-between mb-6">
@@ -326,11 +335,42 @@ function ProjectsList() {
         <Button onClick={() => setShowNew(true)}><Plus className="h-4 w-4 mr-1" /> New Project</Button>
       </div>
 
+      {projects.length > 0 && (
+        <div className="flex flex-col sm:flex-row gap-3 mb-4">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search projects or clients..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9 pr-8"
+            />
+            {searchQuery && (
+              <button onClick={() => setSearchQuery("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className="w-full sm:w-[150px]">
+              <SelectValue placeholder="All statuses" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All statuses</SelectItem>
+              <SelectItem value="active">Active</SelectItem>
+              <SelectItem value="completed">Completed</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+
       {projects.length === 0 ? (
         <Card><CardContent className="pt-6 text-center text-muted-foreground">No projects yet. Create your first one!</CardContent></Card>
+      ) : filteredProjects.length === 0 ? (
+        <Card><CardContent className="pt-6 text-center text-muted-foreground">No projects match your search.</CardContent></Card>
       ) : (
         <div className="space-y-3">
-          {projects.map((p) => {
+          {filteredProjects.map((p) => {
             const prog = p.nodes.length ? Math.round((p.nodes.filter((n) => n.status === "completed").length / p.nodes.length) * 100) : 0;
             return (
               <Card key={p.id} className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => setSelectedProject(p)}>
