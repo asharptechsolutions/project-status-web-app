@@ -13,7 +13,7 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Trash2, ArrowLeft, Play, CheckCircle2, Link2, Copy, ChevronRight } from "lucide-react";
+import { Plus, Trash2, ArrowLeft, Play, CheckCircle2, Link2, Copy, ChevronRight, Pencil } from "lucide-react";
 import { nanoid } from "nanoid";
 import basePath from "@/lib/base-path";
 import { toast } from "sonner";
@@ -33,6 +33,10 @@ function ProjectsList() {
   const [newNodeLabel, setNewNodeLabel] = useState("");
   const [copyMsg, setCopyMsg] = useState("");
   const [loading, setLoading] = useState(true);
+  const [showEdit, setShowEdit] = useState(false);
+  const [editName, setEditName] = useState("");
+  const [editClient, setEditClient] = useState("");
+  const [editClientEmail, setEditClientEmail] = useState("");
 
   const load = useCallback(async () => {
     if (!user) return;
@@ -161,6 +165,32 @@ function ProjectsList() {
     }
   };
 
+  const openEdit = () => {
+    if (!selectedProject) return;
+    setEditName(selectedProject.name);
+    setEditClient(selectedProject.clientName);
+    setEditClientEmail(selectedProject.clientEmail || "");
+    setShowEdit(true);
+  };
+
+  const handleEdit = async () => {
+    if (!selectedProject || !editName.trim() || !editClient.trim()) return;
+    try {
+      await updateProject(selectedProject.id, {
+        name: editName.trim(),
+        clientName: editClient.trim(),
+        clientEmail: editClientEmail.trim(),
+        updatedAt: new Date().toISOString(),
+      });
+      setSelectedProject({ ...selectedProject, name: editName.trim(), clientName: editClient.trim(), clientEmail: editClientEmail.trim() });
+      setShowEdit(false);
+      toast.success("Project updated");
+      load();
+    } catch (error: any) {
+      toast.error(error.message || "Failed to update project");
+    }
+  };
+
   if (loading) return <div className="flex items-center justify-center p-8"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" /></div>;
 
   if (selectedProject) {
@@ -178,6 +208,9 @@ function ProjectsList() {
           </div>
           <div className="flex items-center gap-2">
             <Badge variant={selectedProject.status === "completed" ? "default" : "secondary"}>{selectedProject.status}</Badge>
+            <Button variant="outline" size="sm" onClick={openEdit}>
+              <Pencil className="h-4 w-4 mr-1" /> Edit
+            </Button>
             <Button variant="outline" size="sm" onClick={copyShareLink}>
               <Link2 className="h-4 w-4 mr-1" /> {copyMsg || "Share Link"}
             </Button>
@@ -246,6 +279,21 @@ function ProjectsList() {
           <Input placeholder="New stage name (e.g. Metal Cutting)" value={newNodeLabel} onChange={(e) => setNewNodeLabel(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addNode()} />
           <Button onClick={addNode}><Plus className="h-4 w-4 mr-1" /> Add</Button>
         </div>
+
+        <Dialog open={showEdit} onOpenChange={setShowEdit}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Edit Project</DialogTitle>
+              <DialogDescription>Update project name and client information</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div><Label>Project Name</Label><Input value={editName} onChange={(e) => setEditName(e.target.value)} /></div>
+              <div><Label>Client Name</Label><Input value={editClient} onChange={(e) => setEditClient(e.target.value)} /></div>
+              <div><Label>Client Email (optional)</Label><Input type="email" value={editClientEmail} onChange={(e) => setEditClientEmail(e.target.value)} /></div>
+              <Button onClick={handleEdit} className="w-full" disabled={!editName.trim() || !editClient.trim()}>Save Changes</Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     );
   }
