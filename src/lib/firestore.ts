@@ -111,6 +111,14 @@ export async function createTemplate(data: Omit<WorkflowTemplate, "id">): Promis
   }
 }
 
+export async function updateTemplate(id: string, data: Partial<Omit<WorkflowTemplate, "id">>): Promise<void> {
+  try {
+    await updateDoc(doc(db, PREFIX + "templates", id), data);
+  } catch (error) {
+    handleFirestoreError("updating template", error);
+  }
+}
+
 export async function deleteTemplate(id: string): Promise<void> {
   try {
     await deleteDoc(doc(db, PREFIX + "templates", id));
