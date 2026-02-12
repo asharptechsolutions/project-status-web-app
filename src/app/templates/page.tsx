@@ -3,12 +3,13 @@ import { useEffect, useState, useCallback } from "react";
 import { Navbar } from "@/components/navbar";
 import { AuthGate } from "@/components/auth-gate";
 import { useAuth } from "@/lib/auth-context";
-import { getTemplates, createTemplate, updateTemplate, deleteTemplate } from "@/lib/firestore";
-import type { WorkflowTemplate, WorkflowNode, WorkflowEdge } from "@/lib/types";
+import { getTemplates, createTemplate, updateTemplate, deleteTemplate, getPresetStages, createPresetStage, deletePresetStage } from "@/lib/firestore";
+import type { WorkflowTemplate, WorkflowNode, WorkflowEdge, PresetStage } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Plus, Trash2, ChevronRight, Pencil } from "lucide-react";
 import { nanoid } from "nanoid";
@@ -32,10 +33,16 @@ function TemplatesInner() {
   const [canvasNodes, setCanvasNodes] = useState<TemplateNode[]>([]);
   const [canvasEdges, setCanvasEdges] = useState<WorkflowEdge[]>([]);
   const [loading, setLoading] = useState(true);
+  const [presetStages, setPresetStages] = useState<PresetStage[]>([]);
+  const [newPresetName, setNewPresetName] = useState("");
 
   const load = useCallback(async () => {
     if (!user) return;
-    try { setTemplates(await getTemplates(user.uid)); } catch (error: any) { toast.error(error.message || "Failed to load templates"); } finally { setLoading(false); }
+    try {
+      const [t, ps] = await Promise.all([getTemplates(user.uid), getPresetStages(user.uid)]);
+      setTemplates(t);
+      setPresetStages(ps);
+    } catch (error: any) { toast.error(error.message || "Failed to load templates"); } finally { setLoading(false); }
   }, [user]);
   useEffect(() => { load(); }, [load]);
 
@@ -189,6 +196,69 @@ function TemplatesInner() {
             </CardContent>
           </Card>
         ))}
+      </div>
+
+      {/* Preset Stages Section */}
+      <div className="mt-10">
+        <h2 className="text-lg font-semibold mb-3">Preset Stages</h2>
+        <p className="text-sm text-muted-foreground mb-4">
+          Save commonly used stage names here. They&apos;ll appear as quick-pick options when adding stages to any project.
+        </p>
+        <div className="flex gap-2 mb-4">
+          <Input
+            placeholder="Stage name (e.g. Quality Check)"
+            value={newPresetName}
+            onChange={(e) => setNewPresetName(e.target.value)}
+            onKeyDown={async (e) => {
+              if (e.key === "Enter" && user && newPresetName.trim()) {
+                try {
+                  await createPresetStage({ name: newPresetName.trim(), userId: user.uid, createdAt: new Date().toISOString() });
+                  setNewPresetName("");
+                  toast.success("Preset stage added");
+                  load();
+                } catch (error: any) { toast.error(error.message || "Failed to add preset stage"); }
+              }
+            }}
+            className="max-w-md"
+          />
+          <Button
+            onClick={async () => {
+              if (!user || !newPresetName.trim()) return;
+              try {
+                await createPresetStage({ name: newPresetName.trim(), userId: user.uid, createdAt: new Date().toISOString() });
+                setNewPresetName("");
+                toast.success("Preset stage added");
+                load();
+              } catch (error: any) { toast.error(error.message || "Failed to add preset stage"); }
+            }}
+            disabled={!newPresetName.trim()}
+          >
+            <Plus className="h-4 w-4 mr-1" /> Add
+          </Button>
+        </div>
+        {presetStages.length > 0 ? (
+          <div className="flex flex-wrap gap-2">
+            {presetStages.map((ps) => (
+              <Badge key={ps.id} variant="secondary" className="text-sm py-1.5 px-3 flex items-center gap-1.5">
+                {ps.name}
+                <button
+                  onClick={async () => {
+                    try {
+                      await deletePresetStage(ps.id);
+                      toast.success("Preset stage removed");
+                      load();
+                    } catch (error: any) { toast.error(error.message || "Failed to delete preset stage"); }
+                  }}
+                  className="ml-1 hover:text-destructive transition-colors"
+                >
+                  <Trash2 className="h-3 w-3" />
+                </button>
+              </Badge>
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">No preset stages yet. Add some above!</p>
+        )}
       </div>
     </div>
   );

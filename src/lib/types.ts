@@ -55,6 +55,13 @@ export interface Worker {
   userId: string;
 }
 
+export interface PresetStage {
+  id: string;
+  name: string;
+  userId: string;
+  createdAt: string;
+}
+
 export interface ProjectMessage {
   id: string;
   projectId: string;

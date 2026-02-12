@@ -5,7 +5,7 @@ import {
 } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
 import { storage } from "./firebase";
-import type { Project, WorkflowTemplate, Worker, ProjectContact, ProjectFile, ProjectMessage } from "./types";
+import type { Project, WorkflowTemplate, Worker, ProjectContact, ProjectFile, ProjectMessage, PresetStage } from "./types";
 
 const PREFIX = "wfz_";
 
@@ -319,5 +319,33 @@ export async function sendProjectMessage(
     return ref.id;
   } catch (error) {
     handleFirestoreError("sending message", error);
+  }
+}
+
+// Preset Stages
+export async function getPresetStages(userId: string): Promise<PresetStage[]> {
+  try {
+    const q = query(collection(db, PREFIX + "preset_stages"), where("userId", "==", userId));
+    const snap = await getDocs(q);
+    return snap.docs.map((d) => ({ id: d.id, ...d.data() } as PresetStage));
+  } catch (error) {
+    handleFirestoreError("loading preset stages", error);
+  }
+}
+
+export async function createPresetStage(data: Omit<PresetStage, "id">): Promise<string> {
+  try {
+    const ref = await addDoc(collection(db, PREFIX + "preset_stages"), data);
+    return ref.id;
+  } catch (error) {
+    handleFirestoreError("creating preset stage", error);
+  }
+}
+
+export async function deletePresetStage(id: string): Promise<void> {
+  try {
+    await deleteDoc(doc(db, PREFIX + "preset_stages", id));
+  } catch (error) {
+    handleFirestoreError("deleting preset stage", error);
   }
 }

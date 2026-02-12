@@ -4,8 +4,8 @@ import { useSearchParams } from "next/navigation";
 import { Navbar } from "@/components/navbar";
 import { AuthGate } from "@/components/auth-gate";
 import { useAuth } from "@/lib/auth-context";
-import { getProjects, createProject, updateProject, deleteProject, getTemplates, getWorkers, getProjectFiles } from "@/lib/firestore";
-import type { Project, ProjectContact, WorkflowNode, WorkflowEdge, WorkflowTemplate, Worker, ProjectFile } from "@/lib/types";
+import { getProjects, createProject, updateProject, deleteProject, getTemplates, getWorkers, getProjectFiles, getPresetStages } from "@/lib/firestore";
+import type { Project, ProjectContact, WorkflowNode, WorkflowEdge, WorkflowTemplate, Worker, ProjectFile, PresetStage } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -30,6 +30,7 @@ function ProjectsList() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [templates, setTemplates] = useState<WorkflowTemplate[]>([]);
   const [workers, setWorkers] = useState<Worker[]>([]);
+  const [presetStages, setPresetStages] = useState<PresetStage[]>([]);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [showNew, setShowNew] = useState(false);
   const [newName, setNewName] = useState("");
@@ -57,10 +58,11 @@ function ProjectsList() {
   const load = useCallback(async () => {
     if (!user) return;
     try {
-      const [p, t, w] = await Promise.all([getProjects(user.uid), getTemplates(user.uid), getWorkers(user.uid)]);
+      const [p, t, w, ps] = await Promise.all([getProjects(user.uid), getTemplates(user.uid), getWorkers(user.uid), getPresetStages(user.uid)]);
       setProjects(p);
       setTemplates(t);
       setWorkers(w);
+      setPresetStages(ps);
     } catch (error: any) {
       toast.error(error.message || "Failed to load data");
     } finally {
@@ -447,6 +449,7 @@ function ProjectsList() {
               onRemoveNode={removeNode}
               onEstimatedCompletionChange={updateEstimatedCompletion}
               onAddNode={addNodeAtPosition}
+              presetStages={presetStages}
             />
           ) : (
             <Card><CardContent className="pt-6 text-center text-muted-foreground">No stages yet. Add your first one below!</CardContent></Card>

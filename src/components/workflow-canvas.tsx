@@ -20,7 +20,7 @@ import {
   type NodeProps,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import type { WorkflowNode as WorkflowNodeType, WorkflowEdge, Worker } from "@/lib/types";
+import type { WorkflowNode as WorkflowNodeType, WorkflowEdge, Worker, PresetStage } from "@/lib/types";
 type WorkflowNode = WorkflowNodeType;
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -270,6 +270,7 @@ interface WorkflowCanvasProps {
   onEstimatedCompletionChange: (nodeId: string, date: string) => void;
   onAddNode?: (label: string, position: { x: number; y: number }) => void;
   readOnly?: boolean;
+  presetStages?: PresetStage[];
 }
 
 export function WorkflowCanvas({
@@ -284,6 +285,7 @@ export function WorkflowCanvas({
   onEstimatedCompletionChange,
   onAddNode,
   readOnly = false,
+  presetStages = [],
 }: WorkflowCanvasProps) {
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [addPosition, setAddPosition] = useState<{ x: number; y: number }>({ x: 250, y: 100 });
@@ -522,17 +524,43 @@ export function WorkflowCanvas({
             <DialogTitle>Add New Stage</DialogTitle>
             <DialogDescription>Enter a name for the new workflow stage</DialogDescription>
           </DialogHeader>
-          <div className="flex gap-2">
-            <Input
-              placeholder="Stage name (e.g. Quality Check)"
-              value={newStageLabel}
-              onChange={(e) => setNewStageLabel(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleAddSubmit()}
-              autoFocus
-            />
-            <Button onClick={handleAddSubmit} disabled={!newStageLabel.trim()}>
-              <Plus className="h-4 w-4 mr-1" /> Add
-            </Button>
+          <div className="space-y-3">
+            <div className="flex gap-2">
+              <Input
+                placeholder="Stage name (e.g. Quality Check)"
+                value={newStageLabel}
+                onChange={(e) => setNewStageLabel(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleAddSubmit()}
+                autoFocus
+              />
+              <Button onClick={handleAddSubmit} disabled={!newStageLabel.trim()}>
+                <Plus className="h-4 w-4 mr-1" /> Add
+              </Button>
+            </div>
+            {presetStages.length > 0 && (
+              <div>
+                <p className="text-sm text-muted-foreground mb-2">Or pick a preset:</p>
+                <div className="flex flex-wrap gap-2">
+                  {presetStages.map((ps) => (
+                    <Button
+                      key={ps.id}
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => {
+                        setNewStageLabel(ps.name);
+                        if (onAddNode && addPosition) {
+                          onAddNode(ps.name, addPosition);
+                          setShowAddDialog(false);
+                          setNewStageLabel("");
+                        }
+                      }}
+                    >
+                      {ps.name}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </DialogContent>
       </Dialog>
