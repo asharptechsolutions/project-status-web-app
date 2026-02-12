@@ -139,6 +139,14 @@ export async function createWorker(data: Omit<Worker, "id">): Promise<string> {
   }
 }
 
+export async function updateWorker(id: string, data: Partial<Omit<Worker, "id">>): Promise<void> {
+  try {
+    await updateDoc(doc(db, PREFIX + "workers", id), data);
+  } catch (error) {
+    handleFirestoreError("updating worker", error);
+  }
+}
+
 export async function deleteWorker(id: string): Promise<void> {
   try {
     await deleteDoc(doc(db, PREFIX + "workers", id));
