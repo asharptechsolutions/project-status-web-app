@@ -25,7 +25,7 @@ type WorkflowNode = WorkflowNodeType;
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Play, CheckCircle2, Trash2, Clock, Loader2, User, Plus, LayoutGrid, Lock, Unlock } from "lucide-react";
+import { Play, CheckCircle2, Trash2, Clock, Loader2, User, Plus, LayoutGrid, Lock, Unlock, CalendarDays } from "lucide-react";
 import Dagre from "@dagrejs/dagre";
 import { Input } from "@/components/ui/input";
 import {
@@ -40,6 +40,7 @@ interface StageNodeData {
   label: string;
   status: WorkflowNode["status"];
   assignedTo?: string;
+  estimatedCompletion?: string;
   workers: Worker[];
   readOnly?: boolean;
   blocked?: boolean;
@@ -47,6 +48,7 @@ interface StageNodeData {
   onStatusChange: (nodeId: string, status: WorkflowNode["status"]) => void;
   onAssignWorker: (nodeId: string, workerId: string) => void;
   onRemove: (nodeId: string) => void;
+  onEstimatedCompletionChange: (nodeId: string, date: string) => void;
   [key: string]: unknown;
 }
 
@@ -140,6 +142,30 @@ function StageNode({ id, data }: NodeProps<Node<StageNodeData>>) {
           <div className="flex items-center gap-1.5 text-xs text-green-600 dark:text-green-400">
             <Unlock className="h-3 w-3" />
             <span>Ready to start</span>
+          </div>
+        )}
+        {/* Estimated Completion */}
+        {data.status !== "completed" && !data.readOnly && (
+          <div className="flex items-center gap-1.5">
+            <CalendarDays className="h-3 w-3 text-muted-foreground shrink-0" />
+            <input
+              type="date"
+              className="h-6 text-xs bg-transparent border border-border rounded px-1.5 w-full focus:outline-none focus:ring-1 focus:ring-primary"
+              value={data.estimatedCompletion || ""}
+              onChange={(e) => data.onEstimatedCompletionChange(id, e.target.value)}
+              placeholder="Est. completion"
+            />
+          </div>
+        )}
+        {data.estimatedCompletion && data.status !== "completed" && data.readOnly && (
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <CalendarDays className="h-3 w-3" />
+            <span>Est. {new Date(data.estimatedCompletion + "T00:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}</span>
+          </div>
+        )}
+        {data.estimatedCompletion && !data.readOnly && (
+          <div className="text-[10px] text-muted-foreground pl-[18px]">
+            Est. {new Date(data.estimatedCompletion + "T00:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
           </div>
         )}
         {/* Actions */}
@@ -239,6 +265,7 @@ interface WorkflowCanvasProps {
   onStatusChange: (nodeId: string, status: WorkflowNode["status"]) => void;
   onAssignWorker: (nodeId: string, workerId: string) => void;
   onRemoveNode: (nodeId: string) => void;
+  onEstimatedCompletionChange: (nodeId: string, date: string) => void;
   onAddNode?: (label: string, position: { x: number; y: number }) => void;
   readOnly?: boolean;
 }
@@ -252,6 +279,7 @@ export function WorkflowCanvas({
   onStatusChange,
   onAssignWorker,
   onRemoveNode,
+  onEstimatedCompletionChange,
   onAddNode,
   readOnly = false,
 }: WorkflowCanvasProps) {
@@ -287,6 +315,7 @@ export function WorkflowCanvas({
           label: n.label,
           status: n.status,
           assignedTo: n.assignedTo,
+          estimatedCompletion: n.estimatedCompletion,
           workers,
           readOnly,
           blocked: blockedMap[n.id]?.blocked ?? false,
@@ -294,9 +323,10 @@ export function WorkflowCanvas({
           onStatusChange,
           onAssignWorker,
           onRemove: onRemoveNode,
+          onEstimatedCompletionChange,
         },
       })),
-    [wfNodes, workers, onStatusChange, onAssignWorker, onRemoveNode, blockedMap]
+    [wfNodes, workers, onStatusChange, onAssignWorker, onRemoveNode, onEstimatedCompletionChange, blockedMap]
   );
 
   const rfEdges: Edge[] = useMemo(

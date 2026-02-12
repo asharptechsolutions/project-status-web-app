@@ -370,6 +370,7 @@ function TrackInner() {
             onStatusChange={noop}
             onAssignWorker={noop}
             onRemoveNode={noop}
+            onEstimatedCompletionChange={noop}
             readOnly
           />
         </main>

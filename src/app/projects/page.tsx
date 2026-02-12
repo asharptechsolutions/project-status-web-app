@@ -174,6 +174,17 @@ function ProjectsList() {
     }
   };
 
+  const updateEstimatedCompletion = async (nodeId: string, date: string) => {
+    if (!selectedProject) return;
+    const nodes = selectedProject.nodes.map((n) => n.id === nodeId ? { ...n, estimatedCompletion: date || undefined } : n);
+    try {
+      await updateProject(selectedProject.id, { nodes });
+      setSelectedProject({ ...selectedProject, nodes });
+    } catch (error: any) {
+      toast.error(error.message || "Failed to update estimated completion");
+    }
+  };
+
   const removeNode = async (nodeId: string) => {
     if (!selectedProject) return;
     const nodes = selectedProject.nodes.filter((n) => n.id !== nodeId);
@@ -408,6 +419,7 @@ function ProjectsList() {
               onStatusChange={updateNodeStatus}
               onAssignWorker={assignWorker}
               onRemoveNode={removeNode}
+              onEstimatedCompletionChange={updateEstimatedCompletion}
               onAddNode={addNodeAtPosition}
             />
           ) : (
