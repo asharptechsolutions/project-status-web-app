@@ -86,10 +86,13 @@ function ProjectsList() {
       }
     }
     try {
+      const initialContacts: ProjectContact[] = newClientEmail.trim()
+        ? [{ name: newClient.trim(), email: newClientEmail.trim().toLowerCase() }]
+        : [];
       const id = await createProject({
         name: newName, clientName: newClient, clientEmail: newClientEmail,
         description: newDescription.trim() || undefined,
-        nodes, edges, contacts: [], shareToken: nanoid(12), status: "active",
+        nodes, edges, contacts: initialContacts, shareToken: nanoid(12), status: "active",
         createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), userId: user.uid,
       });
       setNewName(""); setNewClient(""); setNewClientEmail(""); setNewDescription(""); setSelectedTemplate(""); setShowNew(false);
