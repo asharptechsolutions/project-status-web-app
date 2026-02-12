@@ -311,14 +311,26 @@ export function WorkflowCanvas({
     [wfEdges]
   );
 
-  const [flowNodes, setFlowNodes] = useState(rfNodes);
+  // Auto-layout nodes in readOnly mode for clean presentation
+  const initialNodes = useMemo(() => {
+    if (readOnly && rfNodes.length > 0) {
+      return getLayoutedElements(rfNodes, rfEdges, "TB");
+    }
+    return rfNodes;
+  }, [readOnly, rfNodes, rfEdges]);
+
+  const [flowNodes, setFlowNodes] = useState(initialNodes);
   const [flowEdges, setFlowEdges] = useState(rfEdges);
 
   // Sync when props change
   useMemo(() => {
-    setFlowNodes(rfNodes);
+    if (readOnly && rfNodes.length > 0) {
+      setFlowNodes(getLayoutedElements(rfNodes, rfEdges, "TB"));
+    } else {
+      setFlowNodes(rfNodes);
+    }
     setFlowEdges(rfEdges);
-  }, [rfNodes, rfEdges]);
+  }, [rfNodes, rfEdges, readOnly]);
 
   const onNodesChange: OnNodesChange = useCallback(
     (changes) => {
@@ -421,16 +433,20 @@ export function WorkflowCanvas({
         proOptions={{ hideAttribution: true }}
       >
         <Background />
-        <Controls />
-        <MiniMap
-          nodeStrokeWidth={3}
-          nodeColor={(n) => {
-            const data = n.data as StageNodeData;
-            if (data.status === "completed") return "#22c55e";
-            if (data.status === "in-progress") return "#3b82f6";
-            return "#94a3b8";
-          }}
-        />
+        {!readOnly && (
+          <>
+            <Controls />
+            <MiniMap
+              nodeStrokeWidth={3}
+              nodeColor={(n) => {
+                const data = n.data as StageNodeData;
+                if (data.status === "completed") return "#22c55e";
+                if (data.status === "in-progress") return "#3b82f6";
+                return "#94a3b8";
+              }}
+            />
+          </>
+        )}
       </ReactFlow>
       {/* Floating toolbar */}
       {!readOnly && (
