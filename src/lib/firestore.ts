@@ -173,8 +173,12 @@ export async function createAccessCode(email: string): Promise<void> {
     const sendCode = httpsCallable(functions, "sendVerificationCode");
     await sendCode({ email: email.toLowerCase().trim() });
   } catch (error: unknown) {
+    console.error("sendVerificationCode error:", error);
     // If Cloud Function is not deployed yet, fall back to local code generation
-    if (error instanceof Error && (error.message.includes("not-found") || error.message.includes("INTERNAL"))) {
+    const errMsg = error instanceof Error ? error.message : String(error);
+    const errCode = (error as { code?: string })?.code || "";
+    if (errCode === "functions/not-found") {
+      console.warn("Cloud Function not deployed, falling back to local code generation.");
       const code = Math.floor(100000 + Math.random() * 900000).toString();
       await addDoc(collection(db, PREFIX + "access_codes"), {
         email: email.toLowerCase().trim(),
