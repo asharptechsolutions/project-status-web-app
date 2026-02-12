@@ -5,7 +5,7 @@ import { Navbar } from "@/components/navbar";
 import { AuthGate } from "@/components/auth-gate";
 import { useAuth } from "@/lib/auth-context";
 import { getProjects, createProject, updateProject, deleteProject, getTemplates, getWorkers } from "@/lib/firestore";
-import type { Project, WorkflowNode, WorkflowEdge, WorkflowTemplate, Worker } from "@/lib/types";
+import type { Project, ProjectContact, WorkflowNode, WorkflowEdge, WorkflowTemplate, Worker } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -15,7 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Trash2, ArrowLeft, Play, CheckCircle2, Link2, Copy, ChevronRight, Pencil, Search, X, ArrowUpDown, Archive, ArchiveRestore, Bell, BellOff } from "lucide-react";
+import { Plus, Trash2, ArrowLeft, Play, CheckCircle2, Link2, Copy, ChevronRight, Pencil, Search, X, ArrowUpDown, Archive, ArchiveRestore, Bell, BellOff, Users, UserPlus } from "lucide-react";
 import { nanoid } from "nanoid";
 import basePath from "@/lib/base-path";
 import { toast } from "sonner";
@@ -46,6 +46,8 @@ function ProjectsList() {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("active-completed");
   const [sortBy, setSortBy] = useState<string>("newest");
+  const [newContactName, setNewContactName] = useState("");
+  const [newContactEmail, setNewContactEmail] = useState("");
 
   const load = useCallback(async () => {
     if (!user) return;
@@ -87,7 +89,7 @@ function ProjectsList() {
       const id = await createProject({
         name: newName, clientName: newClient, clientEmail: newClientEmail,
         description: newDescription.trim() || undefined,
-        nodes, edges, shareToken: nanoid(12), status: "active",
+        nodes, edges, contacts: [], shareToken: nanoid(12), status: "active",
         createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), userId: user.uid,
       });
       setNewName(""); setNewClient(""); setNewClientEmail(""); setNewDescription(""); setSelectedTemplate(""); setShowNew(false);
@@ -256,6 +258,34 @@ function ProjectsList() {
     }
   };
 
+  const addContact = async () => {
+    if (!selectedProject || !newContactName.trim() || !newContactEmail.trim()) return;
+    const contacts = [...(selectedProject.contacts || []), { name: newContactName.trim(), email: newContactEmail.trim().toLowerCase() }];
+    try {
+      await updateProject(selectedProject.id, { contacts });
+      setSelectedProject({ ...selectedProject, contacts });
+      setNewContactName("");
+      setNewContactEmail("");
+      toast.success("Contact added");
+      load();
+    } catch (error: any) {
+      toast.error(error.message || "Failed to add contact");
+    }
+  };
+
+  const removeContact = async (email: string) => {
+    if (!selectedProject) return;
+    const contacts = (selectedProject.contacts || []).filter((c) => c.email !== email);
+    try {
+      await updateProject(selectedProject.id, { contacts });
+      setSelectedProject({ ...selectedProject, contacts });
+      toast.success("Contact removed");
+      load();
+    } catch (error: any) {
+      toast.error(error.message || "Failed to remove contact");
+    }
+  };
+
   if (loading) return <div className="flex items-center justify-center p-8"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" /></div>;
 
   if (selectedProject) {
@@ -388,6 +418,37 @@ function ProjectsList() {
         <div className="flex gap-2">
           <Input placeholder="New stage name (e.g. Metal Cutting)" value={newNodeLabel} onChange={(e) => setNewNodeLabel(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addNode()} />
           <Button onClick={addNode}><Plus className="h-4 w-4 mr-1" /> Add</Button>
+        </div>
+
+        <div className="mt-8">
+          <h2 className="text-lg font-semibold mb-3 flex items-center gap-2">
+            <Users className="h-5 w-5" /> Contacts
+          </h2>
+          <p className="text-sm text-muted-foreground mb-4">
+            Only contacts listed here can view this project via the tracking link. They&apos;ll verify their email with a code.
+          </p>
+          {(selectedProject.contacts || []).length > 0 && (
+            <div className="space-y-2 mb-4">
+              {(selectedProject.contacts || []).map((c) => (
+                <div key={c.email} className="flex items-center justify-between bg-secondary/50 rounded-lg px-3 py-2">
+                  <div>
+                    <span className="font-medium text-sm">{c.name}</span>
+                    <span className="text-sm text-muted-foreground ml-2">{c.email}</span>
+                  </div>
+                  <Button variant="ghost" size="sm" onClick={() => removeContact(c.email)}>
+                    <Trash2 className="h-4 w-4 text-destructive" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="flex flex-col sm:flex-row gap-2">
+            <Input placeholder="Name" value={newContactName} onChange={(e) => setNewContactName(e.target.value)} className="sm:w-1/3" />
+            <Input placeholder="Email" type="email" value={newContactEmail} onChange={(e) => setNewContactEmail(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addContact()} className="sm:flex-1" />
+            <Button onClick={addContact} disabled={!newContactName.trim() || !newContactEmail.trim()}>
+              <UserPlus className="h-4 w-4 mr-1" /> Add
+            </Button>
+          </div>
         </div>
 
         <Dialog open={showEdit} onOpenChange={setShowEdit}>

@@ -1,9 +1,9 @@
 import { db } from "./firebase";
 import {
   collection, doc, addDoc, updateDoc, deleteDoc, getDocs, getDoc,
-  query, where, Timestamp, setDoc,
+  query, where, Timestamp, setDoc, orderBy, limit,
 } from "firebase/firestore";
-import type { Project, WorkflowTemplate, Worker } from "./types";
+import type { Project, WorkflowTemplate, Worker, ProjectContact } from "./types";
 
 const PREFIX = "wfz_";
 
@@ -160,5 +160,75 @@ export async function deleteWorker(id: string): Promise<void> {
     await deleteDoc(doc(db, PREFIX + "workers", id));
   } catch (error) {
     handleFirestoreError("deleting worker", error);
+  }
+}
+
+// Access Codes for contact verification
+export async function createAccessCode(email: string): Promise<string> {
+  try {
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    await addDoc(collection(db, PREFIX + "access_codes"), {
+      email: email.toLowerCase().trim(),
+      code,
+      createdAt: new Date().toISOString(),
+      expiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(), // 15 min
+      used: false,
+    });
+    return code;
+  } catch (error) {
+    handleFirestoreError("creating access code", error);
+  }
+}
+
+export async function verifyAccessCode(email: string, code: string): Promise<boolean> {
+  try {
+    const q = query(
+      collection(db, PREFIX + "access_codes"),
+      where("email", "==", email.toLowerCase().trim()),
+      where("code", "==", code),
+      where("used", "==", false)
+    );
+    const snap = await getDocs(q);
+    if (snap.empty) return false;
+    // Check expiry
+    const data = snap.docs[0].data();
+    if (new Date(data.expiresAt) < new Date()) return false;
+    // Mark as used
+    await updateDoc(snap.docs[0].ref, { used: true });
+    return true;
+  } catch (error) {
+    handleFirestoreError("verifying access code", error);
+  }
+}
+
+export async function getProjectsForContact(email: string): Promise<Project[]> {
+  try {
+    // Get all non-archived projects and filter by contacts array client-side
+    // (Firestore doesn't support array-contains on nested object fields easily)
+    const q = query(collection(db, PREFIX + "projects"));
+    const snap = await getDocs(q);
+    const normalizedEmail = email.toLowerCase().trim();
+    return snap.docs
+      .map((d) => ({ id: d.id, ...d.data() } as Project))
+      .filter((p) => {
+        const contacts = p.contacts || [];
+        return contacts.some((c) => c.email.toLowerCase().trim() === normalizedEmail);
+      });
+  } catch (error) {
+    handleFirestoreError("loading contact projects", error);
+  }
+}
+
+// Send verification email via notifications collection (processed by Cloud Functions)
+export async function sendAccessCodeEmail(email: string, code: string): Promise<void> {
+  try {
+    await addDoc(collection(db, PREFIX + "notifications"), {
+      type: "access_code",
+      email: email.toLowerCase().trim(),
+      code,
+      createdAt: new Date().toISOString(),
+    });
+  } catch (error) {
+    handleFirestoreError("sending verification email", error);
   }
 }

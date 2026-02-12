@@ -1,88 +1,385 @@
 "use client";
-import { useEffect, useState, Suspense } from "react";
+import { useEffect, useState, Suspense, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
-import { getProject, getProjectByToken } from "@/lib/firestore";
+import { getProjectsForContact, createAccessCode, verifyAccessCode, sendAccessCodeEmail } from "@/lib/firestore";
 import type { Project } from "@/lib/types";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Workflow } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Workflow, ArrowLeft, Mail, ShieldCheck, LogOut } from "lucide-react";
 import { WorkflowCanvas } from "@/components/workflow-canvas";
+
+const SESSION_KEY = "wfz_contact_session";
+
+function getSession(): { email: string; expiresAt: number } | null {
+  try {
+    const raw = sessionStorage.getItem(SESSION_KEY);
+    if (!raw) return null;
+    const session = JSON.parse(raw);
+    if (session.expiresAt < Date.now()) {
+      sessionStorage.removeItem(SESSION_KEY);
+      return null;
+    }
+    return session;
+  } catch {
+    return null;
+  }
+}
+
+function setSession(email: string) {
+  sessionStorage.setItem(SESSION_KEY, JSON.stringify({
+    email,
+    expiresAt: Date.now() + 60 * 60 * 1000, // 1 hour
+  }));
+}
+
+function clearSession() {
+  sessionStorage.removeItem(SESSION_KEY);
+}
 
 function TrackInner() {
   const searchParams = useSearchParams();
-  const [project, setProject] = useState<Project | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [step, setStep] = useState<"loading" | "email" | "code" | "projects" | "detail">("loading");
+  const [email, setEmail] = useState("");
+  const [code, setCode] = useState("");
   const [error, setError] = useState("");
+  const [sending, setSending] = useState(false);
+  const [verifying, setVerifying] = useState(false);
+  const [verifiedEmail, setVerifiedEmail] = useState("");
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [selectedProject, setSelectedProject] = useState<Project | null>(null);
+  const [loadingProjects, setLoadingProjects] = useState(false);
+
+  const loadProjects = useCallback(async (contactEmail: string) => {
+    setLoadingProjects(true);
+    try {
+      const p = await getProjectsForContact(contactEmail);
+      setProjects(p.filter((proj) => proj.status !== "archived"));
+      setVerifiedEmail(contactEmail);
+      setStep("projects");
+    } catch (err: any) {
+      setError(err.message || "Failed to load projects");
+      setStep("email");
+    } finally {
+      setLoadingProjects(false);
+    }
+  }, []);
 
   useEffect(() => {
+    // Check existing session
+    const session = getSession();
+    if (session) {
+      loadProjects(session.email);
+    } else {
+      setStep("email");
+    }
+  }, [loadProjects]);
+
+  // If a project ID is in the URL and we're verified, auto-select it
+  useEffect(() => {
     const id = searchParams.get("id");
-    const token = searchParams.get("token");
-    if (!id && !token) { setError("No tracking link provided."); setLoading(false); return; }
-    const loadProject = id ? getProject(id) : getProjectByToken(token!);
-    loadProject.then((p) => {
-      if (!p) setError("Project not found. The link may be invalid.");
-      else setProject(p);
-      setLoading(false);
-    }).catch((err) => { setError(err.message || "Failed to load project."); setLoading(false); });
-  }, [searchParams]);
+    if (id && projects.length > 0 && step === "projects") {
+      const found = projects.find((p) => p.id === id);
+      if (found) {
+        setSelectedProject(found);
+        setStep("detail");
+      }
+    }
+  }, [searchParams, projects, step]);
 
-  if (loading) return <div className="flex items-center justify-center min-h-[100dvh]"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" /></div>;
-  if (error) return <div className="flex items-center justify-center min-h-[100dvh] p-4"><Card className="max-w-md w-full"><CardContent className="pt-6 text-center"><p className="text-lg font-medium mb-2">Oops!</p><p className="text-muted-foreground">{error}</p></CardContent></Card></div>;
-  if (!project) return null;
+  const handleSendCode = async () => {
+    if (!email.trim()) return;
+    setError("");
+    setSending(true);
+    try {
+      const accessCode = await createAccessCode(email);
+      await sendAccessCodeEmail(email, accessCode);
+      setStep("code");
+    } catch (err: any) {
+      setError(err.message || "Failed to send verification code");
+    } finally {
+      setSending(false);
+    }
+  };
 
-  const progress = project.nodes.length ? Math.round((project.nodes.filter((n) => n.status === "completed").length / project.nodes.length) * 100) : 0;
-  const currentNode = project.nodes.find((n) => n.status === "in-progress");
+  const handleVerifyCode = async () => {
+    if (!code.trim()) return;
+    setError("");
+    setVerifying(true);
+    try {
+      const valid = await verifyAccessCode(email, code.trim());
+      if (!valid) {
+        setError("Invalid or expired code. Please try again.");
+        setVerifying(false);
+        return;
+      }
+      setSession(email);
+      await loadProjects(email);
+    } catch (err: any) {
+      setError(err.message || "Verification failed");
+    } finally {
+      setVerifying(false);
+    }
+  };
 
-  // No-op handlers for read-only canvas
+  const handleLogout = () => {
+    clearSession();
+    setVerifiedEmail("");
+    setProjects([]);
+    setSelectedProject(null);
+    setEmail("");
+    setCode("");
+    setStep("email");
+  };
+
   const noop = () => {};
 
+  // Loading
+  if (step === "loading") {
+    return (
+      <div className="flex items-center justify-center min-h-[100dvh]">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+      </div>
+    );
+  }
+
+  // Email entry
+  if (step === "email") {
+    return (
+      <div className="min-h-[100dvh] bg-background flex items-center justify-center p-4">
+        <Card className="max-w-md w-full">
+          <CardHeader className="text-center">
+            <div className="flex justify-center mb-2">
+              <div className="rounded-full bg-primary/10 p-3">
+                <ShieldCheck className="h-8 w-8 text-primary" />
+              </div>
+            </div>
+            <CardTitle className="text-xl">Verify Your Identity</CardTitle>
+            <p className="text-sm text-muted-foreground mt-1">
+              Enter the email address associated with your project to receive a verification code.
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div>
+              <Label htmlFor="email">Email Address</Label>
+              <Input
+                id="email"
+                type="email"
+                placeholder="you@example.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleSendCode()}
+                autoFocus
+              />
+            </div>
+            {error && <p className="text-sm text-destructive">{error}</p>}
+            <Button onClick={handleSendCode} className="w-full" disabled={sending || !email.trim()}>
+              <Mail className="h-4 w-4 mr-2" />
+              {sending ? "Sending..." : "Send Verification Code"}
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // Code entry
+  if (step === "code") {
+    return (
+      <div className="min-h-[100dvh] bg-background flex items-center justify-center p-4">
+        <Card className="max-w-md w-full">
+          <CardHeader className="text-center">
+            <div className="flex justify-center mb-2">
+              <div className="rounded-full bg-primary/10 p-3">
+                <Mail className="h-8 w-8 text-primary" />
+              </div>
+            </div>
+            <CardTitle className="text-xl">Enter Verification Code</CardTitle>
+            <p className="text-sm text-muted-foreground mt-1">
+              We sent a 6-digit code to <strong>{email}</strong>. Check your inbox.
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div>
+              <Label htmlFor="code">Verification Code</Label>
+              <Input
+                id="code"
+                type="text"
+                inputMode="numeric"
+                maxLength={6}
+                placeholder="123456"
+                value={code}
+                onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
+                onKeyDown={(e) => e.key === "Enter" && handleVerifyCode()}
+                autoFocus
+                className="text-center text-2xl tracking-widest"
+              />
+            </div>
+            {error && <p className="text-sm text-destructive">{error}</p>}
+            <Button onClick={handleVerifyCode} className="w-full" disabled={verifying || code.length !== 6}>
+              {verifying ? "Verifying..." : "Verify & View Projects"}
+            </Button>
+            <div className="text-center">
+              <Button variant="link" size="sm" onClick={() => { setStep("email"); setCode(""); setError(""); }}>
+                Use a different email
+              </Button>
+              <span className="text-muted-foreground mx-1">•</span>
+              <Button variant="link" size="sm" onClick={handleSendCode} disabled={sending}>
+                {sending ? "Sending..." : "Resend code"}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // Project detail view
+  if (step === "detail" && selectedProject) {
+    const progress = selectedProject.nodes.length
+      ? Math.round((selectedProject.nodes.filter((n) => n.status === "completed").length / selectedProject.nodes.length) * 100)
+      : 0;
+    const currentNode = selectedProject.nodes.find((n) => n.status === "in-progress");
+
+    return (
+      <div className="min-h-[100dvh] bg-background">
+        <header className="border-b py-4 px-4">
+          <div className="max-w-4xl mx-auto flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Workflow className="h-5 w-5 text-primary" />
+              <span className="font-bold">Workflowz</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground hidden sm:inline">{verifiedEmail}</span>
+              <Button variant="ghost" size="sm" onClick={handleLogout}>
+                <LogOut className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        </header>
+
+        <main className="p-4 max-w-4xl mx-auto">
+          <Button variant="ghost" className="mb-4" onClick={() => { setSelectedProject(null); setStep("projects"); }}>
+            <ArrowLeft className="h-4 w-4 mr-2" /> Back to Projects
+          </Button>
+
+          <div className="mb-6">
+            <h1 className="text-2xl font-bold">{selectedProject.name}</h1>
+            <p className="text-muted-foreground">Client: {selectedProject.clientName}</p>
+          </div>
+
+          <Card className="mb-6">
+            <CardContent className="pt-6">
+              <div className="flex items-center justify-between mb-2">
+                <span className="font-medium">Overall Progress</span>
+                <Badge variant={selectedProject.status === "completed" ? "default" : "secondary"}>{progress}%</Badge>
+              </div>
+              <div className="w-full bg-secondary rounded-full h-4">
+                <div
+                  className="bg-primary rounded-full h-4 transition-all flex items-center justify-center"
+                  style={{ width: `${Math.max(progress, 5)}%` }}
+                >
+                  {progress > 15 && (
+                    <span className="text-[10px] text-primary-foreground font-bold">{progress}%</span>
+                  )}
+                </div>
+              </div>
+              {currentNode && (
+                <p className="mt-3 text-sm text-muted-foreground">
+                  Currently at: <strong className="text-foreground">{currentNode.label}</strong>
+                </p>
+              )}
+              {selectedProject.status === "completed" && (
+                <p className="mt-3 text-sm text-green-600 dark:text-green-400 font-medium">✅ Project completed!</p>
+              )}
+            </CardContent>
+          </Card>
+
+          <h2 className="text-lg font-semibold mb-3">Workflow</h2>
+          <WorkflowCanvas
+            nodes={selectedProject.nodes}
+            edges={selectedProject.edges || []}
+            workers={[]}
+            onNodesUpdate={noop}
+            onEdgesUpdate={noop}
+            onStatusChange={noop}
+            onAssignWorker={noop}
+            onRemoveNode={noop}
+            readOnly
+          />
+        </main>
+
+        <footer className="border-t py-4 px-4 mt-8">
+          <p className="text-center text-sm text-muted-foreground">Powered by Workflowz</p>
+        </footer>
+      </div>
+    );
+  }
+
+  // Projects list
   return (
     <div className="min-h-[100dvh] bg-background">
       <header className="border-b py-4 px-4">
-        <div className="max-w-4xl mx-auto flex items-center gap-2">
-          <Workflow className="h-5 w-5 text-primary" />
-          <span className="font-bold">Workflowz</span>
+        <div className="max-w-4xl mx-auto flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Workflow className="h-5 w-5 text-primary" />
+            <span className="font-bold">Workflowz</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-muted-foreground hidden sm:inline">{verifiedEmail}</span>
+            <Button variant="ghost" size="sm" onClick={handleLogout}>
+              <LogOut className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
       </header>
 
       <main className="p-4 max-w-4xl mx-auto">
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold">{project.name}</h1>
-          <p className="text-muted-foreground">Client: {project.clientName}</p>
-        </div>
+        <h1 className="text-2xl font-bold mb-6">Your Projects</h1>
 
-        <Card className="mb-6">
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between mb-2">
-              <span className="font-medium">Overall Progress</span>
-              <Badge variant={project.status === "completed" ? "default" : "secondary"}>{progress}%</Badge>
-            </div>
-            <div className="w-full bg-secondary rounded-full h-4">
-              <div className="bg-primary rounded-full h-4 transition-all flex items-center justify-center" style={{ width: `${Math.max(progress, 5)}%` }}>
-                {progress > 15 && <span className="text-[10px] text-primary-foreground font-bold">{progress}%</span>}
-              </div>
-            </div>
-            {currentNode && (
-              <p className="mt-3 text-sm text-muted-foreground">Currently at: <strong className="text-foreground">{currentNode.label}</strong></p>
-            )}
-            {project.status === "completed" && (
-              <p className="mt-3 text-sm text-green-600 dark:text-green-400 font-medium">✅ Project completed!</p>
-            )}
-          </CardContent>
-        </Card>
-
-        <h2 className="text-lg font-semibold mb-3">Workflow</h2>
-        <WorkflowCanvas
-          nodes={project.nodes}
-          edges={project.edges || []}
-          workers={[]}
-          onNodesUpdate={noop}
-          onEdgesUpdate={noop}
-          onStatusChange={noop}
-          onAssignWorker={noop}
-          onRemoveNode={noop}
-          readOnly
-        />
+        {loadingProjects ? (
+          <div className="flex items-center justify-center p-8">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+          </div>
+        ) : projects.length === 0 ? (
+          <Card>
+            <CardContent className="pt-6 text-center text-muted-foreground">
+              <p className="mb-2">No projects found for <strong>{verifiedEmail}</strong>.</p>
+              <p className="text-sm">Make sure the project owner has added your email as a contact.</p>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="space-y-3">
+            {projects.map((p) => {
+              const prog = p.nodes.length
+                ? Math.round((p.nodes.filter((n) => n.status === "completed").length / p.nodes.length) * 100)
+                : 0;
+              return (
+                <Card
+                  key={p.id}
+                  className="cursor-pointer hover:shadow-md transition-shadow"
+                  onClick={() => { setSelectedProject(p); setStep("detail"); }}
+                >
+                  <CardContent className="pt-4 pb-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-medium">{p.name}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {p.nodes.length} stages
+                        </p>
+                      </div>
+                      <Badge variant={p.status === "completed" ? "default" : "secondary"}>
+                        {prog}%
+                      </Badge>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        )}
       </main>
 
       <footer className="border-t py-4 px-4 mt-8">
@@ -94,7 +391,13 @@ function TrackInner() {
 
 export default function TrackPage() {
   return (
-    <Suspense fallback={<div className="flex items-center justify-center min-h-[100dvh]"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" /></div>}>
+    <Suspense
+      fallback={
+        <div className="flex items-center justify-center min-h-[100dvh]">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+        </div>
+      }
+    >
       <TrackInner />
     </Suspense>
   );

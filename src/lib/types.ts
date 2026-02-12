@@ -14,6 +14,11 @@ export interface WorkflowEdge {
   target: string;
 }
 
+export interface ProjectContact {
+  email: string;
+  name: string;
+}
+
 export interface Project {
   id: string;
   name: string;
@@ -22,6 +27,7 @@ export interface Project {
   description?: string;
   nodes: WorkflowNode[];
   edges: WorkflowEdge[];
+  contacts: ProjectContact[];
   shareToken: string;
   status: "active" | "completed" | "archived";
   templateId?: string;
