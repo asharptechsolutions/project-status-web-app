@@ -54,3 +54,14 @@ export interface Worker {
   role?: string;
   userId: string;
 }
+
+export interface ProjectFile {
+  id: string;
+  projectId: string;
+  fileName: string;
+  fileSize: number;
+  contentType: string;
+  downloadUrl: string;
+  uploadedBy: string;
+  uploadedAt: string;
+}

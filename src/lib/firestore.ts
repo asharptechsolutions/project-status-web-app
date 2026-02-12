@@ -3,7 +3,9 @@ import {
   collection, doc, addDoc, updateDoc, deleteDoc, getDocs, getDoc,
   query, where, Timestamp, setDoc, orderBy, limit,
 } from "firebase/firestore";
-import type { Project, WorkflowTemplate, Worker, ProjectContact } from "./types";
+import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
+import { storage } from "./firebase";
+import type { Project, WorkflowTemplate, Worker, ProjectContact, ProjectFile } from "./types";
 
 const PREFIX = "wfz_";
 
@@ -233,4 +235,63 @@ export async function getProjectsForContact(email: string): Promise<Project[]> {
 export async function sendAccessCodeEmail(email: string, code: string): Promise<void> {
   // No-op until Cloud Functions are set up for email delivery
   return;
+}
+
+// Project Files
+export async function uploadProjectFile(
+  projectId: string,
+  file: File,
+  uploadedBy: string
+): Promise<ProjectFile> {
+  try {
+    const fileId = `${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+    const storageRef = ref(storage, `wfz_files/${projectId}/${fileId}`);
+    await uploadBytes(storageRef, file, { contentType: file.type });
+    const downloadUrl = await getDownloadURL(storageRef);
+
+    const fileDoc: Omit<ProjectFile, "id"> = {
+      projectId,
+      fileName: file.name,
+      fileSize: file.size,
+      contentType: file.type,
+      downloadUrl,
+      uploadedBy: uploadedBy.toLowerCase().trim(),
+      uploadedAt: new Date().toISOString(),
+    };
+
+    const docRef = await addDoc(collection(db, PREFIX + "files"), fileDoc);
+    return { id: docRef.id, ...fileDoc };
+  } catch (error) {
+    handleFirestoreError("uploading file", error);
+  }
+}
+
+export async function getProjectFiles(projectId: string): Promise<ProjectFile[]> {
+  try {
+    const q = query(
+      collection(db, PREFIX + "files"),
+      where("projectId", "==", projectId),
+      orderBy("uploadedAt", "desc")
+    );
+    const snap = await getDocs(q);
+    return snap.docs.map((d) => ({ id: d.id, ...d.data() } as ProjectFile));
+  } catch (error) {
+    handleFirestoreError("loading files", error);
+  }
+}
+
+export async function deleteProjectFile(fileId: string, projectId: string, fileName: string): Promise<void> {
+  try {
+    // Delete from Storage
+    const storageRef = ref(storage, `wfz_files/${projectId}/${fileName}`);
+    try {
+      await deleteObject(storageRef);
+    } catch {
+      // File may already be deleted from storage, continue
+    }
+    // Delete metadata from Firestore
+    await deleteDoc(doc(db, PREFIX + "files", fileId));
+  } catch (error) {
+    handleFirestoreError("deleting file", error);
+  }
 }

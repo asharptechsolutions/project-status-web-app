@@ -4,8 +4,8 @@ import { useSearchParams } from "next/navigation";
 import { Navbar } from "@/components/navbar";
 import { AuthGate } from "@/components/auth-gate";
 import { useAuth } from "@/lib/auth-context";
-import { getProjects, createProject, updateProject, deleteProject, getTemplates, getWorkers } from "@/lib/firestore";
-import type { Project, ProjectContact, WorkflowNode, WorkflowEdge, WorkflowTemplate, Worker } from "@/lib/types";
+import { getProjects, createProject, updateProject, deleteProject, getTemplates, getWorkers, getProjectFiles } from "@/lib/firestore";
+import type { Project, ProjectContact, WorkflowNode, WorkflowEdge, WorkflowTemplate, Worker, ProjectFile } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -20,6 +20,7 @@ import { nanoid } from "nanoid";
 import basePath from "@/lib/base-path";
 import { toast } from "sonner";
 import { WorkflowCanvas } from "@/components/workflow-canvas";
+import { FileUpload } from "@/components/file-upload";
 import { notifyStageChange } from "@/lib/notifications";
 
 function ProjectsList() {
@@ -50,6 +51,7 @@ function ProjectsList() {
   const [sortBy, setSortBy] = useState<string>("newest");
   const [newContactName, setNewContactName] = useState("");
   const [newContactEmail, setNewContactEmail] = useState("");
+  const [projectFiles, setProjectFiles] = useState<ProjectFile[]>([]);
 
   const load = useCallback(async () => {
     if (!user) return;
@@ -66,6 +68,12 @@ function ProjectsList() {
   }, [user]);
 
   useEffect(() => { load(); }, [load]);
+
+  useEffect(() => {
+    if (selectedProject) {
+      getProjectFiles(selectedProject.id).then(setProjectFiles).catch(() => setProjectFiles([]));
+    }
+  }, [selectedProject?.id]);
 
   useEffect(() => {
     if (searchParams.get("new") === "1") setShowNew(true);
@@ -478,6 +486,17 @@ function ProjectsList() {
               <UserPlus className="h-4 w-4 mr-1" /> Add
             </Button>
           </div>
+        </div>
+
+        <div className="mt-8">
+          <FileUpload
+            projectId={selectedProject.id}
+            uploaderEmail={user?.email || "manager"}
+            files={projectFiles}
+            onFilesChange={setProjectFiles}
+            readOnly
+            canDelete
+          />
         </div>
 
         <Dialog open={showEdit} onOpenChange={setShowEdit}>

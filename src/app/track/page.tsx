@@ -10,6 +10,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Workflow, ArrowLeft, Mail, ShieldCheck, LogOut, Link2 } from "lucide-react";
 import { WorkflowCanvas } from "@/components/workflow-canvas";
+import { FileUpload } from "@/components/file-upload";
+import { getProjectFiles } from "@/lib/firestore";
+import type { ProjectFile } from "@/lib/types";
 
 const SESSION_KEY = "wfz_contact_session";
 
@@ -54,6 +57,7 @@ function TrackInner() {
   const [loadingProjects, setLoadingProjects] = useState(false);
   const [tokenMode, setTokenMode] = useState(false);
   const [pendingProject, setPendingProject] = useState<Project | null>(null);
+  const [files, setFiles] = useState<ProjectFile[]>([]);
 
   const loadProjects = useCallback(async (contactEmail: string) => {
     setLoadingProjects(true);
@@ -128,6 +132,13 @@ function TrackInner() {
       setStep("email");
     }
   }, [loadProjects, verifyTokenAccess, searchParams]);
+
+  // Load files when viewing a project
+  useEffect(() => {
+    if (step === "detail" && selectedProject) {
+      getProjectFiles(selectedProject.id).then(setFiles).catch(() => setFiles([]));
+    }
+  }, [step, selectedProject]);
 
   // If a project ID is in the URL (without token) and we're verified, auto-select it
   useEffect(() => {
@@ -388,6 +399,15 @@ function TrackInner() {
             onEstimatedCompletionChange={noop}
             readOnly
           />
+
+          <div className="mt-6">
+            <FileUpload
+              projectId={selectedProject.id}
+              uploaderEmail={verifiedEmail}
+              files={files}
+              onFilesChange={setFiles}
+            />
+          </div>
         </main>
 
         <footer className="border-t py-4 px-4 mt-8">
