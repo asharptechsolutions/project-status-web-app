@@ -91,6 +91,19 @@ function ProjectsList() {
     }
   };
 
+  const addNodeAtPosition = async (label: string, position: { x: number; y: number }) => {
+    if (!selectedProject) return;
+    const newNode: WorkflowNode = { id: nanoid(8), label, status: "pending", position };
+    const updated = { ...selectedProject, nodes: [...selectedProject.nodes, newNode] };
+    try {
+      await updateProject(selectedProject.id, { nodes: updated.nodes });
+      setSelectedProject(updated);
+      load();
+    } catch (error: any) {
+      toast.error(error.message || "Failed to add stage");
+    }
+  };
+
   const addNode = async () => {
     if (!selectedProject || !newNodeLabel.trim()) return;
     const newNode: WorkflowNode = { id: nanoid(8), label: newNodeLabel, status: "pending" };
@@ -257,6 +270,7 @@ function ProjectsList() {
               onStatusChange={updateNodeStatus}
               onAssignWorker={assignWorker}
               onRemoveNode={removeNode}
+              onAddNode={addNodeAtPosition}
             />
           ) : (
             <Card><CardContent className="pt-6 text-center text-muted-foreground">No stages yet. Add your first one below!</CardContent></Card>

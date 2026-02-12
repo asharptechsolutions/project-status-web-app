@@ -24,7 +24,15 @@ import type { WorkflowNode, WorkflowEdge, Worker } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Play, CheckCircle2, Trash2, Clock, Loader2, User } from "lucide-react";
+import { Play, CheckCircle2, Trash2, Clock, Loader2, User, Plus } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 
 interface StageNodeData {
   label: string;
@@ -162,6 +170,7 @@ interface WorkflowCanvasProps {
   onStatusChange: (nodeId: string, status: WorkflowNode["status"]) => void;
   onAssignWorker: (nodeId: string, workerId: string) => void;
   onRemoveNode: (nodeId: string) => void;
+  onAddNode?: (label: string, position: { x: number; y: number }) => void;
   readOnly?: boolean;
 }
 
@@ -174,8 +183,12 @@ export function WorkflowCanvas({
   onStatusChange,
   onAssignWorker,
   onRemoveNode,
+  onAddNode,
   readOnly = false,
 }: WorkflowCanvasProps) {
+  const [showAddDialog, setShowAddDialog] = useState(false);
+  const [addPosition, setAddPosition] = useState<{ x: number; y: number }>({ x: 250, y: 100 });
+  const [newStageLabel, setNewStageLabel] = useState("");
   const rfNodes: Node<StageNodeData>[] = useMemo(
     () =>
       wfNodes.map((n, i) => ({
@@ -257,14 +270,46 @@ export function WorkflowCanvas({
     [onEdgesUpdate]
   );
 
+  const handleDoubleClick = useCallback(
+    (event: React.MouseEvent) => {
+      if (readOnly || !onAddNode) return;
+      // Get canvas position from the ReactFlow viewport
+      const bounds = (event.currentTarget as HTMLElement).getBoundingClientRect();
+      const x = event.clientX - bounds.left;
+      const y = event.clientY - bounds.top;
+      setAddPosition({ x, y });
+      setNewStageLabel("");
+      setShowAddDialog(true);
+    },
+    [readOnly, onAddNode]
+  );
+
+  const handleAddSubmit = useCallback(() => {
+    if (!newStageLabel.trim() || !onAddNode) return;
+    onAddNode(newStageLabel.trim(), addPosition);
+    setNewStageLabel("");
+    setShowAddDialog(false);
+  }, [newStageLabel, addPosition, onAddNode]);
+
+  const handleToolbarAdd = useCallback(() => {
+    if (!onAddNode) return;
+    // Place new node below existing nodes
+    const maxY = wfNodes.reduce((max, n) => Math.max(max, n.position?.y ?? 0), 0);
+    setAddPosition({ x: 250, y: maxY + 160 });
+    setNewStageLabel("");
+    setShowAddDialog(true);
+  }, [onAddNode, wfNodes]);
+
   return (
-    <div className="w-full h-[500px] border rounded-lg overflow-hidden bg-background">
+    <div className="w-full h-[500px] border rounded-lg overflow-hidden bg-background relative">
       <ReactFlow
         nodes={flowNodes}
         edges={flowEdges}
         onNodesChange={readOnly ? undefined : onNodesChange}
         onEdgesChange={readOnly ? undefined : onEdgesChange}
         onConnect={readOnly ? undefined : onConnect}
+        onPaneClick={undefined}
+        onDoubleClick={!readOnly ? handleDoubleClick : undefined}
         nodeTypes={nodeTypes}
         nodesDraggable={!readOnly}
         nodesConnectable={!readOnly}
@@ -285,6 +330,37 @@ export function WorkflowCanvas({
           }}
         />
       </ReactFlow>
+      {/* Floating add button */}
+      {!readOnly && onAddNode && (
+        <Button
+          size="sm"
+          className="absolute top-3 right-3 z-10 shadow-md"
+          onClick={handleToolbarAdd}
+        >
+          <Plus className="h-4 w-4 mr-1" /> Add Stage
+        </Button>
+      )}
+      {/* Add stage dialog */}
+      <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add New Stage</DialogTitle>
+            <DialogDescription>Enter a name for the new workflow stage</DialogDescription>
+          </DialogHeader>
+          <div className="flex gap-2">
+            <Input
+              placeholder="Stage name (e.g. Quality Check)"
+              value={newStageLabel}
+              onChange={(e) => setNewStageLabel(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleAddSubmit()}
+              autoFocus
+            />
+            <Button onClick={handleAddSubmit} disabled={!newStageLabel.trim()}>
+              <Plus className="h-4 w-4 mr-1" /> Add
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
