@@ -5,7 +5,8 @@ import { getProject, getProjectByToken } from "@/lib/firestore";
 import type { Project } from "@/lib/types";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { CheckCircle2, Clock, Circle, Workflow } from "lucide-react";
+import { Workflow } from "lucide-react";
+import { WorkflowCanvas } from "@/components/workflow-canvas";
 
 function TrackInner() {
   const searchParams = useSearchParams();
@@ -32,16 +33,19 @@ function TrackInner() {
   const progress = project.nodes.length ? Math.round((project.nodes.filter((n) => n.status === "completed").length / project.nodes.length) * 100) : 0;
   const currentNode = project.nodes.find((n) => n.status === "in-progress");
 
+  // No-op handlers for read-only canvas
+  const noop = () => {};
+
   return (
     <div className="min-h-[100dvh] bg-background">
       <header className="border-b py-4 px-4">
-        <div className="max-w-2xl mx-auto flex items-center gap-2">
+        <div className="max-w-4xl mx-auto flex items-center gap-2">
           <Workflow className="h-5 w-5 text-primary" />
           <span className="font-bold">Workflowz</span>
         </div>
       </header>
 
-      <main className="p-4 max-w-2xl mx-auto">
+      <main className="p-4 max-w-4xl mx-auto">
         <div className="mb-6">
           <h1 className="text-2xl font-bold">{project.name}</h1>
           <p className="text-muted-foreground">Client: {project.clientName}</p>
@@ -67,31 +71,18 @@ function TrackInner() {
           </CardContent>
         </Card>
 
-        <h2 className="text-lg font-semibold mb-3">Workflow Stages</h2>
-        <div className="space-y-3">
-          {project.nodes.map((node, i) => (
-            <div key={node.id} className="flex items-start gap-3">
-              <div className="flex flex-col items-center">
-                {node.status === "completed" ? (
-                  <CheckCircle2 className="h-6 w-6 text-green-500 shrink-0" />
-                ) : node.status === "in-progress" ? (
-                  <Clock className="h-6 w-6 text-blue-500 animate-pulse shrink-0" />
-                ) : (
-                  <Circle className="h-6 w-6 text-muted-foreground shrink-0" />
-                )}
-                {i < project.nodes.length - 1 && <div className="w-0.5 h-8 bg-border mt-1" />}
-              </div>
-              <div className="pb-4">
-                <p className={`font-medium ${node.status === "completed" ? "text-green-600 dark:text-green-400" : node.status === "in-progress" ? "text-blue-600 dark:text-blue-400" : "text-muted-foreground"}`}>
-                  {node.label}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  {node.status === "completed" && node.completedAt ? `Completed ${new Date(node.completedAt).toLocaleDateString()}` : node.status === "in-progress" && node.startedAt ? `Started ${new Date(node.startedAt).toLocaleDateString()}` : "Pending"}
-                </p>
-              </div>
-            </div>
-          ))}
-        </div>
+        <h2 className="text-lg font-semibold mb-3">Workflow</h2>
+        <WorkflowCanvas
+          nodes={project.nodes}
+          edges={project.edges || []}
+          workers={[]}
+          onNodesUpdate={noop}
+          onEdgesUpdate={noop}
+          onStatusChange={noop}
+          onAssignWorker={noop}
+          onRemoveNode={noop}
+          readOnly
+        />
       </main>
 
       <footer className="border-t py-4 px-4 mt-8">

@@ -39,6 +39,7 @@ interface StageNodeData {
   status: WorkflowNode["status"];
   assignedTo?: string;
   workers: Worker[];
+  readOnly?: boolean;
   onStatusChange: (nodeId: string, status: WorkflowNode["status"]) => void;
   onAssignWorker: (nodeId: string, workerId: string) => void;
   onRemove: (nodeId: string) => void;
@@ -104,25 +105,27 @@ function StageNode({ id, data }: NodeProps<Node<StageNodeData>>) {
             <span>{assignedWorker.name}</span>
           </div>
         ) : null}
-        {/* Worker assignment */}
-        <Select
-          value={data.assignedTo || ""}
-          onValueChange={(v) => data.onAssignWorker(id, v)}
-        >
-          <SelectTrigger className="h-7 text-xs">
-            <SelectValue placeholder={assignedWorker ? "Reassign" : "Assign worker"} />
-          </SelectTrigger>
-          <SelectContent>
-            {data.workers.map((w) => (
-              <SelectItem key={w.id} value={w.id}>
-                {w.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        {/* Worker assignment (hidden in read-only) */}
+        {!data.readOnly && (
+          <Select
+            value={data.assignedTo || ""}
+            onValueChange={(v) => data.onAssignWorker(id, v)}
+          >
+            <SelectTrigger className="h-7 text-xs">
+              <SelectValue placeholder={assignedWorker ? "Reassign" : "Assign worker"} />
+            </SelectTrigger>
+            <SelectContent>
+              {data.workers.map((w) => (
+                <SelectItem key={w.id} value={w.id}>
+                  {w.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
         {/* Actions */}
         <div className="flex items-center gap-1">
-          {data.status === "pending" && (
+          {data.status === "pending" && !data.readOnly && (
             <Button
               size="sm"
               variant="outline"
@@ -132,7 +135,7 @@ function StageNode({ id, data }: NodeProps<Node<StageNodeData>>) {
               <Play className="h-3 w-3 mr-1" /> Start
             </Button>
           )}
-          {data.status === "in-progress" && (
+          {data.status === "in-progress" && !data.readOnly && (
             <Button
               size="sm"
               className="h-7 text-xs flex-1 bg-green-600 hover:bg-green-700"
@@ -144,14 +147,22 @@ function StageNode({ id, data }: NodeProps<Node<StageNodeData>>) {
           {data.status === "completed" && (
             <span className="text-xs text-green-600 font-medium flex-1 text-center">✓ Done</span>
           )}
-          <Button
-            size="sm"
-            variant="ghost"
-            className="h-7 w-7 p-0 shrink-0 text-destructive hover:text-destructive"
-            onClick={() => data.onRemove(id)}
-          >
-            <Trash2 className="h-3 w-3" />
-          </Button>
+          {data.status === "pending" && data.readOnly && (
+            <span className="text-xs text-muted-foreground font-medium flex-1 text-center">Pending</span>
+          )}
+          {data.status === "in-progress" && data.readOnly && (
+            <span className="text-xs text-blue-500 font-medium flex-1 text-center">In Progress</span>
+          )}
+          {!data.readOnly && (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-7 w-7 p-0 shrink-0 text-destructive hover:text-destructive"
+              onClick={() => data.onRemove(id)}
+            >
+              <Trash2 className="h-3 w-3" />
+            </Button>
+          )}
         </div>
       </div>
       <Handle type="source" position={Position.Bottom} className="!bg-primary !w-3 !h-3" />
@@ -200,6 +211,7 @@ export function WorkflowCanvas({
           status: n.status,
           assignedTo: n.assignedTo,
           workers,
+          readOnly,
           onStatusChange,
           onAssignWorker,
           onRemove: onRemoveNode,
