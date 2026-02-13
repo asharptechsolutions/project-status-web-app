@@ -29,7 +29,7 @@ type WorkflowNode = WorkflowNodeType;
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Play, CheckCircle2, Trash2, Clock, Loader2, User, Plus, LayoutGrid, Lock, Unlock, CalendarDays } from "lucide-react";
+import { Play, CheckCircle2, Trash2, Clock, Loader2, User, Plus, LayoutGrid, Lock, Unlock, CalendarDays, Pencil } from "lucide-react";
 import Dagre from "@dagrejs/dagre";
 import { Input } from "@/components/ui/input";
 import {
@@ -54,6 +54,7 @@ interface StageNodeData {
   onRemove: (nodeId: string) => void;
   onEstimatedCompletionChange: (nodeId: string, date: string) => void;
   onRenameNode: (nodeId: string, label: string) => void;
+  onEditNode: (nodeId: string) => void;
   direction?: "TB" | "LR";
   isSource?: boolean;
   [key: string]: unknown;
@@ -124,18 +125,29 @@ function StageNode({ id, data }: NodeProps<Node<StageNodeData>>) {
             </span>
           )}
         </div>
-        <Badge
-          variant={
-            data.status === "completed"
-              ? "default"
-              : data.status === "in-progress"
-              ? "secondary"
-              : "outline"
-          }
-          className="shrink-0 text-[10px] uppercase tracking-wide"
-        >
-          {data.status}
-        </Badge>
+        <div className="flex items-center gap-1 shrink-0">
+          {!data.readOnly && (
+            <button
+              className="p-0.5 rounded hover:bg-black/10 dark:hover:bg-white/10 text-muted-foreground hover:text-foreground transition-colors"
+              onClick={() => data.onEditNode(id)}
+              title="Edit stage"
+            >
+              <Pencil className="h-3 w-3" />
+            </button>
+          )}
+          <Badge
+            variant={
+              data.status === "completed"
+                ? "default"
+                : data.status === "in-progress"
+                ? "secondary"
+                : "outline"
+            }
+            className="text-[10px] uppercase tracking-wide"
+          >
+            {data.status}
+          </Badge>
+        </div>
       </div>
       {/* Body */}
       <div className="p-3 flex flex-col gap-2">
@@ -375,6 +387,8 @@ export function WorkflowCanvas({
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [addPosition, setAddPosition] = useState<{ x: number; y: number }>({ x: 250, y: 100 });
   const [newStageLabel, setNewStageLabel] = useState("");
+  const [editingNode, setEditingNode] = useState<WorkflowNode | null>(null);
+  const [editForm, setEditForm] = useState({ label: "", status: "" as WorkflowNode["status"], assignedTo: "", estimatedCompletion: "" });
 
   // Responsive layout direction: horizontal (LR) on desktop, vertical (TB) on mobile
   const [direction, setDirection] = useState<"TB" | "LR">("TB");
@@ -384,6 +398,36 @@ export function WorkflowCanvas({
     window.addEventListener("resize", update);
     return () => window.removeEventListener("resize", update);
   }, []);
+  const handleEditNode = useCallback((nodeId: string) => {
+    const node = wfNodes.find((n) => n.id === nodeId);
+    if (!node) return;
+    setEditingNode(node);
+    setEditForm({
+      label: node.label,
+      status: node.status,
+      assignedTo: node.assignedTo || "",
+      estimatedCompletion: node.estimatedCompletion || "",
+    });
+  }, [wfNodes]);
+
+  const handleEditSave = useCallback(() => {
+    if (!editingNode) return;
+    const trimmedLabel = editForm.label.trim();
+    if (trimmedLabel && trimmedLabel !== editingNode.label && onRenameNode) {
+      onRenameNode(editingNode.id, trimmedLabel);
+    }
+    if (editForm.status !== editingNode.status) {
+      onStatusChange(editingNode.id, editForm.status);
+    }
+    if (editForm.assignedTo !== (editingNode.assignedTo || "")) {
+      onAssignWorker(editingNode.id, editForm.assignedTo);
+    }
+    if (editForm.estimatedCompletion !== (editingNode.estimatedCompletion || "")) {
+      onEstimatedCompletionChange(editingNode.id, editForm.estimatedCompletion);
+    }
+    setEditingNode(null);
+  }, [editingNode, editForm, onRenameNode, onStatusChange, onAssignWorker, onEstimatedCompletionChange]);
+
   // Compute which nodes are blocked (predecessors not all completed)
   const blockedMap = useMemo(() => {
     const map: Record<string, { blocked: boolean; blockedBy: string[] }> = {};
@@ -425,9 +469,10 @@ export function WorkflowCanvas({
           onRemove: onRemoveNode,
           onEstimatedCompletionChange,
           onRenameNode: onRenameNode || (() => {}),
+          onEditNode: handleEditNode,
         },
       })),
-    [wfNodes, workers, onStatusChange, onAssignWorker, onRemoveNode, onEstimatedCompletionChange, onRenameNode, blockedMap, direction]
+    [wfNodes, workers, onStatusChange, onAssignWorker, onRemoveNode, onEstimatedCompletionChange, onRenameNode, handleEditNode, blockedMap, direction]
   );
 
   const deleteEdgeRef = useRef<(edgeId: string) => void>(() => {});
@@ -668,6 +713,65 @@ export function WorkflowCanvas({
                 </div>
               </div>
             )}
+          </div>
+        </DialogContent>
+      </Dialog>
+      {/* Edit stage dialog */}
+      <Dialog open={!!editingNode} onOpenChange={(open) => { if (!open) setEditingNode(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Stage</DialogTitle>
+            <DialogDescription>Update the details for this workflow stage</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Name</label>
+              <Input
+                value={editForm.label}
+                onChange={(e) => setEditForm((f) => ({ ...f, label: e.target.value }))}
+                placeholder="Stage name"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Status</label>
+              <Select value={editForm.status} onValueChange={(v) => setEditForm((f) => ({ ...f, status: v as WorkflowNode["status"] }))}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="pending">Pending</SelectItem>
+                  <SelectItem value="in-progress">In Progress</SelectItem>
+                  <SelectItem value="completed">Completed</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Assigned To</label>
+              <Select value={editForm.assignedTo} onValueChange={(v) => setEditForm((f) => ({ ...f, assignedTo: v }))}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Unassigned" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">Unassigned</SelectItem>
+                  {workers.map((w) => (
+                    <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Estimated Completion</label>
+              <input
+                type="date"
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                value={editForm.estimatedCompletion}
+                onChange={(e) => setEditForm((f) => ({ ...f, estimatedCompletion: e.target.value }))}
+              />
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="outline" onClick={() => setEditingNode(null)}>Cancel</Button>
+              <Button onClick={handleEditSave}>Save Changes</Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
