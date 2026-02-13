@@ -4,7 +4,7 @@ import { useSearchParams } from "next/navigation";
 import { Navbar } from "@/components/navbar";
 import { AuthGate } from "@/components/auth-gate";
 import { useAuth } from "@/lib/auth-context";
-import { getProjects, createProject, updateProject, deleteProject, getTemplates, getWorkers, onProjectFiles, getPresetStages } from "@/lib/firestore";
+import { getProjects, createProject, updateProject, deleteProject, getTemplates, getWorkers, onProjectFiles, getPresetStages, onAllMessages, onAllFiles } from "@/lib/firestore";
 import type { Project, ProjectContact, WorkflowNode, WorkflowEdge, WorkflowTemplate, Worker, ProjectFile, PresetStage } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,7 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Trash2, ArrowLeft, Play, CheckCircle2, Link2, Copy, ChevronRight, Pencil, Search, X, ArrowUpDown, Archive, ArchiveRestore, Bell, BellOff, Users, UserPlus, MessageCircle } from "lucide-react";
+import { Plus, Trash2, ArrowLeft, Play, CheckCircle2, Link2, Copy, ChevronRight, Pencil, Search, X, ArrowUpDown, Archive, ArchiveRestore, Bell, BellOff, Users, UserPlus, MessageCircle, FileText } from "lucide-react";
 import { nanoid } from "nanoid";
 import basePath from "@/lib/base-path";
 import { toast } from "sonner";
@@ -54,6 +54,30 @@ function ProjectsList() {
   const [newContactName, setNewContactName] = useState("");
   const [newContactEmail, setNewContactEmail] = useState("");
   const [projectFiles, setProjectFiles] = useState<ProjectFile[]>([]);
+  const [latestMessages, setLatestMessages] = useState<Record<string, { count: number; latestAt: string; fromClient: boolean }>>({});
+  const [latestFiles, setLatestFiles] = useState<Record<string, { latestAt: string }>>({});
+
+  // Get last-seen timestamps from localStorage
+  const getLastSeen = (projectId: string): string => {
+    try { return localStorage.getItem(`ps_seen_${projectId}`) || ""; } catch { return ""; }
+  };
+  const markSeen = (projectId: string) => {
+    try { localStorage.setItem(`ps_seen_${projectId}`, new Date().toISOString()); } catch {}
+  };
+
+  const hasUnreadMessages = (projectId: string) => {
+    const msg = latestMessages[projectId];
+    if (!msg) return false;
+    const seen = getLastSeen(projectId);
+    return msg.latestAt > seen;
+  };
+
+  const hasUnseenFiles = (projectId: string) => {
+    const file = latestFiles[projectId];
+    if (!file) return false;
+    const seen = getLastSeen(projectId);
+    return file.latestAt > seen;
+  };
 
   const load = useCallback(async () => {
     if (!user) return;
@@ -71,6 +95,15 @@ function ProjectsList() {
   }, [user]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Real-time unread tracking across all projects
+  useEffect(() => {
+    const ids = projects.map((p) => p.id);
+    if (!ids.length) return;
+    const unsub1 = onAllMessages(ids, setLatestMessages);
+    const unsub2 = onAllFiles(ids, setLatestFiles);
+    return () => { unsub1(); unsub2(); };
+  }, [projects]);
 
   useEffect(() => {
     if (selectedProject) {
@@ -617,13 +650,27 @@ function ProjectsList() {
           {filteredProjects.map((p) => {
             const prog = p.nodes.length ? Math.round((p.nodes.filter((n) => n.status === "completed").length / p.nodes.length) * 100) : 0;
             return (
-              <Card key={p.id} className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => setSelectedProject(p)}>
+              <Card key={p.id} className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => { markSeen(p.id); setSelectedProject(p); }}>
                 <CardContent className="pt-4 pb-4">
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="font-medium">{p.name}</p>
                       <p className="text-sm text-muted-foreground">Client: {p.clientName} • {p.nodes.length} stages</p>
                       {p.description && <p className="text-xs text-muted-foreground mt-1 line-clamp-1">{p.description}</p>}
+                      {(hasUnreadMessages(p.id) || hasUnseenFiles(p.id)) && (
+                        <div className="flex items-center gap-2 mt-1">
+                          {hasUnreadMessages(p.id) && (
+                            <span className="inline-flex items-center gap-1 text-xs font-medium text-blue-600 dark:text-blue-400">
+                              <MessageCircle className="h-3 w-3" />New message
+                            </span>
+                          )}
+                          {hasUnseenFiles(p.id) && (
+                            <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-600 dark:text-amber-400">
+                              <FileText className="h-3 w-3" />New file
+                            </span>
+                          )}
+                        </div>
+                      )}
                     </div>
                     <div className="flex items-center gap-2">
                       {p.status === "archived" ? (

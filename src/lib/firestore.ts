@@ -355,6 +355,52 @@ export function onProjectFiles(
   });
 }
 
+export function onAllMessages(
+  projectIds: string[],
+  callback: (latest: Record<string, { count: number; latestAt: string; fromClient: boolean }>) => void
+): () => void {
+  if (!projectIds.length) { callback({}); return () => {}; }
+  const q = query(
+    collection(db, PREFIX + "messages"),
+    where("projectId", "in", projectIds.slice(0, 30))
+  );
+  return onSnapshot(q, (snap) => {
+    const result: Record<string, { count: number; latestAt: string; fromClient: boolean }> = {};
+    snap.docs.forEach((d) => {
+      const data = d.data();
+      const pid = data.projectId as string;
+      if (!result[pid] || data.createdAt > result[pid].latestAt) {
+        result[pid] = { count: (result[pid]?.count || 0) + 1, latestAt: data.createdAt, fromClient: data.senderRole === "client" };
+      } else {
+        result[pid].count = (result[pid]?.count || 0) + 1;
+      }
+    });
+    callback(result);
+  });
+}
+
+export function onAllFiles(
+  projectIds: string[],
+  callback: (latest: Record<string, { latestAt: string }>) => void
+): () => void {
+  if (!projectIds.length) { callback({}); return () => {}; }
+  const q = query(
+    collection(db, PREFIX + "files"),
+    where("projectId", "in", projectIds.slice(0, 30))
+  );
+  return onSnapshot(q, (snap) => {
+    const result: Record<string, { latestAt: string }> = {};
+    snap.docs.forEach((d) => {
+      const data = d.data();
+      const pid = data.projectId as string;
+      if (!result[pid] || data.uploadedAt > result[pid].latestAt) {
+        result[pid] = { latestAt: data.uploadedAt };
+      }
+    });
+    callback(result);
+  });
+}
+
 // Preset Stages
 export async function getPresetStages(userId: string): Promise<PresetStage[]> {
   try {
