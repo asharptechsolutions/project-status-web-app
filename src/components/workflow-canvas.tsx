@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ReactFlow,
   Background,
@@ -18,6 +18,10 @@ import {
   Handle,
   Position,
   type NodeProps,
+  type EdgeProps,
+  BaseEdge,
+  EdgeLabelRenderer,
+  getSmoothStepPath,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import type { WorkflowNode as WorkflowNodeType, WorkflowEdge, Worker, PresetStage } from "@/lib/types";
@@ -257,7 +261,59 @@ function StageNode({ id, data }: NodeProps<Node<StageNodeData>>) {
   );
 }
 
+function DeletableEdge({
+  id,
+  sourceX,
+  sourceY,
+  targetX,
+  targetY,
+  sourcePosition,
+  targetPosition,
+  style,
+  markerEnd,
+  selected,
+  data,
+}: EdgeProps) {
+  const [edgePath, labelX, labelY] = getSmoothStepPath({
+    sourceX,
+    sourceY,
+    sourcePosition,
+    targetX,
+    targetY,
+    targetPosition,
+  });
+
+  const onDelete = data?.onDelete as ((id: string) => void) | undefined;
+
+  return (
+    <>
+      <BaseEdge path={edgePath} markerEnd={markerEnd} style={{ ...style, strokeWidth: selected ? 3 : 2 }} />
+      {selected && onDelete && (
+        <EdgeLabelRenderer>
+          <div
+            style={{
+              position: "absolute",
+              transform: `translate(-50%, -50%) translate(${labelX}px,${labelY}px)`,
+              pointerEvents: "all",
+            }}
+            className="nodrag nopan"
+          >
+            <button
+              className="flex items-center justify-center w-5 h-5 rounded-full bg-destructive text-destructive-foreground hover:bg-destructive/80 shadow-md text-xs font-bold"
+              onClick={() => onDelete(id)}
+              title="Delete edge"
+            >
+              ×
+            </button>
+          </div>
+        </EdgeLabelRenderer>
+      )}
+    </>
+  );
+}
+
 const nodeTypes: NodeTypes = { stage: StageNode };
+const edgeTypes = { deletable: DeletableEdge };
 
 function getLayoutedElements(
   nodes: Node<StageNodeData>[],
@@ -374,16 +430,19 @@ export function WorkflowCanvas({
     [wfNodes, workers, onStatusChange, onAssignWorker, onRemoveNode, onEstimatedCompletionChange, onRenameNode, blockedMap, direction]
   );
 
+  const deleteEdgeRef = useRef<(edgeId: string) => void>(() => {});
+
   const rfEdges: Edge[] = useMemo(
     () =>
       wfEdges.map((e) => ({
         id: e.id,
         source: e.source,
         target: e.target,
-        type: "smoothstep",
+        type: readOnly ? "smoothstep" : "deletable",
         animated: true,
+        data: readOnly ? {} : { onDelete: (id: string) => deleteEdgeRef.current(id) },
       })),
-    [wfEdges]
+    [wfEdges, readOnly]
   );
 
   // Auto-layout nodes in readOnly mode for clean presentation
@@ -396,6 +455,17 @@ export function WorkflowCanvas({
 
   const [flowNodes, setFlowNodes] = useState(initialNodes);
   const [flowEdges, setFlowEdges] = useState(rfEdges);
+
+  // Wire up the edge delete handler now that setFlowEdges is available
+  deleteEdgeRef.current = (edgeId: string) => {
+    if (readOnly) return;
+    setFlowEdges((eds) => {
+      const updated = eds.filter((e) => e.id !== edgeId);
+      const wfNew = updated.map((e) => ({ id: e.id, source: e.source, target: e.target }));
+      onEdgesUpdate(wfNew);
+      return updated;
+    });
+  };
 
   // Sync when props change
   useMemo(() => {
@@ -430,16 +500,22 @@ export function WorkflowCanvas({
     (changes) => {
       setFlowEdges((eds) => {
         const updated = applyEdgeChanges(changes, eds);
+        // Persist edge removals back to parent
+        const hasRemoval = changes.some((c) => c.type === "remove");
+        if (hasRemoval) {
+          const wfNew = updated.map((e) => ({ id: e.id, source: e.source, target: e.target }));
+          onEdgesUpdate(wfNew);
+        }
         return updated;
       });
     },
-    []
+    [onEdgesUpdate]
   );
 
   const onConnect: OnConnect = useCallback(
     (params) => {
       setFlowEdges((eds) => {
-        const newEdges = addEdge({ ...params, type: "smoothstep", animated: true }, eds);
+        const newEdges = addEdge({ ...params, type: "deletable", animated: true, data: { onDelete: (id: string) => deleteEdgeRef.current(id) } }, eds);
         const wfNew = newEdges.map((e) => ({ id: e.id, source: e.source, target: e.target }));
         onEdgesUpdate(wfNew);
         return newEdges;
@@ -500,6 +576,7 @@ export function WorkflowCanvas({
         onPaneClick={undefined}
         onDoubleClick={!readOnly ? handleDoubleClick : undefined}
         nodeTypes={nodeTypes}
+        edgeTypes={edgeTypes}
         nodesDraggable={!readOnly}
         nodesConnectable={!readOnly}
         elementsSelectable={!readOnly}
