@@ -31,7 +31,7 @@ export function ProjectChat({ projectId, senderEmail, senderName, senderRole }: 
   }, [projectId]);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
   }, [messages.length]);
 
   const handleSend = async () => {

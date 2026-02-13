@@ -1,6 +1,6 @@
 "use client";
-import { useEffect, useState, useCallback, Suspense } from "react";
-import { useSearchParams } from "next/navigation";
+import { useEffect, useState, useCallback, useRef, Suspense } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import { Navbar } from "@/components/navbar";
 import { AuthGate } from "@/components/auth-gate";
 import { useAuth } from "@/lib/auth-context";
@@ -27,6 +27,8 @@ import { notifyStageChange } from "@/lib/notifications";
 function ProjectsList() {
   const { user } = useAuth();
   const searchParams = useSearchParams();
+  const router = useRouter();
+  const handledParams = useRef(false);
   const [projects, setProjects] = useState<Project[]>([]);
   const [templates, setTemplates] = useState<WorkflowTemplate[]>([]);
   const [workers, setWorkers] = useState<Worker[]>([]);
@@ -115,13 +117,21 @@ function ProjectsList() {
   }, [selectedProject?.id]);
 
   useEffect(() => {
-    if (searchParams.get("new") === "1") setShowNew(true);
+    if (!handledParams.current) {
+      if (searchParams.get("new") === "1") {
+        setShowNew(true);
+        // Clear ?new=1 from URL to prevent re-triggering on refresh
+        router.replace("/projects/", { scroll: false });
+        handledParams.current = true;
+        return;
+      }
+    }
     const id = searchParams.get("id");
     if (id && projects.length) {
       const found = projects.find((p) => p.id === id);
       if (found) setSelectedProject(found);
     }
-  }, [searchParams, projects]);
+  }, [searchParams, projects, router]);
 
   const handleCreate = async () => {
     if (!user || !newName.trim()) return;
@@ -357,6 +367,11 @@ function ProjectsList() {
   };
 
   if (loading) return <div className="flex items-center justify-center p-8"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" /></div>;
+
+  // Scroll to top when project detail opens
+  useEffect(() => {
+    if (selectedProject) window.scrollTo(0, 0);
+  }, [selectedProject?.id]);
 
   if (selectedProject) {
     const progress = selectedProject.nodes.length ? Math.round((selectedProject.nodes.filter((n) => n.status === "completed").length / selectedProject.nodes.length) * 100) : 0;
