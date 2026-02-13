@@ -334,7 +334,7 @@ export function WorkflowCanvas({
           direction,
           blocked: blockedMap[n.id]?.blocked ?? false,
           blockedBy: blockedMap[n.id]?.blockedBy ?? [],
-          isSource: !wfEdges.some((e) => e.target === n.id),
+          isSource: i === 0 && !wfEdges.some((e) => e.target === n.id),
           onStatusChange,
           onAssignWorker,
           onRemove: onRemoveNode,
