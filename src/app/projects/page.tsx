@@ -167,8 +167,9 @@ function ProjectsList() {
         : [];
       const primaryEmail = initialContacts.length > 0 ? initialContacts[0].email : "";
       const id = await createProject({
-        name: newName, clientName: newClient, clientEmail: primaryEmail, clientPhone: newClientPhone.trim() || undefined,
-        description: newDescription.trim() || undefined,
+        name: newName, clientName: newClient, clientEmail: primaryEmail,
+        ...(newClientPhone.trim() ? { clientPhone: newClientPhone.trim() } : {}),
+        ...(newDescription.trim() ? { description: newDescription.trim() } : {}),
         nodes, edges, contacts: initialContacts, shareToken: nanoid(12), status: "active",
         createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), userId: user.uid,
       });
@@ -349,11 +350,11 @@ function ProjectsList() {
         name: editName.trim(),
         clientName: editClient.trim(),
         clientEmail: editClientEmail.trim(),
-        clientPhone: editClientPhone.trim() || undefined,
-        description: editDescription.trim() || undefined,
+        clientPhone: editClientPhone.trim() || "",
+        description: editDescription.trim() || "",
         updatedAt: new Date().toISOString(),
       });
-      setSelectedProject({ ...selectedProject, name: editName.trim(), clientName: editClient.trim(), clientEmail: editClientEmail.trim(), clientPhone: editClientPhone.trim() || undefined, description: editDescription.trim() || undefined });
+      setSelectedProject({ ...selectedProject, name: editName.trim(), clientName: editClient.trim(), clientEmail: editClientEmail.trim(), clientPhone: editClientPhone.trim() || "", description: editDescription.trim() || "" });
       setShowEdit(false);
       toast.success("Project updated");
       load();
@@ -408,8 +409,8 @@ function ProjectsList() {
         name: listEditName.trim(),
         clientName: listEditClient.trim(),
         clientEmail: listEditClientEmail.trim(),
-        clientPhone: listEditClientPhone.trim() || undefined,
-        description: listEditDescription.trim() || undefined,
+        clientPhone: listEditClientPhone.trim() || "",
+        description: listEditDescription.trim() || "",
         updatedAt: new Date().toISOString(),
       });
       setShowListEdit(false);
