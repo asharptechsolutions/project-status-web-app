@@ -5,7 +5,5 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "sb_publish
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-// Service role client for admin operations (org sync, member management)
-// In a static export, this runs client-side. For production, use edge functions.
-const supabaseServiceKey = process.env.NEXT_PUBLIC_SUPABASE_SERVICE_KEY || "sb_secret_lh0GhRL__LM7PDDnoSjAsg_oSEBK29g";
-export const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
+// Use anon client for everything - RLS policies handle access control
+export const supabaseAdmin = supabase;
