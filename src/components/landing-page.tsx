@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import Link from "next/link";
 import { LoginPage } from "@/components/login-page";
 import {
   Workflow,
@@ -32,6 +33,9 @@ export function LandingPage() {
             <span className="font-bold text-lg">ProjectStatus</span>
           </div>
           <div className="flex items-center gap-2">
+            <Button variant="ghost" size="sm" asChild>
+              <Link href="/security/">Security</Link>
+            </Button>
             <Button variant="ghost" size="sm" onClick={() => setShowAuth(true)}>
               Sign In
             </Button>
@@ -181,6 +185,7 @@ export function LandingPage() {
             <Workflow className="h-4 w-4" />
             <span>ProjectStatus</span>
           </div>
+          <Link href="/security/" className="hover:text-foreground transition-colors">Security</Link>
           <p>&copy; {new Date().getFullYear()} SharpTech.ai. All rights reserved.</p>
         </div>
       </footer>

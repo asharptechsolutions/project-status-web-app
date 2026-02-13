@@ -3,7 +3,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTheme } from "next-themes";
-import { Menu, Sun, Moon, LogOut, Workflow } from "lucide-react";
+import { Menu, Sun, Moon, LogOut, Workflow, Shield } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { auth } from "@/lib/firebase";
@@ -16,6 +16,7 @@ const links = [
   { href: "/projects/", label: "Projects" },
   { href: "/templates/", label: "Templates" },
   { href: "/workers/", label: "Workers" },
+  { href: "/security/", label: "Security" },
 ];
 
 export function Navbar() {
