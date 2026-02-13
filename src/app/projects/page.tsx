@@ -146,7 +146,8 @@ function ProjectsList() {
   }, [searchParams, projects, router]);
 
   const handleCreate = async () => {
-    if (!user || !newName.trim()) return;
+    if (!user) { toast.error("Not logged in"); return; }
+    if (!newName.trim()) { toast.error("Project name is required"); return; }
     let nodes: WorkflowNode[] = [];
     let edges: WorkflowEdge[] = [];
     if (selectedTemplate) {
