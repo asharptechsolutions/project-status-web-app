@@ -49,6 +49,7 @@ interface StageNodeData {
   onAssignWorker: (nodeId: string, workerId: string) => void;
   onRemove: (nodeId: string) => void;
   onEstimatedCompletionChange: (nodeId: string, date: string) => void;
+  onRenameNode: (nodeId: string, label: string) => void;
   direction?: "TB" | "LR";
   isSource?: boolean;
   [key: string]: unknown;
@@ -61,6 +62,8 @@ function StatusIcon({ status }: { status: WorkflowNode["status"] }) {
 }
 
 function StageNode({ id, data }: NodeProps<Node<StageNodeData>>) {
+  const [editing, setEditing] = useState(false);
+  const [editLabel, setEditLabel] = useState(data.label);
   const assignedWorker = data.workers.find((w) => w.id === data.assignedTo);
 
   const borderColor =
@@ -91,7 +94,31 @@ function StageNode({ id, data }: NodeProps<Node<StageNodeData>>) {
       <div className={`${headerBg} px-3 py-2 flex items-center justify-between gap-2`}>
         <div className="flex items-center gap-1.5 min-w-0">
           <StatusIcon status={data.status} />
-          <span className="font-semibold text-sm truncate">{data.label}</span>
+          {editing && !data.readOnly ? (
+            <input
+              className="font-semibold text-sm bg-transparent border-b border-primary outline-none min-w-0 w-full"
+              value={editLabel}
+              autoFocus
+              onChange={(e) => setEditLabel(e.target.value)}
+              onBlur={() => {
+                setEditing(false);
+                const trimmed = editLabel.trim();
+                if (trimmed && trimmed !== data.label) data.onRenameNode(id, trimmed);
+                else setEditLabel(data.label);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                if (e.key === "Escape") { setEditLabel(data.label); setEditing(false); }
+              }}
+            />
+          ) : (
+            <span
+              className={`font-semibold text-sm truncate ${!data.readOnly ? "cursor-pointer hover:underline" : ""}`}
+              onDoubleClick={() => { if (!data.readOnly) { setEditLabel(data.label); setEditing(true); } }}
+            >
+              {data.label}
+            </span>
+          )}
         </div>
         <Badge
           variant={
@@ -268,6 +295,7 @@ interface WorkflowCanvasProps {
   onAssignWorker: (nodeId: string, workerId: string) => void;
   onRemoveNode: (nodeId: string) => void;
   onEstimatedCompletionChange: (nodeId: string, date: string) => void;
+  onRenameNode?: (nodeId: string, label: string) => void;
   onAddNode?: (label: string, position: { x: number; y: number }) => void;
   readOnly?: boolean;
   presetStages?: PresetStage[];
@@ -283,6 +311,7 @@ export function WorkflowCanvas({
   onAssignWorker,
   onRemoveNode,
   onEstimatedCompletionChange,
+  onRenameNode,
   onAddNode,
   readOnly = false,
   presetStages = [],
@@ -339,9 +368,10 @@ export function WorkflowCanvas({
           onAssignWorker,
           onRemove: onRemoveNode,
           onEstimatedCompletionChange,
+          onRenameNode: onRenameNode || (() => {}),
         },
       })),
-    [wfNodes, workers, onStatusChange, onAssignWorker, onRemoveNode, onEstimatedCompletionChange, blockedMap, direction]
+    [wfNodes, workers, onStatusChange, onAssignWorker, onRemoveNode, onEstimatedCompletionChange, onRenameNode, blockedMap, direction]
   );
 
   const rfEdges: Edge[] = useMemo(

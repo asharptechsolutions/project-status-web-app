@@ -252,6 +252,17 @@ function ProjectsList() {
     }
   };
 
+  const renameNode = async (nodeId: string, label: string) => {
+    if (!selectedProject) return;
+    const nodes = selectedProject.nodes.map((n) => n.id === nodeId ? { ...n, label } : n);
+    try {
+      await updateProject(selectedProject.id, { nodes });
+      setSelectedProject({ ...selectedProject, nodes });
+    } catch (error: any) {
+      toast.error(error.message || "Failed to rename stage");
+    }
+  };
+
   const removeNode = async (nodeId: string) => {
     if (!selectedProject) return;
     const nodes = selectedProject.nodes.filter((n) => n.id !== nodeId);
@@ -498,6 +509,7 @@ function ProjectsList() {
               onStatusChange={updateNodeStatus}
               onAssignWorker={assignWorker}
               onRemoveNode={removeNode}
+              onRenameNode={renameNode}
               onEstimatedCompletionChange={updateEstimatedCompletion}
               onAddNode={addNodeAtPosition}
               presetStages={presetStages}
