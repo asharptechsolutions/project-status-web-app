@@ -4,8 +4,13 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { Navbar } from "@/components/navbar";
 import { AuthGate } from "@/components/auth-gate";
 import { useAuth } from "@/lib/auth-context";
-import { getProjects, createProject, updateProject, deleteProject, getTemplates, getWorkers, onProjectFiles, getPresetStages, onAllMessages, onAllFiles } from "@/lib/firestore";
-import type { Project, ProjectContact, WorkflowNode, WorkflowEdge, WorkflowTemplate, Worker, ProjectFile, PresetStage } from "@/lib/types";
+import {
+  getProjects, createProject, updateProject, deleteProject,
+  getProjectStages, createProjectStage, updateProjectStage, deleteProjectStage,
+  getProjectFiles, getProjectMessages, getTemplates, getPresetStages,
+  getAssignedProjects, getMembers,
+} from "@/lib/data";
+import type { Project, ProjectStage, ProjectFile, Template, PresetStage, Member } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -15,124 +20,74 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Trash2, ArrowLeft, Play, CheckCircle2, Link2, Copy, ChevronRight, Pencil, Search, X, ArrowUpDown, Archive, ArchiveRestore, Bell, BellOff, Users, UserPlus, MessageCircle, FileText } from "lucide-react";
-import { nanoid } from "nanoid";
-import basePath from "@/lib/base-path";
+import {
+  Plus, Trash2, ArrowLeft, Play, CheckCircle2, ChevronRight,
+  Pencil, Search, X, ArrowUpDown, Archive, ArchiveRestore,
+  Clock, Loader2, GripVertical,
+} from "lucide-react";
 import { toast } from "sonner";
-import { WorkflowCanvas } from "@/components/workflow-canvas";
 import { FileUpload } from "@/components/file-upload";
 import { ProjectChat } from "@/components/project-chat";
-import { notifyStageChange } from "@/lib/notifications";
 
 function ProjectsList() {
-  const { user } = useAuth();
+  const { orgId, userId, isAdmin, isWorker, isClient, member } = useAuth();
   const searchParams = useSearchParams();
   const router = useRouter();
   const handledParams = useRef(false);
   const [projects, setProjects] = useState<Project[]>([]);
-  const [templates, setTemplates] = useState<WorkflowTemplate[]>([]);
-  const [workers, setWorkers] = useState<Worker[]>([]);
+  const [templates, setTemplates] = useState<Template[]>([]);
   const [presetStages, setPresetStages] = useState<PresetStage[]>([]);
+  const [members, setMembers] = useState<Member[]>([]);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
+  const [stages, setStages] = useState<ProjectStage[]>([]);
   const [showNew, setShowNew] = useState(false);
   const [newName, setNewName] = useState("");
-  const [newClient, setNewClient] = useState("");
-  const [newClientEmail, setNewClientEmail] = useState("");
-  const [newClientPhone, setNewClientPhone] = useState("");
   const [newDescription, setNewDescription] = useState("");
-  const [selectedTemplate, setSelectedTemplate] = useState<string>("");
-  const [newNodeLabel, setNewNodeLabel] = useState("");
-  const [copyMsg, setCopyMsg] = useState("");
+  const [selectedTemplate, setSelectedTemplate] = useState("");
+  const [newStageName, setNewStageName] = useState("");
   const [loading, setLoading] = useState(true);
   const [showEdit, setShowEdit] = useState(false);
   const [editName, setEditName] = useState("");
-  const [editClient, setEditClient] = useState("");
-  const [editClientEmail, setEditClientEmail] = useState("");
-  const [editClientPhone, setEditClientPhone] = useState("");
   const [editDescription, setEditDescription] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>("active-completed");
-  const [sortBy, setSortBy] = useState<string>("newest");
-  const [newContactName, setNewContactName] = useState("");
-  const [newContactEmail, setNewContactEmail] = useState("");
-  const [projectFiles, setProjectFiles] = useState<ProjectFile[]>([]);
-  const [editingProject, setEditingProject] = useState<Project | null>(null);
-  const [showListEdit, setShowListEdit] = useState(false);
-  const [listEditName, setListEditName] = useState("");
-  const [listEditClient, setListEditClient] = useState("");
-  const [listEditClientEmail, setListEditClientEmail] = useState("");
-  const [listEditClientPhone, setListEditClientPhone] = useState("");
-  const [listEditDescription, setListEditDescription] = useState("");
-  const [latestMessages, setLatestMessages] = useState<Record<string, { count: number; latestAt: string; fromClient: boolean }>>({});
-  const [latestFiles, setLatestFiles] = useState<Record<string, { latestAt: string }>>({});
-
-  // Get last-seen timestamps from localStorage
-  const getLastSeen = (projectId: string): string => {
-    try { return localStorage.getItem(`ps_seen_${projectId}`) || ""; } catch { return ""; }
-  };
-  const markSeen = (projectId: string) => {
-    try { localStorage.setItem(`ps_seen_${projectId}`, new Date().toISOString()); } catch {}
-  };
-
-  const hasUnreadMessages = (projectId: string) => {
-    const msg = latestMessages[projectId];
-    if (!msg) return false;
-    const seen = getLastSeen(projectId);
-    return msg.latestAt > seen;
-  };
-
-  const hasUnseenFiles = (projectId: string) => {
-    const file = latestFiles[projectId];
-    if (!file) return false;
-    const seen = getLastSeen(projectId);
-    return file.latestAt > seen;
-  };
+  const [statusFilter, setStatusFilter] = useState("active-completed");
+  const [sortBy, setSortBy] = useState("newest");
+  const [files, setFiles] = useState<ProjectFile[]>([]);
 
   const load = useCallback(async () => {
-    if (!user) return;
+    if (!orgId) return;
     try {
-      const [p, t, w, ps] = await Promise.all([getProjects(user.uid), getTemplates(user.uid), getWorkers(user.uid), getPresetStages(user.uid)]);
+      const [p, t, ps, m] = await Promise.all([
+        isClient && member ? getAssignedProjects(member.id) : getProjects(orgId),
+        isAdmin ? getTemplates(orgId) : Promise.resolve([]),
+        isAdmin ? getPresetStages(orgId) : Promise.resolve([]),
+        getMembers(orgId),
+      ]);
       setProjects(p);
       setTemplates(t);
-      setWorkers(w);
       setPresetStages(ps);
-    } catch (error: any) {
-      toast.error(error.message || "Failed to load data");
+      setMembers(m);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to load data");
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [orgId, isAdmin, isClient, member]);
 
   useEffect(() => { load(); }, [load]);
 
-  // Real-time unread tracking across all projects
+  // Load stages when viewing a project
   useEffect(() => {
-    const ids = projects.map((p) => p.id);
-    if (!ids.length) return;
-    const unsub1 = onAllMessages(ids, setLatestMessages);
-    const unsub2 = onAllFiles(ids, setLatestFiles);
-    return () => { unsub1(); unsub2(); };
-  }, [projects]);
-
-  // Scroll to top when project detail opens
-  useEffect(() => {
-    if (selectedProject) window.scrollTo(0, 0);
-  }, [selectedProject?.id]);
-
-  useEffect(() => {
-    if (selectedProject) {
-      const unsub = onProjectFiles(selectedProject.id, setProjectFiles);
-      return unsub;
-    } else {
-      setProjectFiles([]);
-    }
+    if (!selectedProject) { setStages([]); setFiles([]); return; }
+    getProjectStages(selectedProject.id).then(setStages).catch(() => {});
+    getProjectFiles(selectedProject.id).then(setFiles).catch(() => {});
+    window.scrollTo(0, 0);
   }, [selectedProject?.id]);
 
   useEffect(() => {
     if (!handledParams.current) {
       if (searchParams.get("new") === "1") {
         setShowNew(true);
-        // Clear ?new=1 from URL to prevent re-triggering on refresh
         router.replace("/projects/", { scroll: false });
         handledParams.current = true;
         return;
@@ -146,156 +101,94 @@ function ProjectsList() {
   }, [searchParams, projects, router]);
 
   const handleCreate = async () => {
-    if (!user) { toast.error("Not logged in"); return; }
+    if (!orgId || !userId) return;
     if (!newName.trim()) { toast.error("Project name is required"); return; }
-    let nodes: WorkflowNode[] = [];
-    let edges: WorkflowEdge[] = [];
-    if (selectedTemplate) {
-      const tmpl = templates.find((t) => t.id === selectedTemplate);
-      if (tmpl) {
-        nodes = tmpl.nodes.map((n) => ({ ...n, status: "pending" as const }));
-        edges = [...tmpl.edges];
-      }
-    }
-    // Auto-create initial "Order Planning" source node if no template selected
-    if (nodes.length === 0) {
-      nodes = [{ id: nanoid(8), label: "Order Planning", status: "pending", position: { x: 250, y: 50 } }];
-    }
     try {
-      const initialContacts: ProjectContact[] = newClientEmail.trim()
-        ? newClientEmail.split(",").map(e => e.trim()).filter(e => e).map(email => ({ name: newClient.trim(), email: email.toLowerCase() }))
-        : [];
-      const primaryEmail = initialContacts.length > 0 ? initialContacts[0].email : "";
       const id = await createProject({
-        name: newName, clientName: newClient, clientEmail: primaryEmail,
-        ...(newClientPhone.trim() ? { clientPhone: newClientPhone.trim() } : {}),
-        ...(newDescription.trim() ? { description: newDescription.trim() } : {}),
-        nodes, edges, contacts: initialContacts, shareToken: nanoid(12), status: "active",
-        createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), userId: user.uid,
+        org_id: orgId,
+        name: newName.trim(),
+        description: newDescription.trim(),
+        status: "active",
+        created_by: userId,
       });
-      setNewName(""); setNewClient(""); setNewClientEmail(""); setNewClientPhone(""); setNewDescription(""); setSelectedTemplate(""); setShowNew(false);
+      // If template selected, create stages from it
+      if (selectedTemplate) {
+        const tmpl = templates.find((t) => t.id === selectedTemplate);
+        if (tmpl?.stages) {
+          for (const s of tmpl.stages) {
+            await createProjectStage({
+              project_id: id,
+              name: s.name,
+              status: "pending",
+              position: s.position,
+              started_at: null,
+              completed_at: null,
+              started_by: null,
+            });
+          }
+        }
+      }
+      setNewName(""); setNewDescription(""); setSelectedTemplate(""); setShowNew(false);
       toast.success("Project created");
       await load();
-      const created = (await getProjects(user.uid)).find((p) => p.id === id);
-      if (created) setSelectedProject(created);
-    } catch (error: any) {
-      toast.error(error.message || "Failed to create project");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to create project");
     }
   };
 
-  const addNodeAtPosition = async (label: string, position: { x: number; y: number }) => {
-    if (!selectedProject) return;
-    const newNode: WorkflowNode = { id: nanoid(8), label, status: "pending", position };
-    const updated = { ...selectedProject, nodes: [...selectedProject.nodes, newNode] };
+  const addStage = async () => {
+    if (!selectedProject || !newStageName.trim()) return;
     try {
-      await updateProject(selectedProject.id, { nodes: updated.nodes });
-      setSelectedProject(updated);
-      load();
-    } catch (error: any) {
-      toast.error(error.message || "Failed to add stage");
+      const stage = await createProjectStage({
+        project_id: selectedProject.id,
+        name: newStageName.trim(),
+        status: "pending",
+        position: stages.length,
+        started_at: null,
+        completed_at: null,
+        started_by: null,
+      });
+      setStages([...stages, stage]);
+      setNewStageName("");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to add stage");
     }
   };
 
-  const addNode = async () => {
-    if (!selectedProject || !newNodeLabel.trim()) return;
-    const newNode: WorkflowNode = { id: nanoid(8), label: newNodeLabel, status: "pending" };
-    const lastNode = selectedProject.nodes[selectedProject.nodes.length - 1];
-    const newEdges = [...selectedProject.edges];
-    if (lastNode) newEdges.push({ id: nanoid(8), source: lastNode.id, target: newNode.id });
-    const updated = { ...selectedProject, nodes: [...selectedProject.nodes, newNode], edges: newEdges };
+  const updateStageStatus = async (stageId: string, status: ProjectStage["status"]) => {
+    if (!selectedProject || !userId) return;
+    const now = new Date().toISOString();
+    const updates: Partial<ProjectStage> = { status };
+    if (status === "in_progress") {
+      updates.started_at = now;
+      updates.started_by = userId;
+    }
+    if (status === "completed") {
+      updates.completed_at = now;
+    }
     try {
-      await updateProject(selectedProject.id, { nodes: updated.nodes, edges: updated.edges });
-      setSelectedProject(updated);
-      setNewNodeLabel("");
-      load();
-    } catch (error: any) {
-      toast.error(error.message || "Failed to add stage");
-    }
-  };
-
-  const updateNodeStatus = async (nodeId: string, status: WorkflowNode["status"]) => {
-    if (!selectedProject) return;
-    // Parallel workflow validation: check all predecessors are completed before starting
-    if (status === "in-progress") {
-      const incomingEdges = selectedProject.edges.filter((e) => e.target === nodeId);
-      const incomplete = incomingEdges
-        .map((e) => selectedProject.nodes.find((n) => n.id === e.source))
-        .filter((n) => n && n.status !== "completed");
-      if (incomplete.length > 0) {
-        toast.error(`Cannot start: waiting on ${incomplete.map((n) => n!.label).join(", ")}`);
-        return;
+      await updateProjectStage(stageId, updates);
+      const newStages = stages.map((s) => s.id === stageId ? { ...s, ...updates } : s);
+      setStages(newStages);
+      // Check if all stages complete
+      const allDone = newStages.every((s) => s.status === "completed");
+      if (allDone && selectedProject.status !== "completed") {
+        await updateProject(selectedProject.id, { status: "completed" });
+        setSelectedProject({ ...selectedProject, status: "completed" });
+        load();
       }
-    }
-    const nodes = selectedProject.nodes.map((n) =>
-      n.id === nodeId ? { ...n, status, ...(status === "in-progress" ? { startedAt: new Date().toISOString() } : {}), ...(status === "completed" ? { completedAt: new Date().toISOString() } : {}) } : n
-    );
-    const allDone = nodes.every((n) => n.status === "completed");
-    try {
-      await updateProject(selectedProject.id, { nodes, status: allDone ? "completed" : "active" });
-      setSelectedProject({ ...selectedProject, nodes, status: allDone ? "completed" : "active" });
-      // Send email notification to client if they have an email
-      const changedNode = nodes.find((n) => n.id === nodeId);
-      if (changedNode) {
-        notifyStageChange(selectedProject, changedNode, status, allDone);
-      }
-      load();
-    } catch (error: any) {
-      toast.error(error.message || "Failed to update stage");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to update stage");
     }
   };
 
-  const assignWorker = async (nodeId: string, workerId: string) => {
-    if (!selectedProject) return;
-    const nodes = selectedProject.nodes.map((n) => n.id === nodeId ? { ...n, assignedTo: workerId || undefined } : n);
+  const removeStage = async (stageId: string) => {
     try {
-      await updateProject(selectedProject.id, { nodes });
-      setSelectedProject({ ...selectedProject, nodes });
-    } catch (error: any) {
-      toast.error(error.message || "Failed to assign worker");
+      await deleteProjectStage(stageId);
+      setStages(stages.filter((s) => s.id !== stageId));
+    } catch (err: any) {
+      toast.error(err.message || "Failed to remove stage");
     }
-  };
-
-  const updateEstimatedCompletion = async (nodeId: string, date: string) => {
-    if (!selectedProject) return;
-    const nodes = selectedProject.nodes.map((n) => n.id === nodeId ? { ...n, estimatedCompletion: date || undefined } : n);
-    try {
-      await updateProject(selectedProject.id, { nodes });
-      setSelectedProject({ ...selectedProject, nodes });
-    } catch (error: any) {
-      toast.error(error.message || "Failed to update estimated completion");
-    }
-  };
-
-  const renameNode = async (nodeId: string, label: string) => {
-    if (!selectedProject) return;
-    const nodes = selectedProject.nodes.map((n) => n.id === nodeId ? { ...n, label } : n);
-    try {
-      await updateProject(selectedProject.id, { nodes });
-      setSelectedProject({ ...selectedProject, nodes });
-    } catch (error: any) {
-      toast.error(error.message || "Failed to rename stage");
-    }
-  };
-
-  const removeNode = async (nodeId: string) => {
-    if (!selectedProject) return;
-    const nodes = selectedProject.nodes.filter((n) => n.id !== nodeId);
-    const edges = selectedProject.edges.filter((e) => e.source !== nodeId && e.target !== nodeId);
-    try {
-      await updateProject(selectedProject.id, { nodes, edges });
-      setSelectedProject({ ...selectedProject, nodes, edges });
-      load();
-    } catch (error: any) {
-      toast.error(error.message || "Failed to remove stage");
-    }
-  };
-
-  const copyShareLink = () => {
-    if (!selectedProject) return;
-    const url = `${window.location.origin}${basePath}/track/?id=${selectedProject.id}&token=${selectedProject.shareToken}`;
-    navigator.clipboard.writeText(url);
-    setCopyMsg("Copied!");
-    setTimeout(() => setCopyMsg(""), 2000);
   };
 
   const handleDelete = async (id: string) => {
@@ -304,8 +197,8 @@ function ProjectsList() {
       setSelectedProject(null);
       toast.success("Project deleted");
       load();
-    } catch (error: any) {
-      toast.error(error.message || "Failed to delete project");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to delete project");
     }
   };
 
@@ -315,117 +208,54 @@ function ProjectsList() {
       setSelectedProject(null);
       toast.success("Project archived");
       load();
-    } catch (error: any) {
-      toast.error(error.message || "Failed to archive project");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to archive project");
     }
   };
 
   const handleRestore = async (id: string) => {
     if (!selectedProject) return;
-    const allDone = selectedProject.nodes.length > 0 && selectedProject.nodes.every((n) => n.status === "completed");
+    const allDone = stages.length > 0 && stages.every((s) => s.status === "completed");
     try {
       await updateProject(id, { status: allDone ? "completed" : "active" });
       setSelectedProject({ ...selectedProject, status: allDone ? "completed" : "active" });
       toast.success("Project restored");
       load();
-    } catch (error: any) {
-      toast.error(error.message || "Failed to restore project");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to restore project");
     }
   };
 
   const openEdit = () => {
     if (!selectedProject) return;
     setEditName(selectedProject.name);
-    setEditClient(selectedProject.clientName);
-    setEditClientEmail(selectedProject.clientEmail || "");
-    setEditClientPhone(selectedProject.clientPhone || "");
     setEditDescription(selectedProject.description || "");
     setShowEdit(true);
   };
 
   const handleEdit = async () => {
-    if (!selectedProject || !editName.trim() || !editClient.trim()) return;
+    if (!selectedProject || !editName.trim()) return;
     try {
       await updateProject(selectedProject.id, {
         name: editName.trim(),
-        clientName: editClient.trim(),
-        clientEmail: editClientEmail.trim(),
-        clientPhone: editClientPhone.trim() || "",
-        description: editDescription.trim() || "",
-        updatedAt: new Date().toISOString(),
+        description: editDescription.trim(),
       });
-      setSelectedProject({ ...selectedProject, name: editName.trim(), clientName: editClient.trim(), clientEmail: editClientEmail.trim(), clientPhone: editClientPhone.trim() || "", description: editDescription.trim() || "" });
+      setSelectedProject({ ...selectedProject, name: editName.trim(), description: editDescription.trim() });
       setShowEdit(false);
       toast.success("Project updated");
       load();
-    } catch (error: any) {
-      toast.error(error.message || "Failed to update project");
-    }
-  };
-
-  const addContact = async () => {
-    if (!selectedProject || !newContactName.trim() || !newContactEmail.trim()) return;
-    const contacts = [...(selectedProject.contacts || []), { name: newContactName.trim(), email: newContactEmail.trim().toLowerCase() }];
-    try {
-      await updateProject(selectedProject.id, { contacts });
-      setSelectedProject({ ...selectedProject, contacts });
-      setNewContactName("");
-      setNewContactEmail("");
-      toast.success("Contact added");
-      load();
-    } catch (error: any) {
-      toast.error(error.message || "Failed to add contact");
-    }
-  };
-
-  const removeContact = async (email: string) => {
-    if (!selectedProject) return;
-    const contacts = (selectedProject.contacts || []).filter((c) => c.email !== email);
-    try {
-      await updateProject(selectedProject.id, { contacts });
-      setSelectedProject({ ...selectedProject, contacts });
-      toast.success("Contact removed");
-      load();
-    } catch (error: any) {
-      toast.error(error.message || "Failed to remove contact");
-    }
-  };
-
-  const openListEdit = (p: Project, e: React.MouseEvent) => {
-    e.stopPropagation();
-    setEditingProject(p);
-    setListEditName(p.name);
-    setListEditClient(p.clientName);
-    setListEditClientEmail(p.clientEmail || "");
-    setListEditClientPhone(p.clientPhone || "");
-    setListEditDescription(p.description || "");
-    setShowListEdit(true);
-  };
-
-  const handleListEdit = async () => {
-    if (!editingProject || !listEditName.trim()) return;
-    try {
-      await updateProject(editingProject.id, {
-        name: listEditName.trim(),
-        clientName: listEditClient.trim(),
-        clientEmail: listEditClientEmail.trim(),
-        clientPhone: listEditClientPhone.trim() || "",
-        description: listEditDescription.trim() || "",
-        updatedAt: new Date().toISOString(),
-      });
-      setShowListEdit(false);
-      setEditingProject(null);
-      toast.success("Project updated");
-      load();
-    } catch (error: any) {
-      toast.error(error.message || "Failed to update project");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to update project");
     }
   };
 
   if (loading) return <div className="flex items-center justify-center p-8"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" /></div>;
 
+  // Project detail view
   if (selectedProject) {
-    const progress = selectedProject.nodes.length ? Math.round((selectedProject.nodes.filter((n) => n.status === "completed").length / selectedProject.nodes.length) * 100) : 0;
+    const completedCount = stages.filter((s) => s.status === "completed").length;
+    const progress = stages.length ? Math.round((completedCount / stages.length) * 100) : 0;
+
     return (
       <div className="p-4 max-w-4xl mx-auto w-full">
         <Button variant="ghost" className="mb-4" onClick={() => setSelectedProject(null)}>
@@ -435,84 +265,69 @@ function ProjectsList() {
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
           <div>
             <h1 className="text-2xl font-bold">{selectedProject.name}</h1>
-            <p className="text-muted-foreground flex items-center gap-2">
-              Client: {selectedProject.clientName}
-              {selectedProject.clientEmail ? (
-                <span className="inline-flex items-center gap-1 text-xs text-green-600 dark:text-green-400" title={`Notifications → ${selectedProject.clientEmail}`}>
-                  <Bell className="h-3 w-3" /> Email alerts on
-                </span>
-              ) : (
-                <span className="inline-flex items-center gap-1 text-xs text-muted-foreground" title="Add client email to enable notifications">
-                  <BellOff className="h-3 w-3" /> No email set
-                </span>
-              )}
-              {selectedProject.clientPhone && (
-                <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-                  📞 {selectedProject.clientPhone}
-                </span>
-              )}
-            </p>
-            {selectedProject.description && <p className="text-sm text-muted-foreground mt-1">{selectedProject.description}</p>}
-          </div>
-          <div className="flex items-center gap-2">
-            <Badge variant={selectedProject.status === "completed" ? "default" : "secondary"}>{selectedProject.status}</Badge>
-            <Button variant="outline" size="sm" onClick={openEdit}>
-              <Pencil className="h-4 w-4 mr-1" /> Edit
-            </Button>
-            <Button variant="outline" size="sm" onClick={copyShareLink}>
-              <Link2 className="h-4 w-4 mr-1" /> {copyMsg || "Share Link"}
-            </Button>
-            {selectedProject.status === "archived" ? (
-              <Button variant="outline" size="sm" onClick={() => handleRestore(selectedProject.id)}>
-                <ArchiveRestore className="h-4 w-4 mr-1" /> Restore
-              </Button>
-            ) : (
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
-                  <Button variant="outline" size="sm">
-                    <Archive className="h-4 w-4 mr-1" /> Archive
-                  </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>Archive Project</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      Archive &quot;{selectedProject.name}&quot;? It will be hidden from the default view but can be restored anytime.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                    <AlertDialogAction onClick={() => handleArchive(selectedProject.id)}>
-                      Archive
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
+            {selectedProject.description && (
+              <p className="text-sm text-muted-foreground mt-1">{selectedProject.description}</p>
             )}
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button variant="destructive" size="sm">
-                  <Trash2 className="h-4 w-4" />
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <Badge variant={selectedProject.status === "completed" ? "default" : "secondary"}>
+              {selectedProject.status}
+            </Badge>
+            {isAdmin && (
+              <>
+                <Button variant="outline" size="sm" onClick={openEdit}>
+                  <Pencil className="h-4 w-4 mr-1" /> Edit
                 </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Delete Project</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    Are you sure you want to permanently delete &quot;{selectedProject.name}&quot;? This action cannot be undone. Consider archiving instead.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>Cancel</AlertDialogCancel>
-                  <AlertDialogAction onClick={() => handleDelete(selectedProject.id)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-                    Delete Forever
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
+                {selectedProject.status === "archived" ? (
+                  <Button variant="outline" size="sm" onClick={() => handleRestore(selectedProject.id)}>
+                    <ArchiveRestore className="h-4 w-4 mr-1" /> Restore
+                  </Button>
+                ) : (
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button variant="outline" size="sm">
+                        <Archive className="h-4 w-4 mr-1" /> Archive
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Archive Project</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          Archive &quot;{selectedProject.name}&quot;? It will be hidden from the default view.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction onClick={() => handleArchive(selectedProject.id)}>Archive</AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                )}
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button variant="destructive" size="sm"><Trash2 className="h-4 w-4" /></Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Delete Project</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        Permanently delete &quot;{selectedProject.name}&quot;? This cannot be undone.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction onClick={() => handleDelete(selectedProject.id)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                        Delete
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              </>
+            )}
           </div>
         </div>
 
+        {/* Progress */}
         <div className="mb-6">
           <div className="flex items-center justify-between mb-1">
             <span className="text-sm font-medium">Progress</span>
@@ -523,111 +338,131 @@ function ProjectsList() {
           </div>
         </div>
 
+        {/* Stages */}
         <h2 className="text-lg font-semibold mb-3">Workflow Stages</h2>
-        <div className="mb-6">
-          {selectedProject.nodes.length > 0 ? (
-            <WorkflowCanvas
-              nodes={selectedProject.nodes}
-              edges={selectedProject.edges}
-              workers={workers}
-              onNodesUpdate={async (nodes) => {
-                try {
-                  await updateProject(selectedProject.id, { nodes });
-                  setSelectedProject({ ...selectedProject, nodes });
-                } catch (error: any) {
-                  toast.error(error.message || "Failed to save positions");
-                }
-              }}
-              onEdgesUpdate={async (edges) => {
-                try {
-                  await updateProject(selectedProject.id, { edges });
-                  setSelectedProject({ ...selectedProject, edges });
-                } catch (error: any) {
-                  toast.error(error.message || "Failed to save edges");
-                }
-              }}
-              onStatusChange={updateNodeStatus}
-              onAssignWorker={assignWorker}
-              onRemoveNode={removeNode}
-              onRenameNode={renameNode}
-              onEstimatedCompletionChange={updateEstimatedCompletion}
-              onAddNode={addNodeAtPosition}
-              presetStages={presetStages}
-            />
+        <div className="space-y-3 mb-4">
+          {stages.length === 0 ? (
+            <Card><CardContent className="pt-6 text-center text-muted-foreground">No stages yet. {isAdmin || isWorker ? "Add your first one below!" : ""}</CardContent></Card>
           ) : (
-            <Card><CardContent className="pt-6 text-center text-muted-foreground">No stages yet. Add your first one below!</CardContent></Card>
-          )}
-        </div>
-
-        <div className="flex gap-2">
-          <Input placeholder="New stage name (e.g. Metal Cutting)" value={newNodeLabel} onChange={(e) => setNewNodeLabel(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addNode()} />
-          <Button onClick={addNode}><Plus className="h-4 w-4 mr-1" /> Add</Button>
-        </div>
-
-        <div className="mt-8">
-          <h2 className="text-lg font-semibold mb-3 flex items-center gap-2">
-            <Users className="h-5 w-5" /> Contacts
-          </h2>
-          <p className="text-sm text-muted-foreground mb-4">
-            Only contacts listed here can view this project via the tracking link. They&apos;ll verify their email with a code.
-          </p>
-          {(selectedProject.contacts || []).length > 0 && (
-            <div className="space-y-2 mb-4">
-              {(selectedProject.contacts || []).map((c) => (
-                <div key={c.email} className="flex items-center justify-between bg-secondary/50 rounded-lg px-3 py-2">
-                  <div>
-                    <span className="font-medium text-sm">{c.name}</span>
-                    <span className="text-sm text-muted-foreground ml-2">{c.email}</span>
+            stages.map((stage) => (
+              <Card key={stage.id}>
+                <CardContent className="pt-4 pb-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-2">
+                        {stage.status === "completed" && <CheckCircle2 className="h-5 w-5 text-green-500" />}
+                        {stage.status === "in_progress" && <Loader2 className="h-5 w-5 text-blue-500 animate-spin" />}
+                        {stage.status === "pending" && <Clock className="h-5 w-5 text-muted-foreground" />}
+                      </div>
+                      <div>
+                        <p className="font-medium">{stage.name}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {stage.status === "completed" && stage.completed_at && `Completed ${new Date(stage.completed_at).toLocaleDateString()}`}
+                          {stage.status === "in_progress" && stage.started_at && `Started ${new Date(stage.started_at).toLocaleDateString()}`}
+                          {stage.status === "pending" && "Pending"}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {(isAdmin || isWorker) && stage.status === "pending" && (
+                        <Button size="sm" variant="outline" onClick={() => updateStageStatus(stage.id, "in_progress")}>
+                          <Play className="h-3 w-3 mr-1" /> Start
+                        </Button>
+                      )}
+                      {(isAdmin || isWorker) && stage.status === "in_progress" && (
+                        <Button size="sm" className="bg-green-600 hover:bg-green-700" onClick={() => updateStageStatus(stage.id, "completed")}>
+                          <CheckCircle2 className="h-3 w-3 mr-1" /> Complete
+                        </Button>
+                      )}
+                      {isAdmin && (
+                        <Button size="sm" variant="ghost" className="text-destructive" onClick={() => removeStage(stage.id)}>
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      )}
+                    </div>
                   </div>
-                  <Button variant="ghost" size="sm" onClick={() => removeContact(c.email)}>
-                    <Trash2 className="h-4 w-4 text-destructive" />
-                  </Button>
-                </div>
-              ))}
-            </div>
+                </CardContent>
+              </Card>
+            ))
           )}
-          <div className="flex flex-col sm:flex-row gap-2">
-            <Input placeholder="Name" value={newContactName} onChange={(e) => setNewContactName(e.target.value)} className="sm:w-1/3" />
-            <Input placeholder="Email" type="email" value={newContactEmail} onChange={(e) => setNewContactEmail(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addContact()} className="sm:flex-1" />
-            <Button onClick={addContact} disabled={!newContactName.trim() || !newContactEmail.trim()}>
-              <UserPlus className="h-4 w-4 mr-1" /> Add
+        </div>
+
+        {/* Add stage */}
+        {(isAdmin || isWorker) && (
+          <div className="flex gap-2 mb-8">
+            <Input
+              placeholder="New stage name (e.g. Metal Cutting)"
+              value={newStageName}
+              onChange={(e) => setNewStageName(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && addStage()}
+            />
+            <Button onClick={addStage} disabled={!newStageName.trim()}>
+              <Plus className="h-4 w-4 mr-1" /> Add
             </Button>
           </div>
-        </div>
+        )}
 
+        {/* Preset stages quick-add */}
+        {(isAdmin || isWorker) && presetStages.length > 0 && (
+          <div className="mb-8">
+            <p className="text-sm text-muted-foreground mb-2">Quick add preset stages:</p>
+            <div className="flex flex-wrap gap-2">
+              {presetStages.map((ps) => (
+                <Button
+                  key={ps.id}
+                  variant="secondary"
+                  size="sm"
+                  onClick={async () => {
+                    try {
+                      const stage = await createProjectStage({
+                        project_id: selectedProject.id,
+                        name: ps.name,
+                        status: "pending",
+                        position: stages.length,
+                        started_at: null,
+                        completed_at: null,
+                        started_by: null,
+                      });
+                      setStages([...stages, stage]);
+                    } catch (err: any) {
+                      toast.error(err.message || "Failed to add stage");
+                    }
+                  }}
+                >
+                  <Plus className="h-3 w-3 mr-1" /> {ps.name}
+                </Button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Files */}
         <div className="mt-8">
           <FileUpload
             projectId={selectedProject.id}
-            uploaderEmail={user?.email || "manager"}
-            files={projectFiles}
-            onFilesChange={setProjectFiles}
-            readOnly
-            canDelete
+            files={files}
+            onFilesChange={setFiles}
+            readOnly={isClient}
+            canDelete={isAdmin}
           />
         </div>
 
+        {/* Chat */}
         <div className="mt-8">
-          <ProjectChat
-            projectId={selectedProject.id}
-            senderEmail={user?.email || "manager"}
-            senderName="Project Manager"
-            senderRole="manager"
-          />
+          <ProjectChat projectId={selectedProject.id} />
         </div>
 
+        {/* Edit dialog */}
         <Dialog open={showEdit} onOpenChange={setShowEdit}>
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Edit Project</DialogTitle>
-              <DialogDescription>Update project name and client information</DialogDescription>
+              <DialogDescription>Update project details</DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
               <div><Label>Project Name</Label><Input value={editName} onChange={(e) => setEditName(e.target.value)} /></div>
-              <div><Label>Client Name</Label><Input value={editClient} onChange={(e) => setEditClient(e.target.value)} /></div>
-              <div><Label>Approved Contacts (optional)</Label><Input value={editClientEmail} onChange={(e) => setEditClientEmail(e.target.value)} placeholder="email1@example.com, email2@example.com" /><p className="text-xs text-muted-foreground mt-1">Comma-separated emails</p></div>
-              <div><Label>Client Phone (optional)</Label><Input type="tel" value={editClientPhone} onChange={(e) => setEditClientPhone(e.target.value)} /></div>
-              <div><Label>Description (optional)</Label><Textarea value={editDescription} onChange={(e) => setEditDescription(e.target.value)} placeholder="Brief description of the project scope and goals" rows={3} /></div>
-              <Button onClick={handleEdit} className="w-full" disabled={!editName.trim() || !editClient.trim()}>Save Changes</Button>
+              <div><Label>Description (optional)</Label><Textarea value={editDescription} onChange={(e) => setEditDescription(e.target.value)} rows={3} /></div>
+              <Button onClick={handleEdit} className="w-full" disabled={!editName.trim()}>Save Changes</Button>
             </div>
           </DialogContent>
         </Dialog>
@@ -635,44 +470,38 @@ function ProjectsList() {
     );
   }
 
-  const filteredProjects = projects.filter((p) => {
-    const q = searchQuery.toLowerCase();
-    const matchesSearch = !q || p.name.toLowerCase().includes(q) || p.clientName.toLowerCase().includes(q);
-    const matchesStatus = statusFilter === "all" ? true : statusFilter === "active-completed" ? p.status !== "archived" : p.status === statusFilter;
-    return matchesSearch && matchesStatus;
-  }).sort((a, b) => {
-    switch (sortBy) {
-      case "newest": return (b.createdAt || "").localeCompare(a.createdAt || "");
-      case "oldest": return (a.createdAt || "").localeCompare(b.createdAt || "");
-      case "name-asc": return a.name.localeCompare(b.name);
-      case "name-desc": return b.name.localeCompare(a.name);
-      case "client": return a.clientName.localeCompare(b.clientName);
-      case "progress": {
-        const progA = a.nodes.length ? a.nodes.filter(n => n.status === "completed").length / a.nodes.length : 0;
-        const progB = b.nodes.length ? b.nodes.filter(n => n.status === "completed").length / b.nodes.length : 0;
-        return progB - progA;
+  // Project list view
+  const filteredProjects = projects
+    .filter((p) => {
+      const q = searchQuery.toLowerCase();
+      const matchesSearch = !q || p.name.toLowerCase().includes(q) || p.description?.toLowerCase().includes(q);
+      const matchesStatus = statusFilter === "all" ? true : statusFilter === "active-completed" ? p.status !== "archived" : p.status === statusFilter;
+      return matchesSearch && matchesStatus;
+    })
+    .sort((a, b) => {
+      switch (sortBy) {
+        case "newest": return (b.created_at || "").localeCompare(a.created_at || "");
+        case "oldest": return (a.created_at || "").localeCompare(b.created_at || "");
+        case "name-asc": return a.name.localeCompare(b.name);
+        case "name-desc": return b.name.localeCompare(a.name);
+        default: return 0;
       }
-      default: return 0;
-    }
-  });
+    });
 
   return (
     <div className="p-4 max-w-4xl mx-auto w-full">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold">Projects</h1>
-        <Button onClick={() => setShowNew(true)}><Plus className="h-4 w-4 mr-1" /> New Project</Button>
+        {isAdmin && (
+          <Button onClick={() => setShowNew(true)}><Plus className="h-4 w-4 mr-1" /> New Project</Button>
+        )}
       </div>
 
       {projects.length > 0 && (
         <div className="flex flex-col sm:flex-row gap-3 mb-4">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search projects or clients..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9 pr-8"
-            />
+            <Input placeholder="Search projects..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-9 pr-8" />
             {searchQuery && (
               <button onClick={() => setSearchQuery("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
                 <X className="h-4 w-4" />
@@ -680,12 +509,10 @@ function ProjectsList() {
             )}
           </div>
           <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-full sm:w-[150px]">
-              <SelectValue placeholder="All statuses" />
-            </SelectTrigger>
+            <SelectTrigger className="w-full sm:w-[150px]"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="active-completed">Active & Completed</SelectItem>
-              <SelectItem value="all">All (incl. Archived)</SelectItem>
+              <SelectItem value="all">All</SelectItem>
               <SelectItem value="active">Active</SelectItem>
               <SelectItem value="completed">Completed</SelectItem>
               <SelectItem value="archived">Archived</SelectItem>
@@ -693,110 +520,74 @@ function ProjectsList() {
           </Select>
           <Select value={sortBy} onValueChange={setSortBy}>
             <SelectTrigger className="w-full sm:w-[160px]">
-              <ArrowUpDown className="h-4 w-4 mr-2" />
-              <SelectValue placeholder="Sort by" />
+              <ArrowUpDown className="h-4 w-4 mr-2" /><SelectValue />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="newest">Newest first</SelectItem>
               <SelectItem value="oldest">Oldest first</SelectItem>
               <SelectItem value="name-asc">Name A–Z</SelectItem>
               <SelectItem value="name-desc">Name Z–A</SelectItem>
-              <SelectItem value="client">Client</SelectItem>
-              <SelectItem value="progress">Progress</SelectItem>
             </SelectContent>
           </Select>
         </div>
       )}
 
-      {projects.length === 0 ? (
-        <Card><CardContent className="pt-6 text-center text-muted-foreground">No projects yet. Create your first one!</CardContent></Card>
-      ) : filteredProjects.length === 0 ? (
-        <Card><CardContent className="pt-6 text-center text-muted-foreground">No projects match your search.</CardContent></Card>
+      {filteredProjects.length === 0 ? (
+        <Card><CardContent className="pt-6 text-center text-muted-foreground">
+          {projects.length === 0 ? (isAdmin ? "No projects yet. Create your first one!" : "No projects assigned to you.") : "No projects match your search."}
+        </CardContent></Card>
       ) : (
         <div className="space-y-3">
-          {filteredProjects.map((p) => {
-            const prog = p.nodes.length ? Math.round((p.nodes.filter((n) => n.status === "completed").length / p.nodes.length) * 100) : 0;
-            return (
-              <Card key={p.id} className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => { markSeen(p.id); setSelectedProject(p); }}>
-                <CardContent className="pt-4 pb-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="font-medium">{p.name}</p>
-                      <p className="text-sm text-muted-foreground">Client: {p.clientName} • {p.nodes.length} stages</p>
-                      {p.description && <p className="text-xs text-muted-foreground mt-1 line-clamp-1">{p.description}</p>}
-                      {(hasUnreadMessages(p.id) || hasUnseenFiles(p.id)) && (
-                        <div className="flex items-center gap-2 mt-1">
-                          {hasUnreadMessages(p.id) && (
-                            <span className="inline-flex items-center gap-1 text-xs font-medium text-blue-600 dark:text-blue-400">
-                              <MessageCircle className="h-3 w-3" />New message
-                            </span>
-                          )}
-                          {hasUnseenFiles(p.id) && (
-                            <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-600 dark:text-amber-400">
-                              <FileText className="h-3 w-3" />New file
-                            </span>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={(e) => openListEdit(p, e)} title="Edit project">
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      {p.status === "archived" ? (
-                        <Badge variant="outline"><Archive className="h-3 w-3 mr-1" />Archived</Badge>
-                      ) : (
-                        <Badge variant={p.status === "completed" ? "default" : "secondary"}>{prog}%</Badge>
-                      )}
-                      <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                    </div>
+          {filteredProjects.map((p) => (
+            <Card key={p.id} className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => setSelectedProject(p)}>
+              <CardContent className="pt-4 pb-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="font-medium">{p.name}</p>
+                    {p.description && <p className="text-sm text-muted-foreground line-clamp-1">{p.description}</p>}
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Created {new Date(p.created_at).toLocaleDateString()}
+                    </p>
                   </div>
-                </CardContent>
-              </Card>
-            );
-          })}
+                  <div className="flex items-center gap-2">
+                    {p.status === "archived" ? (
+                      <Badge variant="outline"><Archive className="h-3 w-3 mr-1" />Archived</Badge>
+                    ) : (
+                      <Badge variant={p.status === "completed" ? "default" : "secondary"}>{p.status}</Badge>
+                    )}
+                    <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
         </div>
       )}
 
+      {/* New project dialog */}
       <Dialog open={showNew} onOpenChange={setShowNew}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>New Project</DialogTitle>
-            <DialogDescription>Create a new workflow project for a client</DialogDescription>
+            <DialogDescription>Create a new workflow project</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div><Label>Project Name</Label><Input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="e.g. Custom Gear Assembly" /></div>
-            <div><Label>Client Name (optional)</Label><Input value={newClient} onChange={(e) => setNewClient(e.target.value)} placeholder="e.g. Acme Corp" /></div>
-            <div><Label>Approved Contacts (optional)</Label><Input value={newClientEmail} onChange={(e) => setNewClientEmail(e.target.value)} placeholder="email1@example.com, email2@example.com" /><p className="text-xs text-muted-foreground mt-1">Comma-separated emails — auto-added to approved contacts</p></div>
-            <div><Label>Client Phone (optional)</Label><Input type="tel" value={newClientPhone} onChange={(e) => setNewClientPhone(e.target.value)} placeholder="(555) 123-4567" /></div>
-            <div><Label>Description (optional)</Label><Textarea value={newDescription} onChange={(e) => setNewDescription(e.target.value)} placeholder="Brief description of the project scope and goals" rows={3} /></div>
+            <div><Label>Description (optional)</Label><Textarea value={newDescription} onChange={(e) => setNewDescription(e.target.value)} placeholder="Brief description" rows={3} /></div>
             {templates.length > 0 && (
               <div>
                 <Label>Template (optional)</Label>
                 <Select value={selectedTemplate} onValueChange={setSelectedTemplate}>
                   <SelectTrigger><SelectValue placeholder="Start from scratch" /></SelectTrigger>
-                  <SelectContent>{templates.map((t) => <SelectItem key={t.id} value={t.id}>{t.name} ({t.nodes.length} stages)</SelectItem>)}</SelectContent>
+                  <SelectContent>
+                    {templates.map((t) => (
+                      <SelectItem key={t.id} value={t.id}>{t.name} ({t.stages.length} stages)</SelectItem>
+                    ))}
+                  </SelectContent>
                 </Select>
               </div>
             )}
             <Button onClick={handleCreate} className="w-full" disabled={!newName.trim()}>Create Project</Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={showListEdit} onOpenChange={setShowListEdit}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Edit Project</DialogTitle>
-            <DialogDescription>Update project name and client information</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div><Label>Project Name</Label><Input value={listEditName} onChange={(e) => setListEditName(e.target.value)} /></div>
-            <div><Label>Client Name</Label><Input value={listEditClient} onChange={(e) => setListEditClient(e.target.value)} /></div>
-            <div><Label>Client Email (optional)</Label><Input value={listEditClientEmail} onChange={(e) => setListEditClientEmail(e.target.value)} placeholder="email@example.com" /></div>
-            <div><Label>Client Phone (optional)</Label><Input type="tel" value={listEditClientPhone} onChange={(e) => setListEditClientPhone(e.target.value)} /></div>
-            <div><Label>Description (optional)</Label><Textarea value={listEditDescription} onChange={(e) => setListEditDescription(e.target.value)} placeholder="Brief description of the project scope and goals" rows={3} /></div>
-            <Button onClick={handleListEdit} className="w-full" disabled={!listEditName.trim()}>Save Changes</Button>
           </div>
         </DialogContent>
       </Dialog>

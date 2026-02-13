@@ -1,13 +1,14 @@
 "use client";
 import { useState, useRef, useCallback } from "react";
-import { uploadProjectFile, deleteProjectFile } from "@/lib/firestore";
+import { uploadFile, deleteFileRecord } from "@/lib/data";
+import { useAuth } from "@/lib/auth-context";
 import type { ProjectFile } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Upload, File, Trash2, Download, Loader2, FileText, Image, FileArchive } from "lucide-react";
 import { toast } from "sonner";
 
-const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+const MAX_FILE_SIZE = 10 * 1024 * 1024;
 
 function formatFileSize(bytes: number): string {
   if (bytes < 1024) return bytes + " B";
@@ -24,65 +25,51 @@ function getFileIcon(contentType: string) {
 
 interface FileUploadProps {
   projectId: string;
-  uploaderEmail: string;
   files: ProjectFile[];
   onFilesChange: (files: ProjectFile[]) => void;
   readOnly?: boolean;
   canDelete?: boolean;
 }
 
-export function FileUpload({ projectId, uploaderEmail, files, onFilesChange, readOnly = false, canDelete = false }: FileUploadProps) {
+export function FileUpload({ projectId, files, onFilesChange, readOnly = false, canDelete = false }: FileUploadProps) {
+  const { userId } = useAuth();
   const [uploading, setUploading] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleUpload = useCallback(async (fileList: FileList | null) => {
-    if (!fileList || fileList.length === 0) return;
-
+    if (!fileList || fileList.length === 0 || !userId) return;
     const file = fileList[0];
-    if (file.size > MAX_FILE_SIZE) {
-      toast.error("File too large. Maximum size is 10MB.");
-      return;
-    }
-
+    if (file.size > MAX_FILE_SIZE) { toast.error("File too large. Max 10MB."); return; }
     setUploading(true);
     try {
-      const uploaded = await uploadProjectFile(projectId, file, uploaderEmail);
+      const uploaded = await uploadFile(projectId, file, userId);
       onFilesChange([uploaded, ...files]);
       toast.success(`Uploaded ${file.name}`);
-    } catch (error: unknown) {
-      toast.error(error instanceof Error ? error.message : "Upload failed");
+    } catch (err: any) {
+      toast.error(err.message || "Upload failed");
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
-  }, [projectId, uploaderEmail, files, onFilesChange]);
+  }, [projectId, userId, files, onFilesChange]);
 
   const handleDelete = async (file: ProjectFile) => {
     try {
-      await deleteProjectFile(file.id, projectId, file.fileName);
+      await deleteFileRecord(file.id);
       onFilesChange(files.filter((f) => f.id !== file.id));
-      toast.success(`Deleted ${file.fileName}`);
-    } catch (error: unknown) {
-      toast.error(error instanceof Error ? error.message : "Delete failed");
+      toast.success(`Deleted ${file.file_name}`);
+    } catch (err: any) {
+      toast.error(err.message || "Delete failed");
     }
-  };
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    setDragOver(false);
-    if (!readOnly) handleUpload(e.dataTransfer.files);
   };
 
   return (
     <Card>
       <CardHeader className="pb-3">
         <CardTitle className="text-base flex items-center gap-2">
-          <File className="h-4 w-4" />
-          Files
-          {files.length > 0 && (
-            <span className="text-xs bg-muted px-2 py-0.5 rounded-full">{files.length}</span>
-          )}
+          <File className="h-4 w-4" /> Files
+          {files.length > 0 && <span className="text-xs bg-muted px-2 py-0.5 rounded-full">{files.length}</span>}
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -93,67 +80,37 @@ export function FileUpload({ projectId, uploaderEmail, files, onFilesChange, rea
             }`}
             onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
             onDragLeave={() => setDragOver(false)}
-            onDrop={handleDrop}
+            onDrop={(e) => { e.preventDefault(); setDragOver(false); handleUpload(e.dataTransfer.files); }}
             onClick={() => fileInputRef.current?.click()}
           >
             {uploading ? (
               <div className="flex items-center justify-center gap-2 text-muted-foreground">
-                <Loader2 className="h-5 w-5 animate-spin" />
-                <span className="text-sm">Uploading...</span>
+                <Loader2 className="h-5 w-5 animate-spin" /><span className="text-sm">Uploading...</span>
               </div>
             ) : (
               <div className="flex flex-col items-center gap-1">
                 <Upload className="h-5 w-5 text-muted-foreground" />
-                <span className="text-sm text-muted-foreground">
-                  Drop a file here or <span className="text-primary underline">browse</span>
-                </span>
+                <span className="text-sm text-muted-foreground">Drop a file here or <span className="text-primary underline">browse</span></span>
                 <span className="text-xs text-muted-foreground">Max 10MB</span>
               </div>
             )}
-            <input
-              ref={fileInputRef}
-              type="file"
-              className="hidden"
-              onChange={(e) => handleUpload(e.target.files)}
-              disabled={uploading}
-            />
+            <input ref={fileInputRef} type="file" className="hidden" onChange={(e) => handleUpload(e.target.files)} disabled={uploading} />
           </div>
         )}
-
-        {files.length === 0 && (
-          <p className="text-sm text-muted-foreground text-center py-2">No files uploaded yet.</p>
-        )}
-
+        {files.length === 0 && <p className="text-sm text-muted-foreground text-center py-2">No files uploaded yet.</p>}
         {files.map((file) => (
-          <div
-            key={file.id}
-            className="flex items-center gap-3 p-2 rounded-md border bg-card hover:bg-muted/50 transition-colors"
-          >
-            {getFileIcon(file.contentType)}
+          <div key={file.id} className="flex items-center gap-3 p-2 rounded-md border bg-card hover:bg-muted/50 transition-colors">
+            {getFileIcon(file.content_type)}
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium truncate">{file.fileName}</p>
-              <p className="text-xs text-muted-foreground">
-                {formatFileSize(file.fileSize)} · {file.uploadedBy} · {new Date(file.uploadedAt).toLocaleDateString()}
-              </p>
+              <p className="text-sm font-medium truncate">{file.file_name}</p>
+              <p className="text-xs text-muted-foreground">{formatFileSize(file.file_size)} · {new Date(file.created_at).toLocaleDateString()}</p>
             </div>
             <div className="flex items-center gap-1">
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8"
-                onClick={() => window.open(file.downloadUrl, "_blank")}
-                title="Download"
-              >
+              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => window.open(file.file_url, "_blank")} title="Download">
                 <Download className="h-4 w-4" />
               </Button>
               {canDelete && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 text-destructive hover:text-destructive"
-                  onClick={() => handleDelete(file)}
-                  title="Delete"
-                >
+                <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" onClick={() => handleDelete(file)} title="Delete">
                   <Trash2 className="h-4 w-4" />
                 </Button>
               )}

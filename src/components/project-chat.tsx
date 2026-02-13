@@ -1,65 +1,65 @@
 "use client";
 import { useEffect, useState, useRef } from "react";
-import { onProjectMessages, sendProjectMessage } from "@/lib/firestore";
+import { getProjectMessages, sendProjectMessage } from "@/lib/data";
+import { useAuth } from "@/lib/auth-context";
 import type { ProjectMessage } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { MessageCircle, Send } from "lucide-react";
+import { MessageCircle, Send, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 
 interface ProjectChatProps {
   projectId: string;
-  senderEmail: string;
-  senderName: string;
-  senderRole: "manager" | "client";
 }
 
-export function ProjectChat({ projectId, senderEmail, senderName, senderRole }: ProjectChatProps) {
+export function ProjectChat({ projectId }: ProjectChatProps) {
+  const { userId, member } = useAuth();
   const [messages, setMessages] = useState<ProjectMessage[]>([]);
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const [loading, setLoading] = useState(true);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
-  const initialLoadRef = useRef(true);
+
+  const loadMessages = async () => {
+    try {
+      const msgs = await getProjectMessages(projectId);
+      setMessages(msgs);
+    } catch (err) {
+      console.error("Failed to load messages:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const unsub = onProjectMessages(projectId, (msgs) => {
-      setMessages(msgs);
-      setLoading(false);
-    });
-    return unsub;
+    loadMessages();
+    // Poll for new messages every 10 seconds
+    const interval = setInterval(loadMessages, 10000);
+    return () => clearInterval(interval);
   }, [projectId]);
 
   useEffect(() => {
-    // Skip auto-scroll on initial load to prevent page jumping to bottom
-    if (initialLoadRef.current) {
-      initialLoadRef.current = false;
-      return;
-    }
-    // Only scroll within the chat container, not the whole page
-    if (chatContainerRef.current) {
+    if (chatContainerRef.current && messages.length > 0) {
       chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
     }
   }, [messages.length]);
 
   const handleSend = async () => {
     const trimmed = text.trim();
-    if (!trimmed) return;
+    if (!trimmed || !userId || !member) return;
     setSending(true);
     try {
       await sendProjectMessage({
-        projectId,
-        senderEmail: senderEmail.toLowerCase().trim(),
-        senderName,
-        senderRole,
-        text: trimmed,
-        createdAt: new Date().toISOString(),
+        project_id: projectId,
+        sender_id: userId,
+        sender_name: member.name,
+        content: trimmed,
       });
       setText("");
-    } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : "Failed to send message");
+      await loadMessages();
+    } catch (err: any) {
+      toast.error(err.message || "Failed to send message");
     } finally {
       setSending(false);
     }
@@ -69,53 +69,43 @@ export function ProjectChat({ projectId, senderEmail, senderName, senderRole }: 
     const d = new Date(iso);
     const now = new Date();
     const isToday = d.toDateString() === now.toDateString();
-    if (isToday) {
-      return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-    }
+    if (isToday) return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
     return d.toLocaleDateString([], { month: "short", day: "numeric" }) + " " + d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
   };
-
-  const isOwnMessage = (msg: ProjectMessage) =>
-    msg.senderEmail.toLowerCase() === senderEmail.toLowerCase();
 
   return (
     <Card>
       <CardHeader className="pb-3">
-        <CardTitle className="text-base flex items-center gap-2">
-          <MessageCircle className="h-5 w-5" />
-          Messages
-        </CardTitle>
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-base flex items-center gap-2">
+            <MessageCircle className="h-5 w-5" />
+            Messages
+          </CardTitle>
+          <Button variant="ghost" size="sm" onClick={loadMessages}>
+            <RefreshCw className="h-3 w-3" />
+          </Button>
+        </div>
       </CardHeader>
       <CardContent>
         <div ref={chatContainerRef} className="h-64 overflow-y-auto border rounded-lg p-3 mb-3 space-y-3 bg-muted/30">
           {loading ? (
-            <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
-              Loading messages...
-            </div>
+            <div className="flex items-center justify-center h-full text-sm text-muted-foreground">Loading messages...</div>
           ) : messages.length === 0 ? (
-            <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
-              No messages yet. Start the conversation!
-            </div>
+            <div className="flex items-center justify-center h-full text-sm text-muted-foreground">No messages yet. Start the conversation!</div>
           ) : (
             messages.map((msg) => {
-              const own = isOwnMessage(msg);
+              const own = msg.sender_id === userId;
               return (
                 <div key={msg.id} className={`flex flex-col ${own ? "items-end" : "items-start"}`}>
                   <div className={`max-w-[80%] rounded-lg px-3 py-2 ${own ? "bg-primary text-primary-foreground" : "bg-background border"}`}>
-                    {!own && (
-                      <p className="text-xs font-medium mb-0.5 opacity-70">
-                        {msg.senderName}
-                        {msg.senderRole === "manager" && " (PM)"}
-                      </p>
-                    )}
-                    <p className="text-sm whitespace-pre-wrap break-words">{msg.text}</p>
+                    {!own && <p className="text-xs font-medium mb-0.5 opacity-70">{msg.sender_name}</p>}
+                    <p className="text-sm whitespace-pre-wrap break-words">{msg.content}</p>
                   </div>
-                  <span className="text-[10px] text-muted-foreground mt-0.5 px-1">{formatTime(msg.createdAt)}</span>
+                  <span className="text-[10px] text-muted-foreground mt-0.5 px-1">{formatTime(msg.created_at)}</span>
                 </div>
               );
             })
           )}
-          <div ref={messagesEndRef} />
         </div>
         <div className="flex gap-2">
           <Input

@@ -1,84 +1,83 @@
-export interface WorkflowNode {
+export interface Organization {
   id: string;
-  label: string;
-  assignedTo?: string;
-  status: "pending" | "in-progress" | "completed";
-  startedAt?: string;
-  completedAt?: string;
-  estimatedCompletion?: string;
-  position?: { x: number; y: number };
+  name: string;
+  created_at: string;
 }
 
-export interface WorkflowEdge {
+export interface Member {
   id: string;
-  source: string;
-  target: string;
-}
-
-export interface ProjectContact {
+  clerk_user_id: string;
+  org_id: string;
+  role: "admin" | "worker" | "client";
   email: string;
   name: string;
+  created_at: string;
 }
 
 export interface Project {
   id: string;
+  org_id: string;
   name: string;
-  clientName: string;
-  clientEmail?: string;
-  clientPhone?: string;
-  description?: string;
-  nodes: WorkflowNode[];
-  edges: WorkflowEdge[];
-  contacts: ProjectContact[];
-  shareToken: string;
+  description: string;
   status: "active" | "completed" | "archived";
-  templateId?: string;
-  createdAt: string;
-  updatedAt: string;
-  userId: string;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
 }
 
-export interface WorkflowTemplate {
+export interface ProjectStage {
   id: string;
+  project_id: string;
   name: string;
-  description?: string;
-  nodes: Omit<WorkflowNode, "status" | "startedAt" | "completedAt">[];
-  edges: WorkflowEdge[];
-  userId: string;
-  createdAt: string;
+  status: "pending" | "in_progress" | "completed";
+  position: number;
+  started_at: string | null;
+  completed_at: string | null;
+  started_by: string | null;
 }
 
-export interface Worker {
+export interface ProjectAssignment {
   id: string;
-  name: string;
-  role?: string;
-  userId: string;
-}
-
-export interface PresetStage {
-  id: string;
-  name: string;
-  userId: string;
-  createdAt: string;
+  project_id: string;
+  member_id: string;
 }
 
 export interface ProjectMessage {
   id: string;
-  projectId: string;
-  senderEmail: string;
-  senderName: string;
-  senderRole: "manager" | "client";
-  text: string;
-  createdAt: string;
+  project_id: string;
+  sender_id: string;
+  sender_name: string;
+  content: string;
+  created_at: string;
 }
 
 export interface ProjectFile {
   id: string;
-  projectId: string;
-  fileName: string;
-  fileSize: number;
-  contentType: string;
-  downloadUrl: string;
-  uploadedBy: string;
-  uploadedAt: string;
+  project_id: string;
+  uploaded_by: string;
+  file_name: string;
+  file_url: string;
+  file_size: number;
+  content_type: string;
+  created_at: string;
 }
+
+export interface Template {
+  id: string;
+  org_id: string;
+  name: string;
+  description: string;
+  stages: { name: string; position: number }[];
+  created_by: string;
+  created_at: string;
+}
+
+export interface PresetStage {
+  id: string;
+  org_id: string;
+  name: string;
+  created_by: string;
+  created_at: string;
+}
+
+export type UserRole = "admin" | "worker" | "client" | "platform_admin";

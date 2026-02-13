@@ -27,19 +27,19 @@ const sections = [
     icon: Server,
     title: "Encryption at Rest",
     description:
-      "Your data is encrypted at rest using AES-256 encryption via Google Cloud and Firebase infrastructure. This ensures your project data remains protected even at the storage level.",
+      "Your data is encrypted at rest using AES-256 encryption via Supabase (PostgreSQL on AWS). This ensures your project data remains protected even at the storage level.",
   },
   {
     icon: UserCheck,
     title: "Access Controls",
     description:
-      "Only approved contacts can view your projects. Access is controlled through email verification, ensuring that only the people you explicitly invite can see your project details.",
+      "Role-based access control with four tiers: Platform admins, Org admins, Workers, and Clients. Each role sees only what they need, enforced at the database level.",
   },
   {
     icon: FileKey,
     title: "File Storage Security",
     description:
-      "All files uploaded to ProjectStatus are stored in Firebase Storage with built-in encryption. Access is governed by security rules that enforce per-user data isolation.",
+      "All files uploaded to ProjectStatus are stored in Supabase Storage with built-in encryption. Access is governed by row-level security policies that enforce per-organization data isolation.",
   },
   {
     icon: MessageSquareLock,
@@ -61,9 +61,9 @@ const sections = [
   },
   {
     icon: Shield,
-    title: "Google Cloud Infrastructure",
+    title: "Enterprise Infrastructure",
     description:
-      "ProjectStatus is hosted entirely on Google Cloud infrastructure, benefiting from Google's world-class security practices, certifications (SOC 1/2/3, ISO 27001), and global reliability.",
+      "ProjectStatus uses Supabase (AWS infrastructure) and Clerk for authentication, benefiting from enterprise-grade security practices, certifications, and global reliability.",
   },
 ];
 
