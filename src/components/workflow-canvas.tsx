@@ -67,8 +67,6 @@ function StatusIcon({ status }: { status: WorkflowNode["status"] }) {
 }
 
 function StageNode({ id, data }: NodeProps<Node<StageNodeData>>) {
-  const [editing, setEditing] = useState(false);
-  const [editLabel, setEditLabel] = useState(data.label);
   const assignedWorker = data.workers.find((w) => w.id === data.assignedTo);
 
   const borderColor =
@@ -99,37 +97,15 @@ function StageNode({ id, data }: NodeProps<Node<StageNodeData>>) {
       <div className={`${headerBg} px-3 py-2 flex items-center justify-between gap-2`}>
         <div className="flex items-center gap-1.5 min-w-0">
           <StatusIcon status={data.status} />
-          {editing && !data.readOnly ? (
-            <input
-              className="font-semibold text-sm bg-transparent border-b border-primary outline-none min-w-0 w-full"
-              value={editLabel}
-              autoFocus
-              onChange={(e) => setEditLabel(e.target.value)}
-              onBlur={() => {
-                setEditing(false);
-                const trimmed = editLabel.trim();
-                if (trimmed && trimmed !== data.label) data.onRenameNode(id, trimmed);
-                else setEditLabel(data.label);
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-                if (e.key === "Escape") { setEditLabel(data.label); setEditing(false); }
-              }}
-            />
-          ) : (
-            <span
-              className={`font-semibold text-sm truncate ${!data.readOnly ? "cursor-pointer hover:underline" : ""}`}
-              onDoubleClick={() => { if (!data.readOnly) { setEditLabel(data.label); setEditing(true); } }}
-            >
-              {data.label}
-            </span>
-          )}
+          <span className="font-semibold text-sm truncate">
+            {data.label}
+          </span>
         </div>
         <div className="flex items-center gap-1 shrink-0">
           {!data.readOnly && (
             <button
-              className="p-0.5 rounded hover:bg-black/10 dark:hover:bg-white/10 text-muted-foreground hover:text-foreground transition-colors"
-              onClick={() => data.onEditNode(id)}
+              className="nodrag nopan p-0.5 rounded hover:bg-black/10 dark:hover:bg-white/10 text-muted-foreground hover:text-foreground transition-colors"
+              onClick={(e) => { e.stopPropagation(); if (typeof data.onEditNode === "function") data.onEditNode(id); }}
               title="Edit stage"
             >
               <Pencil className="h-3 w-3" />
@@ -619,7 +595,7 @@ export function WorkflowCanvas({
         onEdgesChange={readOnly ? undefined : onEdgesChange}
         onConnect={readOnly ? undefined : onConnect}
         onPaneClick={undefined}
-        onDoubleClick={!readOnly ? handleDoubleClick : undefined}
+        onDoubleClick={undefined}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         nodesDraggable={!readOnly}
@@ -747,12 +723,12 @@ export function WorkflowCanvas({
             </div>
             <div className="space-y-1.5">
               <label className="text-sm font-medium">Assigned To</label>
-              <Select value={editForm.assignedTo} onValueChange={(v) => setEditForm((f) => ({ ...f, assignedTo: v }))}>
+              <Select value={editForm.assignedTo || "none"} onValueChange={(v) => setEditForm((f) => ({ ...f, assignedTo: v === "none" ? "" : v }))}>
                 <SelectTrigger>
                   <SelectValue placeholder="Unassigned" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Unassigned</SelectItem>
+                  <SelectItem value="none">Unassigned</SelectItem>
                   {workers.map((w) => (
                     <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>
                   ))}
