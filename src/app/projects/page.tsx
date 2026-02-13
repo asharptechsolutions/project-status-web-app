@@ -114,6 +114,11 @@ function ProjectsList() {
     return () => { unsub1(); unsub2(); };
   }, [projects]);
 
+  // Scroll to top when project detail opens
+  useEffect(() => {
+    if (selectedProject) window.scrollTo(0, 0);
+  }, [selectedProject?.id]);
+
   useEffect(() => {
     if (selectedProject) {
       const unsub = onProjectFiles(selectedProject.id, setProjectFiles);
@@ -416,11 +421,6 @@ function ProjectsList() {
   };
 
   if (loading) return <div className="flex items-center justify-center p-8"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" /></div>;
-
-  // Scroll to top when project detail opens
-  useEffect(() => {
-    if (selectedProject) window.scrollTo(0, 0);
-  }, [selectedProject?.id]);
 
   if (selectedProject) {
     const progress = selectedProject.nodes.length ? Math.round((selectedProject.nodes.filter((n) => n.status === "completed").length / selectedProject.nodes.length) * 100) : 0;
