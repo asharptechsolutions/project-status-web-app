@@ -1,6 +1,6 @@
 "use client";
 import { useState, useRef, useCallback } from "react";
-import { uploadProjectFile, getProjectFiles, deleteProjectFile } from "@/lib/firestore";
+import { uploadProjectFile, deleteProjectFile } from "@/lib/firestore";
 import type { ProjectFile } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";

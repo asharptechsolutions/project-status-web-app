@@ -12,7 +12,7 @@ import { Workflow, ArrowLeft, Mail, ShieldCheck, LogOut, Link2 } from "lucide-re
 import { WorkflowCanvas } from "@/components/workflow-canvas";
 import { FileUpload } from "@/components/file-upload";
 import { ProjectChat } from "@/components/project-chat";
-import { getProjectFiles } from "@/lib/firestore";
+import { onProjectFiles } from "@/lib/firestore";
 import type { ProjectFile } from "@/lib/types";
 
 const SESSION_KEY = "wfz_contact_session";
@@ -137,7 +137,8 @@ function TrackInner() {
   // Load files when viewing a project
   useEffect(() => {
     if (step === "detail" && selectedProject) {
-      getProjectFiles(selectedProject.id).then(setFiles).catch(() => setFiles([]));
+      const unsub = onProjectFiles(selectedProject.id, setFiles);
+      return unsub;
     }
   }, [step, selectedProject]);
 

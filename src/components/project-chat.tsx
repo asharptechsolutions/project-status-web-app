@@ -1,11 +1,11 @@
 "use client";
-import { useEffect, useState, useRef, useCallback } from "react";
-import { getProjectMessages, sendProjectMessage } from "@/lib/firestore";
+import { useEffect, useState, useRef } from "react";
+import { onProjectMessages, sendProjectMessage } from "@/lib/firestore";
 import type { ProjectMessage } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { MessageCircle, Send, RefreshCw } from "lucide-react";
+import { MessageCircle, Send } from "lucide-react";
 import { toast } from "sonner";
 
 interface ProjectChatProps {
@@ -21,27 +21,14 @@ export function ProjectChat({ projectId, senderEmail, senderName, senderRole }: 
   const [sending, setSending] = useState(false);
   const [loading, setLoading] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  const loadMessages = useCallback(async () => {
-    try {
-      const msgs = await getProjectMessages(projectId);
-      setMessages(msgs);
-    } catch {
-      // silent fail on poll
-    } finally {
-      setLoading(false);
-    }
-  }, [projectId]);
 
   useEffect(() => {
-    loadMessages();
-    // Poll every 10 seconds for new messages
-    pollRef.current = setInterval(loadMessages, 10000);
-    return () => {
-      if (pollRef.current) clearInterval(pollRef.current);
-    };
-  }, [loadMessages]);
+    const unsub = onProjectMessages(projectId, (msgs) => {
+      setMessages(msgs);
+      setLoading(false);
+    });
+    return unsub;
+  }, [projectId]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -61,7 +48,6 @@ export function ProjectChat({ projectId, senderEmail, senderName, senderRole }: 
         createdAt: new Date().toISOString(),
       });
       setText("");
-      await loadMessages();
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Failed to send message");
     } finally {
@@ -88,9 +74,6 @@ export function ProjectChat({ projectId, senderEmail, senderName, senderRole }: 
         <CardTitle className="text-base flex items-center gap-2">
           <MessageCircle className="h-5 w-5" />
           Messages
-          <Button variant="ghost" size="sm" className="ml-auto h-7 w-7 p-0" onClick={loadMessages} title="Refresh">
-            <RefreshCw className="h-3.5 w-3.5" />
-          </Button>
         </CardTitle>
       </CardHeader>
       <CardContent>

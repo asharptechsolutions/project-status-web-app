@@ -4,7 +4,7 @@ import { useSearchParams } from "next/navigation";
 import { Navbar } from "@/components/navbar";
 import { AuthGate } from "@/components/auth-gate";
 import { useAuth } from "@/lib/auth-context";
-import { getProjects, createProject, updateProject, deleteProject, getTemplates, getWorkers, getProjectFiles, getPresetStages } from "@/lib/firestore";
+import { getProjects, createProject, updateProject, deleteProject, getTemplates, getWorkers, onProjectFiles, getPresetStages } from "@/lib/firestore";
 import type { Project, ProjectContact, WorkflowNode, WorkflowEdge, WorkflowTemplate, Worker, ProjectFile, PresetStage } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -74,7 +74,10 @@ function ProjectsList() {
 
   useEffect(() => {
     if (selectedProject) {
-      getProjectFiles(selectedProject.id).then(setProjectFiles).catch(() => setProjectFiles([]));
+      const unsub = onProjectFiles(selectedProject.id, setProjectFiles);
+      return unsub;
+    } else {
+      setProjectFiles([]);
     }
   }, [selectedProject?.id]);
 

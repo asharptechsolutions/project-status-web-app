@@ -1,7 +1,7 @@
 import { db } from "./firebase";
 import {
   collection, doc, addDoc, updateDoc, deleteDoc, getDocs, getDoc,
-  query, where, Timestamp, setDoc, orderBy, limit,
+  query, where, Timestamp, setDoc, orderBy, limit, onSnapshot,
 } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
 import { storage } from "./firebase";
@@ -324,6 +324,35 @@ export async function sendProjectMessage(
   } catch (error) {
     handleFirestoreError("sending message", error);
   }
+}
+
+// Real-time listeners
+export function onProjectMessages(
+  projectId: string,
+  callback: (messages: ProjectMessage[]) => void
+): () => void {
+  const q = query(
+    collection(db, PREFIX + "messages"),
+    where("projectId", "==", projectId),
+    orderBy("createdAt", "asc")
+  );
+  return onSnapshot(q, (snap) => {
+    callback(snap.docs.map((d) => ({ id: d.id, ...d.data() } as ProjectMessage)));
+  });
+}
+
+export function onProjectFiles(
+  projectId: string,
+  callback: (files: ProjectFile[]) => void
+): () => void {
+  const q = query(
+    collection(db, PREFIX + "files"),
+    where("projectId", "==", projectId),
+    orderBy("uploadedAt", "desc")
+  );
+  return onSnapshot(q, (snap) => {
+    callback(snap.docs.map((d) => ({ id: d.id, ...d.data() } as ProjectFile)));
+  });
 }
 
 // Preset Stages
