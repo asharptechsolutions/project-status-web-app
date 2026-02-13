@@ -124,7 +124,7 @@ function ProjectsList() {
   }, [searchParams, projects]);
 
   const handleCreate = async () => {
-    if (!user || !newName.trim() || !newClient.trim()) return;
+    if (!user || !newName.trim()) return;
     let nodes: WorkflowNode[] = [];
     let edges: WorkflowEdge[] = [];
     if (selectedTemplate) {
@@ -696,7 +696,7 @@ function ProjectsList() {
           </DialogHeader>
           <div className="space-y-4">
             <div><Label>Project Name</Label><Input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="e.g. Custom Gear Assembly" /></div>
-            <div><Label>Client Name</Label><Input value={newClient} onChange={(e) => setNewClient(e.target.value)} placeholder="e.g. Acme Corp" /></div>
+            <div><Label>Client Name (optional)</Label><Input value={newClient} onChange={(e) => setNewClient(e.target.value)} placeholder="e.g. Acme Corp" /></div>
             <div><Label>Approved Contacts (optional)</Label><Input value={newClientEmail} onChange={(e) => setNewClientEmail(e.target.value)} placeholder="email1@example.com, email2@example.com" /><p className="text-xs text-muted-foreground mt-1">Comma-separated emails — auto-added to approved contacts</p></div>
             <div><Label>Client Phone (optional)</Label><Input type="tel" value={newClientPhone} onChange={(e) => setNewClientPhone(e.target.value)} placeholder="(555) 123-4567" /></div>
             <div><Label>Description (optional)</Label><Textarea value={newDescription} onChange={(e) => setNewDescription(e.target.value)} placeholder="Brief description of the project scope and goals" rows={3} /></div>
@@ -709,7 +709,7 @@ function ProjectsList() {
                 </Select>
               </div>
             )}
-            <Button onClick={handleCreate} className="w-full" disabled={!newName.trim() || !newClient.trim()}>Create Project</Button>
+            <Button onClick={handleCreate} className="w-full" disabled={!newName.trim()}>Create Project</Button>
           </div>
         </DialogContent>
       </Dialog>
