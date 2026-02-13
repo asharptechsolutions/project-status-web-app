@@ -21,6 +21,8 @@ export function ProjectChat({ projectId, senderEmail, senderName, senderRole }: 
   const [sending, setSending] = useState(false);
   const [loading, setLoading] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const chatContainerRef = useRef<HTMLDivElement>(null);
+  const initialLoadRef = useRef(true);
 
   useEffect(() => {
     const unsub = onProjectMessages(projectId, (msgs) => {
@@ -31,7 +33,15 @@ export function ProjectChat({ projectId, senderEmail, senderName, senderRole }: 
   }, [projectId]);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    // Skip auto-scroll on initial load to prevent page jumping to bottom
+    if (initialLoadRef.current) {
+      initialLoadRef.current = false;
+      return;
+    }
+    // Only scroll within the chat container, not the whole page
+    if (chatContainerRef.current) {
+      chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+    }
   }, [messages.length]);
 
   const handleSend = async () => {
@@ -77,7 +87,7 @@ export function ProjectChat({ projectId, senderEmail, senderName, senderRole }: 
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="h-64 overflow-y-auto border rounded-lg p-3 mb-3 space-y-3 bg-muted/30">
+        <div ref={chatContainerRef} className="h-64 overflow-y-auto border rounded-lg p-3 mb-3 space-y-3 bg-muted/30">
           {loading ? (
             <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
               Loading messages...
