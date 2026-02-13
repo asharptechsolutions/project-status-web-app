@@ -198,7 +198,7 @@ function StageNode({ id, data }: NodeProps<Node<StageNodeData>>) {
               className="h-7 text-xs flex-1 bg-green-600 hover:bg-green-700"
               onClick={() => data.onStatusChange(id, "completed")}
             >
-              <CheckCircle2 className="h-3 w-3 mr-1" /> Complete
+              <CheckCircle2 className="h-3 w-3 mr-1" /> Mark Complete
             </Button>
           )}
           {data.status === "completed" && (
