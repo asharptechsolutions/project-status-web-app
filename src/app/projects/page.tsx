@@ -56,6 +56,13 @@ function ProjectsList() {
   const [newContactName, setNewContactName] = useState("");
   const [newContactEmail, setNewContactEmail] = useState("");
   const [projectFiles, setProjectFiles] = useState<ProjectFile[]>([]);
+  const [editingProject, setEditingProject] = useState<Project | null>(null);
+  const [showListEdit, setShowListEdit] = useState(false);
+  const [listEditName, setListEditName] = useState("");
+  const [listEditClient, setListEditClient] = useState("");
+  const [listEditClientEmail, setListEditClientEmail] = useState("");
+  const [listEditClientPhone, setListEditClientPhone] = useState("");
+  const [listEditDescription, setListEditDescription] = useState("");
   const [latestMessages, setLatestMessages] = useState<Record<string, { count: number; latestAt: string; fromClient: boolean }>>({});
   const [latestFiles, setLatestFiles] = useState<Record<string, { latestAt: string }>>({});
 
@@ -374,6 +381,37 @@ function ProjectsList() {
       load();
     } catch (error: any) {
       toast.error(error.message || "Failed to remove contact");
+    }
+  };
+
+  const openListEdit = (p: Project, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setEditingProject(p);
+    setListEditName(p.name);
+    setListEditClient(p.clientName);
+    setListEditClientEmail(p.clientEmail || "");
+    setListEditClientPhone(p.clientPhone || "");
+    setListEditDescription(p.description || "");
+    setShowListEdit(true);
+  };
+
+  const handleListEdit = async () => {
+    if (!editingProject || !listEditName.trim()) return;
+    try {
+      await updateProject(editingProject.id, {
+        name: listEditName.trim(),
+        clientName: listEditClient.trim(),
+        clientEmail: listEditClientEmail.trim(),
+        clientPhone: listEditClientPhone.trim() || undefined,
+        description: listEditDescription.trim() || undefined,
+        updatedAt: new Date().toISOString(),
+      });
+      setShowListEdit(false);
+      setEditingProject(null);
+      toast.success("Project updated");
+      load();
+    } catch (error: any) {
+      toast.error(error.message || "Failed to update project");
     }
   };
 
@@ -700,6 +738,9 @@ function ProjectsList() {
                       )}
                     </div>
                     <div className="flex items-center gap-2">
+                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={(e) => openListEdit(p, e)} title="Edit project">
+                        <Pencil className="h-4 w-4" />
+                      </Button>
                       {p.status === "archived" ? (
                         <Badge variant="outline"><Archive className="h-3 w-3 mr-1" />Archived</Badge>
                       ) : (
@@ -737,6 +778,23 @@ function ProjectsList() {
               </div>
             )}
             <Button onClick={handleCreate} className="w-full" disabled={!newName.trim()}>Create Project</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showListEdit} onOpenChange={setShowListEdit}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Project</DialogTitle>
+            <DialogDescription>Update project name and client information</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div><Label>Project Name</Label><Input value={listEditName} onChange={(e) => setListEditName(e.target.value)} /></div>
+            <div><Label>Client Name</Label><Input value={listEditClient} onChange={(e) => setListEditClient(e.target.value)} /></div>
+            <div><Label>Client Email (optional)</Label><Input value={listEditClientEmail} onChange={(e) => setListEditClientEmail(e.target.value)} placeholder="email@example.com" /></div>
+            <div><Label>Client Phone (optional)</Label><Input type="tel" value={listEditClientPhone} onChange={(e) => setListEditClientPhone(e.target.value)} /></div>
+            <div><Label>Description (optional)</Label><Textarea value={listEditDescription} onChange={(e) => setListEditDescription(e.target.value)} placeholder="Brief description of the project scope and goals" rows={3} /></div>
+            <Button onClick={handleListEdit} className="w-full" disabled={!listEditName.trim()}>Save Changes</Button>
           </div>
         </DialogContent>
       </Dialog>
