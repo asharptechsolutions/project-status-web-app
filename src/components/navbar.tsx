@@ -16,7 +16,6 @@ const links = [
   { href: "/projects/", label: "Projects" },
   { href: "/templates/", label: "Templates" },
   { href: "/workers/", label: "Workers" },
-  { href: "/websites/", label: "Websites" },
   { href: "/security/", label: "Security" },
 ];
 
