@@ -43,6 +43,9 @@ function ProjectsList() {
   const [showNew, setShowNew] = useState(false);
   const [newName, setNewName] = useState("");
   const [newDescription, setNewDescription] = useState("");
+  const [newClientName, setNewClientName] = useState("");
+  const [newClientEmail, setNewClientEmail] = useState("");
+  const [newClientPhone, setNewClientPhone] = useState("");
   const [selectedTemplate, setSelectedTemplate] = useState("");
   const [newStageName, setNewStageName] = useState("");
   const [loading, setLoading] = useState(true);
@@ -108,6 +111,9 @@ function ProjectsList() {
         org_id: orgId,
         name: newName.trim(),
         description: newDescription.trim(),
+        client_name: newClientName.trim(),
+        client_email: newClientEmail.trim(),
+        client_phone: newClientPhone.trim(),
         status: "active",
         created_by: userId,
       });
@@ -128,7 +134,7 @@ function ProjectsList() {
           }
         }
       }
-      setNewName(""); setNewDescription(""); setSelectedTemplate(""); setShowNew(false);
+      setNewName(""); setNewDescription(""); setNewClientName(""); setNewClientEmail(""); setNewClientPhone(""); setSelectedTemplate(""); setShowNew(false);
       toast.success("Project created");
       await load();
     } catch (err: any) {
@@ -573,7 +579,15 @@ function ProjectsList() {
           </DialogHeader>
           <div className="space-y-4">
             <div><Label>Project Name</Label><Input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="e.g. Custom Gear Assembly" /></div>
-            <div><Label>Description (optional)</Label><Textarea value={newDescription} onChange={(e) => setNewDescription(e.target.value)} placeholder="Brief description" rows={3} /></div>
+            <div><Label>Description (optional)</Label><Textarea value={newDescription} onChange={(e) => setNewDescription(e.target.value)} placeholder="Brief description" rows={2} /></div>
+            <div className="border-t pt-3 mt-1">
+              <p className="text-sm font-medium mb-2">Client Info (optional)</p>
+              <div className="space-y-3">
+                <div><Label>Client Name</Label><Input value={newClientName} onChange={(e) => setNewClientName(e.target.value)} placeholder="e.g. John Smith" /></div>
+                <div><Label>Client Email</Label><Input type="email" value={newClientEmail} onChange={(e) => setNewClientEmail(e.target.value)} placeholder="e.g. john@example.com" /></div>
+                <div><Label>Client Phone</Label><Input type="tel" value={newClientPhone} onChange={(e) => setNewClientPhone(e.target.value)} placeholder="e.g. (555) 123-4567" /></div>
+              </div>
+            </div>
             {templates.length > 0 && (
               <div>
                 <Label>Template (optional)</Label>

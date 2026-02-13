@@ -20,6 +20,9 @@ export interface Project {
   name: string;
   description: string;
   status: "active" | "completed" | "archived";
+  client_name: string;
+  client_email: string;
+  client_phone: string;
   created_by: string;
   created_at: string;
   updated_at: string;
