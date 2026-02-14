@@ -11,7 +11,9 @@ export interface Member {
   role: "admin" | "worker" | "client";
   email: string;
   name: string;
+  phone: string | null;
   created_at: string;
+  updated_at: string;
 }
 
 export interface Project {
@@ -91,18 +93,6 @@ export interface Client {
   name: string;
   email: string;
   phone: string | null;
-  created_by: string;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface Worker {
-  id: string;
-  org_id: string;
-  name: string;
-  email: string;
-  phone: string | null;
-  role: string | null;
   created_by: string;
   created_at: string;
   updated_at: string;

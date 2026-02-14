@@ -9,7 +9,6 @@ import type {
   PresetStage,
   Member,
   Client,
-  Worker,
 } from "./types";
 
 // ============ PROJECTS ============
@@ -351,7 +350,7 @@ export async function getMember(
 }
 
 export async function createMember(
-  member: Omit<Member, "id" | "created_at">
+  member: Omit<Member, "id" | "created_at" | "updated_at">
 ): Promise<Member> {
   const { data, error } = await supabaseAdmin
     .from("members")
@@ -368,9 +367,25 @@ export async function updateMember(
 ): Promise<void> {
   const { error } = await supabaseAdmin
     .from("members")
-    .update(updates)
+    .update({ ...updates, updated_at: new Date().toISOString() })
     .eq("id", id);
   if (error) throw new Error(error.message);
+}
+
+export async function getMemberProjects(memberId: string): Promise<Project[]> {
+  const { data: assignments } = await supabaseAdmin
+    .from("project_assignments")
+    .select("project_id")
+    .eq("member_id", memberId);
+  if (!assignments || assignments.length === 0) return [];
+  const projectIds = assignments.map((a: any) => a.project_id);
+  const { data, error } = await supabaseAdmin
+    .from("projects")
+    .select("*")
+    .in("id", projectIds)
+    .order("created_at", { ascending: false });
+  if (error) throw new Error(error.message);
+  return (data || []) as Project[];
 }
 
 export async function deleteMember(id: string): Promise<void> {
@@ -466,72 +481,3 @@ export async function getClientProjects(clientId: string): Promise<Project[]> {
   return (data || []) as Project[];
 }
 
-// ============ WORKERS ============
-
-export async function getWorkers(orgId: string): Promise<Worker[]> {
-  const { data, error } = await supabaseAdmin
-    .from("workers")
-    .select("*")
-    .eq("org_id", orgId)
-    .order("name", { ascending: true });
-  if (error) throw new Error(error.message);
-  return (data || []) as Worker[];
-}
-
-export async function getWorker(id: string): Promise<Worker | null> {
-  const { data, error } = await supabaseAdmin
-    .from("workers")
-    .select("*")
-    .eq("id", id)
-    .single();
-  if (error) return null;
-  return data as Worker;
-}
-
-export async function createWorker(
-  worker: Omit<Worker, "id" | "created_at" | "updated_at">
-): Promise<Worker> {
-  const { data, error } = await supabaseAdmin
-    .from("workers")
-    .insert(worker)
-    .select("*")
-    .single();
-  if (error) throw new Error(error.message);
-  return data as Worker;
-}
-
-export async function updateWorker(
-  id: string,
-  updates: Partial<Worker>
-): Promise<void> {
-  const { error } = await supabaseAdmin
-    .from("workers")
-    .update({ ...updates, updated_at: new Date().toISOString() })
-    .eq("id", id);
-  if (error) throw new Error(error.message);
-}
-
-export async function deleteWorker(id: string): Promise<void> {
-  const { error } = await supabaseAdmin
-    .from("workers")
-    .delete()
-    .eq("id", id);
-  if (error) throw new Error(error.message);
-}
-
-export async function getWorkerProjects(workerId: string): Promise<Project[]> {
-  // Get projects where this worker is assigned via project_assignments
-  const { data: assignments } = await supabaseAdmin
-    .from("project_assignments")
-    .select("project_id")
-    .eq("member_id", workerId);
-  if (!assignments || assignments.length === 0) return [];
-  const projectIds = assignments.map((a: any) => a.project_id);
-  const { data, error } = await supabaseAdmin
-    .from("projects")
-    .select("*")
-    .in("id", projectIds)
-    .order("created_at", { ascending: false });
-  if (error) throw new Error(error.message);
-  return (data || []) as Project[];
-}
