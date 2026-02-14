@@ -8,8 +8,8 @@ import { AppProviders } from "@/components/app-providers";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "ProjectStatus - Visual Workflow Tracking",
-  description: "Track projects with visual workflow canvases and share real-time progress with clients",
+  title: "ProjectStatus - Project Tracking Made Simple",
+  description: "Track project progress visually and share real-time updates with clients",
   icons: { icon: "/icon.svg" },
   openGraph: {
     title: "ProjectStatus - Visual Workflow Tracking",
