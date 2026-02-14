@@ -21,9 +21,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
-  Plus, Trash2, ArrowLeft, Play, CheckCircle2, ChevronRight,
+  Plus, Trash2, ArrowLeft, ChevronRight,
   Pencil, Search, X, ArrowUpDown, Archive, ArchiveRestore,
-  Clock, Loader2, GripVertical, LayoutGrid, Workflow as WorkflowIcon,
+  Clock, Loader2, GripVertical,
 } from "lucide-react";
 import { toast } from "sonner";
 import { FileUpload } from "@/components/file-upload";
@@ -60,7 +60,7 @@ function ProjectsList() {
   const [clientSearch, setClientSearch] = useState("");
   const [showClientDropdown, setShowClientDropdown] = useState(false);
   const [detailClients, setDetailClients] = useState<Client[]>([]);
-  const [newStageName, setNewStageName] = useState("");
+  // newStageName removed — stages added via canvas toolbar
   const [loading, setLoading] = useState(true);
   const [showEdit, setShowEdit] = useState(false);
   const [editName, setEditName] = useState("");
@@ -196,25 +196,6 @@ function ProjectsList() {
       await load();
     } catch (err: any) {
       toast.error(err.message || "Failed to create project");
-    }
-  };
-
-  const addStage = async () => {
-    if (!selectedProject || !newStageName.trim()) return;
-    try {
-      const stage = await createProjectStage({
-        project_id: selectedProject.id,
-        name: newStageName.trim(),
-        status: "pending",
-        position: stages.length,
-        started_at: null,
-        completed_at: null,
-        started_by: null,
-      });
-      setStages([...stages, stage]);
-      setNewStageName("");
-    } catch (err: any) {
-      toast.error(err.message || "Failed to add stage");
     }
   };
 
