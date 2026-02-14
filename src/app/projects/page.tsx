@@ -90,14 +90,14 @@ function ProjectsList() {
 
   // Load stages when viewing a project
   useEffect(() => {
-    if (!selectedProject) { setStages([]); setFiles([]); setDetailClient(null); return; }
+    if (!selectedProject) { setStages([]); setFiles([]); setDetailClients([]); return; }
     getProjectStages(selectedProject.id).then(setStages).catch(() => {});
     getProjectFiles(selectedProject.id).then(setFiles).catch(() => {});
     const cids = selectedProject.client_ids?.length ? selectedProject.client_ids : (selectedProject.client_id ? [selectedProject.client_id] : []);
     if (cids.length > 0) {
       Promise.all(cids.map(id => getClient(id).catch(() => null))).then(results => setDetailClients(results.filter(Boolean) as Client[]));
     } else {
-      setDetailClient(null);
+      setDetailClients([]);
     }
     window.scrollTo(0, 0);
   }, [selectedProject?.id]);
@@ -397,8 +397,8 @@ function ProjectsList() {
                 )) : selectedProject.client_name}
               </p>
               <p className="text-sm text-muted-foreground">{detailClients.length > 0 ? detailClients.map(c => c.email).join(", ") : selectedProject.client_email}</p>
-              {(detailClient?.phone || selectedProject.client_phone) && (
-                <p className="text-sm text-muted-foreground">{detailClient?.phone || selectedProject.client_phone}</p>
+              {(detailClients.some(c => c.phone) || selectedProject.client_phone) && (
+                <p className="text-sm text-muted-foreground">{detailClients.length > 0 ? detailClients.filter(c => c.phone).map(c => c.phone).join(", ") : selectedProject.client_phone}</p>
               )}
             </CardContent>
           </Card>
