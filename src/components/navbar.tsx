@@ -23,7 +23,7 @@ export function Navbar() {
     ...(isAdmin ? [
       { href: "/clients/", label: "Clients" },
       { href: "/templates/", label: "Templates" },
-      { href: "/members/", label: "Members" },
+      { href: "/workers/", label: "Workers" },
     ] : []),
     ...(isPlatformAdmin ? [
       { href: "/admin/", label: "Platform Admin" },

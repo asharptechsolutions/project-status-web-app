@@ -96,4 +96,16 @@ export interface Client {
   updated_at: string;
 }
 
+export interface Worker {
+  id: string;
+  org_id: string;
+  name: string;
+  email: string;
+  phone: string | null;
+  role: string | null;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export type UserRole = "admin" | "worker" | "client" | "platform_admin";

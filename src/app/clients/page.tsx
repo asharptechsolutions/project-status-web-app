@@ -86,10 +86,10 @@ function ClientsInner() {
       });
       // Send Clerk invite
       try {
-        const res = await fetch("/api/invite-client", {
+        const res = await fetch("/api/invite", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email: formEmail.trim() }),
+          body: JSON.stringify({ email: formEmail.trim(), role: "client" }),
         });
         const data = await res.json();
         if (res.ok) {
