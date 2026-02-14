@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
       body: JSON.stringify({
         email_address: email,
         public_metadata: { role: "client" },
-        redirect_url: "https://projectstatus.app/sign-up",
+        redirect_url: "https://projectstatus.app/",
       }),
     });
 
