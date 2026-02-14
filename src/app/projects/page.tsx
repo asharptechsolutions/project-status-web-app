@@ -49,11 +49,11 @@ function ProjectsList() {
   const [newClientCompany, setNewClientCompany] = useState("");
   const [selectedTemplate, setSelectedTemplate] = useState("");
   const [clients, setClients] = useState<Client[]>([]);
-  const [selectedClientId, setSelectedClientId] = useState<string>("");
+  const [selectedClientIds, setSelectedClientIds] = useState<string[]>([]);
   const [clientMode, setClientMode] = useState<"existing" | "new">("existing");
   const [clientSearch, setClientSearch] = useState("");
   const [showClientDropdown, setShowClientDropdown] = useState(false);
-  const [detailClient, setDetailClient] = useState<Client | null>(null);
+  const [detailClients, setDetailClients] = useState<Client[]>([]);
   const [newStageName, setNewStageName] = useState("");
   const [loading, setLoading] = useState(true);
   const [showEdit, setShowEdit] = useState(false);
@@ -93,8 +93,9 @@ function ProjectsList() {
     if (!selectedProject) { setStages([]); setFiles([]); setDetailClient(null); return; }
     getProjectStages(selectedProject.id).then(setStages).catch(() => {});
     getProjectFiles(selectedProject.id).then(setFiles).catch(() => {});
-    if (selectedProject.client_id) {
-      getClient(selectedProject.client_id).then(setDetailClient).catch(() => {});
+    const cids = selectedProject.client_ids?.length ? selectedProject.client_ids : (selectedProject.client_id ? [selectedProject.client_id] : []);
+    if (cids.length > 0) {
+      Promise.all(cids.map(id => getClient(id).catch(() => null))).then(results => setDetailClients(results.filter(Boolean) as Client[]));
     } else {
       setDetailClient(null);
     }
@@ -121,16 +122,11 @@ function ProjectsList() {
     if (!orgId || !userId) return;
     if (!newName.trim()) { toast.error("Project name is required"); return; }
     try {
-      let clientId: string | null = null;
-      let clientEmail = "";
+      const allClientIds: string[] = [...selectedClientIds];
+      let createdClientEmail = "";
 
-      if (clientMode === "existing" && selectedClientId) {
-        clientId = selectedClientId;
-        const c = clients.find((cl) => cl.id === selectedClientId);
-        if (c) {
-          clientEmail = c.email;
-        }
-      } else if (clientMode === "new" && newClientName.trim() && newClientEmail.trim()) {
+      // If creating a new client inline, add to DB first
+      if (clientMode === "new" && newClientName.trim() && newClientEmail.trim()) {
         const newClient = await createClient({
           org_id: orgId,
           name: newClientName.trim(),
@@ -139,22 +135,26 @@ function ProjectsList() {
           phone: newClientPhone.trim() || null,
           created_by: userId,
         });
-        clientId = newClient.id;
-        clientEmail = newClientEmail.trim();
+        allClientIds.push(newClient.id);
+        createdClientEmail = newClientEmail.trim();
         setClients([...clients, newClient]);
       }
 
-      // Send Clerk invitation if we have a client email
-      if (clientEmail) {
+      // Send Clerk invitations to all selected clients
+      const emailsToInvite = new Set<string>();
+      for (const cid of allClientIds) {
+        const c = clients.find(cl => cl.id === cid);
+        if (c?.email) emailsToInvite.add(c.email);
+      }
+      if (createdClientEmail) emailsToInvite.add(createdClientEmail);
+      for (const email of emailsToInvite) {
         try {
-          const res = await fetch("/api/invite-client", {
+          await fetch("/api/invite-client", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ email: clientEmail, orgId }),
+            body: JSON.stringify({ email, orgId }),
           });
-          if (res.ok) {
-            toast.success(`Invitation sent to ${clientEmail}`);
-          }
+          toast.success(`Invitation sent to ${email}`);
         } catch {}
       }
 
@@ -165,7 +165,8 @@ function ProjectsList() {
         client_name: newClientName.trim(),
         client_email: newClientEmail.trim(),
         client_phone: newClientPhone.trim(),
-        client_id: clientId,
+        client_id: allClientIds[0] || null,
+        client_ids: allClientIds,
         status: "active",
         created_by: userId,
       });
@@ -186,7 +187,7 @@ function ProjectsList() {
           }
         }
       }
-      setNewName(""); setNewDescription(""); setNewClientName(""); setNewClientEmail(""); setNewClientPhone(""); setNewClientCompany(""); setSelectedTemplate(""); setSelectedClientId(""); setClientMode("existing"); setClientSearch(""); setShowNew(false);
+      setNewName(""); setNewDescription(""); setNewClientName(""); setNewClientEmail(""); setNewClientPhone(""); setNewClientCompany(""); setSelectedTemplate(""); setSelectedClientIds([]); setClientMode("existing"); setClientSearch(""); setShowNew(false);
       toast.success("Project created");
       await load();
     } catch (err: any) {
@@ -386,15 +387,16 @@ function ProjectsList() {
         </div>
 
         {/* Client Info */}
-        {(detailClient || selectedProject.client_name) && (
+        {(detailClients.length > 0 || selectedProject.client_name) && (
           <Card className="mb-6">
             <CardContent className="pt-4 pb-4">
               <p className="text-sm font-medium mb-1">Client</p>
               <p className="font-medium">
-                {detailClient ? detailClient.name : selectedProject.client_name}
-                {detailClient?.company && <span className="text-muted-foreground font-normal"> · {detailClient.company}</span>}
+                {detailClients.length > 0 ? detailClients.map((c, i) => (
+                  <span key={c.id}>{i > 0 && ", "}{c.name}{c.company && ` (${c.company})`}</span>
+                )) : selectedProject.client_name}
               </p>
-              <p className="text-sm text-muted-foreground">{detailClient ? detailClient.email : selectedProject.client_email}</p>
+              <p className="text-sm text-muted-foreground">{detailClients.length > 0 ? detailClients.map(c => c.email).join(", ") : selectedProject.client_email}</p>
               {(detailClient?.phone || selectedProject.client_phone) && (
                 <p className="text-sm text-muted-foreground">{detailClient?.phone || selectedProject.client_phone}</p>
               )}
@@ -657,25 +659,30 @@ function ProjectsList() {
               </div>
               {clientMode === "existing" ? (
                 <div className="relative">
+                  {selectedClientIds.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mb-2">
+                      {selectedClientIds.map(cid => {
+                        const c = clients.find(cl => cl.id === cid);
+                        return c ? (
+                          <Badge key={cid} variant="secondary" className="gap-1">
+                            {c.name}{c.company ? ` (${c.company})` : ""}
+                            <button onClick={() => setSelectedClientIds(prev => prev.filter(id => id !== cid))} className="text-muted-foreground hover:text-foreground ml-1"><X className="h-3 w-3" /></button>
+                          </Badge>
+                        ) : null;
+                      })}
+                    </div>
+                  )}
                   <Input
-                    placeholder="Search clients..."
+                    placeholder="Search clients to add..."
                     value={clientSearch}
                     onChange={(e) => { setClientSearch(e.target.value); setShowClientDropdown(true); }}
                     onFocus={() => setShowClientDropdown(true)}
                   />
-                  {selectedClientId && (
-                    <div className="mt-2 flex items-center gap-2">
-                      <Badge variant="secondary">
-                        {clients.find((c) => c.id === selectedClientId)?.name}
-                        {clients.find((c) => c.id === selectedClientId)?.company && ` (${clients.find((c) => c.id === selectedClientId)?.company})`}
-                      </Badge>
-                      <button onClick={() => { setSelectedClientId(""); setClientSearch(""); }} className="text-muted-foreground hover:text-foreground"><X className="h-3 w-3" /></button>
-                    </div>
-                  )}
                   {showClientDropdown && clientSearch && (
                     <div className="absolute z-50 w-full mt-1 bg-popover border rounded-md shadow-md max-h-40 overflow-y-auto">
                       {clients
                         .filter((c) => {
+                          if (selectedClientIds.includes(c.id)) return false;
                           const q = clientSearch.toLowerCase();
                           return c.name.toLowerCase().includes(q) || (c.company || "").toLowerCase().includes(q) || c.email.toLowerCase().includes(q);
                         })
@@ -684,12 +691,9 @@ function ProjectsList() {
                             key={c.id}
                             className="w-full text-left px-3 py-2 hover:bg-accent text-sm"
                             onClick={() => {
-                              setSelectedClientId(c.id);
+                              setSelectedClientIds(prev => [...prev, c.id]);
                               setClientSearch("");
                               setShowClientDropdown(false);
-                              setNewClientName(c.name);
-                              setNewClientEmail(c.email);
-                              setNewClientPhone(c.phone || "");
                             }}
                           >
                             <span className="font-medium">{c.name}</span>
@@ -699,6 +703,7 @@ function ProjectsList() {
                           </button>
                         ))}
                       {clients.filter((c) => {
+                        if (selectedClientIds.includes(c.id)) return false;
                         const q = clientSearch.toLowerCase();
                         return c.name.toLowerCase().includes(q) || (c.company || "").toLowerCase().includes(q) || c.email.toLowerCase().includes(q);
                       }).length === 0 && (

@@ -26,6 +26,7 @@ export interface Project {
   client_email: string;
   client_phone: string;
   client_id: string | null;
+  client_ids: string[];
   created_by: string;
   created_at: string;
   updated_at: string;
