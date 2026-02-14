@@ -3,35 +3,55 @@ import { useEffect, useState, useCallback } from "react";
 import { Navbar } from "@/components/navbar";
 import { AuthGate } from "@/components/auth-gate";
 import { useAuth } from "@/lib/auth-context";
-import { getMembers, createMember, updateMember, deleteMember, getProjects, getProjectAssignments, assignProject, unassignProject } from "@/lib/data";
-import type { Member, Project, ProjectAssignment } from "@/lib/types";
+import { getWorkers, createWorker, updateWorker, deleteWorker, getWorkerProjects } from "@/lib/data";
+import type { Worker, Project } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Pencil, Plus, Trash2, UserCircle, Shield, Wrench, Eye } from "lucide-react";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { Plus, Search, X, Pencil, Trash2, ArrowLeft, Mail, Phone, FolderOpen, Briefcase } from "lucide-react";
 import { toast } from "sonner";
 
-function MembersInner() {
+function WorkersInner() {
   const { orgId, userId, isAdmin } = useAuth();
-  const [members, setMembers] = useState<Member[]>([]);
-  const [showNew, setShowNew] = useState(false);
-  const [editMember, setEditMember] = useState<Member | null>(null);
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [role, setRole] = useState<"admin" | "worker" | "client">("worker");
+  const [workers, setWorkers] = useState<Worker[]>([]);
   const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showNew, setShowNew] = useState(false);
+  const [showEdit, setShowEdit] = useState(false);
+  const [selectedWorker, setSelectedWorker] = useState<Worker | null>(null);
+  const [workerProjects, setWorkerProjects] = useState<Project[]>([]);
+  const [projectCounts, setProjectCounts] = useState<Record<string, number>>({});
+
+  // Form state
+  const [formName, setFormName] = useState("");
+  const [formEmail, setFormEmail] = useState("");
+  const [formPhone, setFormPhone] = useState("");
+  const [formRole, setFormRole] = useState("");
 
   const load = useCallback(async () => {
     if (!orgId) return;
     try {
-      setMembers(await getMembers(orgId));
+      const w = await getWorkers(orgId);
+      setWorkers(w);
+      // Get project counts via assignments
+      const { supabaseAdmin } = await import("@/lib/supabase");
+      const { data } = await supabaseAdmin
+        .from("project_assignments")
+        .select("member_id");
+      const counts: Record<string, number> = {};
+      (data || []).forEach((a: any) => {
+        if (a.member_id) counts[a.member_id] = (counts[a.member_id] || 0) + 1;
+      });
+      setProjectCounts(counts);
     } catch (err: any) {
-      toast.error(err.message || "Failed to load members");
+      toast.error(err.message || "Failed to load workers");
     } finally {
       setLoading(false);
     }
@@ -39,125 +59,243 @@ function MembersInner() {
 
   useEffect(() => { load(); }, [load]);
 
+  useEffect(() => {
+    if (!selectedWorker) { setWorkerProjects([]); return; }
+    getWorkerProjects(selectedWorker.id).then(setWorkerProjects).catch(() => {});
+  }, [selectedWorker?.id]);
+
+  const resetForm = () => {
+    setFormName(""); setFormEmail(""); setFormPhone(""); setFormRole("");
+  };
+
   const handleCreate = async () => {
-    if (!orgId || !name.trim() || !email.trim()) return;
+    if (!orgId || !userId) return;
+    if (!formName.trim() || !formEmail.trim()) {
+      toast.error("Name and email are required");
+      return;
+    }
     try {
-      await createMember({
-        clerk_user_id: `pending_${email.toLowerCase().trim()}`,
+      await createWorker({
         org_id: orgId,
-        role,
-        email: email.toLowerCase().trim(),
-        name: name.trim(),
+        name: formName.trim(),
+        email: formEmail.trim(),
+        phone: formPhone.trim() || null,
+        role: formRole.trim() || null,
+        created_by: userId,
       });
-      setName(""); setEmail(""); setRole("worker"); setShowNew(false);
-      toast.success("Member added");
-      load();
+      // Send Clerk invite
+      try {
+        const res = await fetch("/api/invite", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: formEmail.trim(), role: "worker" }),
+        });
+        if (res.ok) {
+          toast.success(`Invitation sent to ${formEmail.trim()}`);
+        }
+      } catch {}
+      resetForm();
+      setShowNew(false);
+      toast.success("Worker created");
+      await load();
     } catch (err: any) {
-      toast.error(err.message || "Failed to add member");
+      toast.error(err.message || "Failed to create worker");
     }
   };
 
-  const handleUpdate = async () => {
-    if (!editMember) return;
+  const openEdit = (worker: Worker) => {
+    setFormName(worker.name);
+    setFormEmail(worker.email);
+    setFormPhone(worker.phone || "");
+    setFormRole(worker.role || "");
+    setShowEdit(true);
+  };
+
+  const handleEdit = async () => {
+    if (!selectedWorker || !formName.trim() || !formEmail.trim()) return;
     try {
-      await updateMember(editMember.id, {
-        name: name.trim(),
-        email: email.toLowerCase().trim(),
-        role,
+      await updateWorker(selectedWorker.id, {
+        name: formName.trim(),
+        email: formEmail.trim(),
+        phone: formPhone.trim() || null,
+        role: formRole.trim() || null,
       });
-      setEditMember(null);
-      toast.success("Member updated");
-      load();
+      setSelectedWorker({ ...selectedWorker, name: formName.trim(), email: formEmail.trim(), phone: formPhone.trim() || null, role: formRole.trim() || null });
+      setShowEdit(false);
+      toast.success("Worker updated");
+      await load();
     } catch (err: any) {
-      toast.error(err.message || "Failed to update member");
+      toast.error(err.message || "Failed to update worker");
     }
   };
 
-  const openEdit = (m: Member) => {
-    setEditMember(m);
-    setName(m.name);
-    setEmail(m.email);
-    setRole(m.role);
+  const handleDelete = async (id: string) => {
+    try {
+      await deleteWorker(id);
+      setSelectedWorker(null);
+      toast.success("Worker deleted");
+      await load();
+    } catch (err: any) {
+      toast.error(err.message || "Failed to delete worker");
+    }
   };
 
-  const roleIcon = (r: string) => {
-    if (r === "admin") return <Shield className="h-4 w-4 text-blue-500" />;
-    if (r === "worker") return <Wrench className="h-4 w-4 text-orange-500" />;
-    return <Eye className="h-4 w-4 text-green-500" />;
-  };
+  if (loading) return <div className="flex items-center justify-center p-8"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" /></div>;
 
-  const roleColor = (r: string): "default" | "secondary" | "outline" => {
-    if (r === "admin") return "default";
-    if (r === "worker") return "secondary";
-    return "outline";
-  };
-
-  if (!isAdmin) {
+  // Worker detail view
+  if (selectedWorker) {
     return (
       <div className="p-4 max-w-4xl mx-auto w-full">
-        <h1 className="text-2xl font-bold mb-4">Members</h1>
-        <Card><CardContent className="pt-6 text-center text-muted-foreground">Only admins can manage members.</CardContent></Card>
+        <Button variant="ghost" className="mb-4" onClick={() => { setSelectedWorker(null); resetForm(); }}>
+          <ArrowLeft className="h-4 w-4 mr-2" /> Back to Workers
+        </Button>
+
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
+          <div>
+            <h1 className="text-2xl font-bold">{selectedWorker.name}</h1>
+            {selectedWorker.role && <p className="text-sm text-muted-foreground">{selectedWorker.role}</p>}
+          </div>
+          {isAdmin && (
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" onClick={() => openEdit(selectedWorker)}>
+                <Pencil className="h-4 w-4 mr-1" /> Edit
+              </Button>
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button variant="destructive" size="sm"><Trash2 className="h-4 w-4" /></Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Delete Worker</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Permanently delete &quot;{selectedWorker.name}&quot;? This cannot be undone.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction onClick={() => handleDelete(selectedWorker.id)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                      Delete
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            </div>
+          )}
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+          <Card>
+            <CardContent className="pt-4 pb-4 flex items-center gap-3">
+              <Mail className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm">{selectedWorker.email}</span>
+            </CardContent>
+          </Card>
+          {selectedWorker.phone && (
+            <Card>
+              <CardContent className="pt-4 pb-4 flex items-center gap-3">
+                <Phone className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm">{selectedWorker.phone}</span>
+              </CardContent>
+            </Card>
+          )}
+          {selectedWorker.role && (
+            <Card>
+              <CardContent className="pt-4 pb-4 flex items-center gap-3">
+                <Briefcase className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm">{selectedWorker.role}</span>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+
+        <h2 className="text-lg font-semibold mb-3">Projects ({workerProjects.length})</h2>
+        {workerProjects.length === 0 ? (
+          <Card><CardContent className="pt-6 text-center text-muted-foreground">No projects assigned to this worker.</CardContent></Card>
+        ) : (
+          <div className="space-y-3">
+            {workerProjects.map((p) => (
+              <Card key={p.id}>
+                <CardContent className="pt-4 pb-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-medium">{p.name}</p>
+                      {p.description && <p className="text-sm text-muted-foreground line-clamp-1">{p.description}</p>}
+                    </div>
+                    <Badge variant={p.status === "completed" ? "default" : "secondary"}>{p.status}</Badge>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
+
+        {/* Edit dialog */}
+        <Dialog open={showEdit} onOpenChange={setShowEdit}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Edit Worker</DialogTitle>
+              <DialogDescription>Update worker information</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div><Label>Name *</Label><Input value={formName} onChange={(e) => setFormName(e.target.value)} /></div>
+              <div><Label>Email *</Label><Input type="email" value={formEmail} onChange={(e) => setFormEmail(e.target.value)} /></div>
+              <div><Label>Phone</Label><Input type="tel" value={formPhone} onChange={(e) => setFormPhone(e.target.value)} /></div>
+              <div><Label>Role</Label><Input value={formRole} onChange={(e) => setFormRole(e.target.value)} /></div>
+              <Button onClick={handleEdit} className="w-full" disabled={!formName.trim() || !formEmail.trim()}>Save Changes</Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     );
   }
 
-  if (loading) return <div className="flex items-center justify-center p-8"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" /></div>;
+  // Worker list view
+  const filtered = workers.filter((w) => {
+    const q = searchQuery.toLowerCase();
+    if (!q) return true;
+    return w.name.toLowerCase().includes(q) || w.email.toLowerCase().includes(q) || (w.phone || "").toLowerCase().includes(q) || (w.role || "").toLowerCase().includes(q);
+  });
 
   return (
     <div className="p-4 max-w-4xl mx-auto w-full">
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold">Members</h1>
-        <Button onClick={() => { setName(""); setEmail(""); setRole("worker"); setShowNew(true); }}>
-          <Plus className="h-4 w-4 mr-1" /> Add Member
-        </Button>
+        <h1 className="text-2xl font-bold">Workers</h1>
+        {isAdmin && (
+          <Button onClick={() => { resetForm(); setShowNew(true); }}><Plus className="h-4 w-4 mr-1" /> New Worker</Button>
+        )}
       </div>
 
-      <div className="mb-6 p-4 bg-muted/50 rounded-lg">
-        <h3 className="font-medium text-sm mb-2">Role Guide</h3>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-sm">
-          <div className="flex items-center gap-2"><Shield className="h-4 w-4 text-blue-500" /> <strong>Admin</strong> — Full access, manage everything</div>
-          <div className="flex items-center gap-2"><Wrench className="h-4 w-4 text-orange-500" /> <strong>Worker</strong> — View all projects, update stages</div>
-          <div className="flex items-center gap-2"><Eye className="h-4 w-4 text-green-500" /> <strong>Client</strong> — View assigned projects only</div>
+      {workers.length > 0 && (
+        <div className="relative mb-4">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input placeholder="Search workers..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-9 pr-8" />
+          {searchQuery && (
+            <button onClick={() => setSearchQuery("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+              <X className="h-4 w-4" />
+            </button>
+          )}
         </div>
-      </div>
+      )}
 
-      {members.length === 0 ? (
-        <Card><CardContent className="pt-6 text-center text-muted-foreground">No members yet. Add your team!</CardContent></Card>
+      {filtered.length === 0 ? (
+        <Card><CardContent className="pt-6 text-center text-muted-foreground">
+          {workers.length === 0 ? "No workers yet. Add your first one!" : "No workers match your search."}
+        </CardContent></Card>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-          {members.map((m) => (
-            <Card key={m.id}>
-              <CardContent className="pt-4 pb-4 flex items-center gap-3">
-                <UserCircle className="h-10 w-10 text-muted-foreground shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <p className="font-medium truncate">{m.name}</p>
-                  <p className="text-xs text-muted-foreground truncate">{m.email}</p>
-                  <Badge variant={roleColor(m.role)} className="mt-1 text-xs">
-                    {roleIcon(m.role)}
-                    <span className="ml-1 capitalize">{m.role}</span>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {filtered.map((w) => (
+            <Card key={w.id} className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => setSelectedWorker(w)}>
+              <CardContent className="pt-4 pb-4">
+                <div className="flex items-start justify-between">
+                  <div className="min-w-0 flex-1">
+                    <p className="font-medium truncate">{w.name}</p>
+                    {w.role && <p className="text-sm text-muted-foreground truncate flex items-center gap-1"><Briefcase className="h-3 w-3" />{w.role}</p>}
+                    <p className="text-sm text-muted-foreground truncate flex items-center gap-1 mt-1"><Mail className="h-3 w-3" />{w.email}</p>
+                    {w.phone && <p className="text-sm text-muted-foreground truncate flex items-center gap-1"><Phone className="h-3 w-3" />{w.phone}</p>}
+                  </div>
+                  <Badge variant="secondary" className="ml-2 shrink-0">
+                    <FolderOpen className="h-3 w-3 mr-1" />{projectCounts[w.id] || 0}
                   </Badge>
-                </div>
-                <div className="flex flex-col gap-1">
-                  <Button variant="ghost" size="sm" onClick={() => openEdit(m)}>
-                    <Pencil className="h-4 w-4" />
-                  </Button>
-                  {m.clerk_user_id !== userId && (
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                        <Button variant="ghost" size="sm"><Trash2 className="h-4 w-4" /></Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>Remove Member</AlertDialogTitle>
-                          <AlertDialogDescription>Remove {m.name} from the organization?</AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>Cancel</AlertDialogCancel>
-                          <AlertDialogAction onClick={async () => { try { await deleteMember(m.id); toast.success("Removed"); load(); } catch (err: any) { toast.error(err.message); } }}>Remove</AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
-                  )}
                 </div>
               </CardContent>
             </Card>
@@ -165,54 +303,19 @@ function MembersInner() {
         </div>
       )}
 
-      {/* Add member dialog */}
+      {/* New worker dialog */}
       <Dialog open={showNew} onOpenChange={setShowNew}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Add Member</DialogTitle>
-            <DialogDescription>Add a team member or client to your organization</DialogDescription>
+            <DialogTitle>New Worker</DialogTitle>
+            <DialogDescription>Add a new worker to your organization</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
-            <div><Label>Name</Label><Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. John Smith" /></div>
-            <div><Label>Email</Label><Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="john@example.com" /></div>
-            <div>
-              <Label>Role</Label>
-              <Select value={role} onValueChange={(v) => setRole(v as any)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="admin">Admin — Full access</SelectItem>
-                  <SelectItem value="worker">Worker — Update stages</SelectItem>
-                  <SelectItem value="client">Client — View only</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <Button onClick={handleCreate} className="w-full" disabled={!name.trim() || !email.trim()}>Add Member</Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Edit member dialog */}
-      <Dialog open={!!editMember} onOpenChange={(open) => { if (!open) setEditMember(null); }}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Edit Member</DialogTitle>
-            <DialogDescription>Update member details and role</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div><Label>Name</Label><Input value={name} onChange={(e) => setName(e.target.value)} /></div>
-            <div><Label>Email</Label><Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} /></div>
-            <div>
-              <Label>Role</Label>
-              <Select value={role} onValueChange={(v) => setRole(v as any)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="admin">Admin</SelectItem>
-                  <SelectItem value="worker">Worker</SelectItem>
-                  <SelectItem value="client">Client</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <Button onClick={handleUpdate} className="w-full" disabled={!name.trim() || !email.trim()}>Save Changes</Button>
+            <div><Label>Name *</Label><Input value={formName} onChange={(e) => setFormName(e.target.value)} placeholder="e.g. Jane Doe" /></div>
+            <div><Label>Email *</Label><Input type="email" value={formEmail} onChange={(e) => setFormEmail(e.target.value)} placeholder="e.g. jane@example.com" /></div>
+            <div><Label>Phone</Label><Input type="tel" value={formPhone} onChange={(e) => setFormPhone(e.target.value)} placeholder="e.g. (555) 123-4567" /></div>
+            <div><Label>Role</Label><Input value={formRole} onChange={(e) => setFormRole(e.target.value)} placeholder="e.g. Developer, Designer" /></div>
+            <Button onClick={handleCreate} className="w-full" disabled={!formName.trim() || !formEmail.trim()}>Create Worker</Button>
           </div>
         </DialogContent>
       </Dialog>
@@ -220,13 +323,15 @@ function MembersInner() {
   );
 }
 
-export default function MembersPage() {
+function WorkersPageInner() {
   return (
-    <AuthGate>
-      <div className="min-h-[100dvh] flex flex-col">
-        <Navbar />
-        <MembersInner />
-      </div>
-    </AuthGate>
+    <div className="min-h-[100dvh] flex flex-col">
+      <Navbar />
+      <WorkersInner />
+    </div>
   );
+}
+
+export default function WorkersPage() {
+  return <AuthGate><WorkersPageInner /></AuthGate>;
 }
