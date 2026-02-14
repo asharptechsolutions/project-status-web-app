@@ -130,9 +130,8 @@ function ProjectsList() {
     if (!newName.trim()) { toast.error("Project name is required"); return; }
     try {
       const allClientIds: string[] = [...selectedClientIds];
-      let createdClientEmail = "";
 
-      // If creating a new client inline, add to DB first
+      // If user typed a new client but didn't click "Add Client", create it now
       if (clientMode === "new" && newClientName.trim() && newClientEmail.trim()) {
         const newClient = await createClient({
           org_id: orgId,
@@ -143,7 +142,6 @@ function ProjectsList() {
           created_by: userId,
         });
         allClientIds.push(newClient.id);
-        createdClientEmail = newClientEmail.trim();
         setClients([...clients, newClient]);
       }
 
@@ -153,7 +151,6 @@ function ProjectsList() {
         const c = clients.find(cl => cl.id === cid);
         if (c?.email) emailsToInvite.add(c.email);
       }
-      if (createdClientEmail) emailsToInvite.add(createdClientEmail);
       for (const email of emailsToInvite) {
         try {
           await fetch("/api/invite-client", {
@@ -780,6 +777,51 @@ function ProjectsList() {
                   <div><Label>Company</Label><Input value={newClientCompany} onChange={(e) => setNewClientCompany(e.target.value)} placeholder="e.g. Acme Corp" /></div>
                   <div><Label>Client Email *</Label><Input type="email" value={newClientEmail} onChange={(e) => setNewClientEmail(e.target.value)} placeholder="e.g. john@example.com" /></div>
                   <div><Label>Client Phone</Label><Input type="tel" value={newClientPhone} onChange={(e) => setNewClientPhone(e.target.value)} placeholder="e.g. (555) 123-4567" /></div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="w-full"
+                    disabled={!newClientName.trim() || !newClientEmail.trim()}
+                    onClick={async () => {
+                      if (!orgId || !userId) return;
+                      try {
+                        const newClient = await createClient({
+                          org_id: orgId,
+                          name: newClientName.trim(),
+                          company: newClientCompany.trim() || null,
+                          email: newClientEmail.trim(),
+                          phone: newClientPhone.trim() || null,
+                          created_by: userId,
+                        });
+                        setClients(prev => [...prev, newClient]);
+                        setSelectedClientIds(prev => [...prev, newClient.id]);
+                        setNewClientName("");
+                        setNewClientEmail("");
+                        setNewClientPhone("");
+                        setNewClientCompany("");
+                        toast.success(`Client "${newClient.name}" added`);
+                      } catch (err: any) {
+                        toast.error(err.message || "Failed to create client");
+                      }
+                    }}
+                  >
+                    <Plus className="h-4 w-4 mr-1" /> Add Client
+                  </Button>
+                </div>
+              )}
+              {/* Show selected clients from both modes */}
+              {selectedClientIds.length > 0 && clientMode === "new" && (
+                <div className="flex flex-wrap gap-1 mt-2">
+                  {selectedClientIds.map(cid => {
+                    const c = clients.find(cl => cl.id === cid);
+                    return c ? (
+                      <Badge key={cid} variant="secondary" className="gap-1">
+                        {c.name}{c.company ? ` (${c.company})` : ""}
+                        <button onClick={() => setSelectedClientIds(prev => prev.filter(id => id !== cid))} className="text-muted-foreground hover:text-foreground ml-1"><X className="h-3 w-3" /></button>
+                      </Badge>
+                    ) : null;
+                  })}
                 </div>
               )}
             </div>
