@@ -4,14 +4,19 @@ const CLERK_SECRET_KEY = process.env.CLERK_SECRET_KEY || "sk_test_LIsoTTHB4mPaBh
 
 export async function POST(req: NextRequest) {
   try {
-    const { email, role } = await req.json();
+    const { email, role, orgId } = await req.json();
     if (!email) {
       return NextResponse.json({ error: "Email is required" }, { status: 400 });
     }
+    if (!orgId) {
+      return NextResponse.json({ error: "Organization ID is required" }, { status: 400 });
+    }
 
-    const inviteRole = role || "client";
+    const inviteRole = role === "member" ? "org:member" : "org:member";
+    // Clerk org invitations use org roles: org:admin or org:member
+    // Clients and members both join as org:member; we differentiate in Supabase
 
-    const res = await fetch("https://api.clerk.com/v1/invitations", {
+    const res = await fetch(`https://api.clerk.com/v1/organizations/${orgId}/invitations`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${CLERK_SECRET_KEY}`,
@@ -19,13 +24,16 @@ export async function POST(req: NextRequest) {
       },
       body: JSON.stringify({
         email_address: email,
-        public_metadata: { role: inviteRole },
+        role: inviteRole,
+        public_metadata: { appRole: role || "client" },
         redirect_url: "https://projectstatus.app/",
       }),
     });
 
     if (res.status === 422) {
-      return NextResponse.json({ message: "Already has an account or invitation" }, { status: 200 });
+      const err = await res.json().catch(() => ({}));
+      const msg = err?.errors?.[0]?.message || "Already has an account or pending invitation";
+      return NextResponse.json({ message: msg }, { status: 200 });
     }
 
     if (!res.ok) {

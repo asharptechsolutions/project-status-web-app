@@ -150,7 +150,7 @@ function ProjectsList() {
           const res = await fetch("/api/invite-client", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ email: clientEmail }),
+            body: JSON.stringify({ email: clientEmail, orgId }),
           });
           if (res.ok) {
             toast.success(`Invitation sent to ${clientEmail}`);

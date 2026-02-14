@@ -89,7 +89,7 @@ function ClientsInner() {
         const res = await fetch("/api/invite", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email: formEmail.trim(), role: "client" }),
+          body: JSON.stringify({ email: formEmail.trim(), role: "client", orgId }),
         });
         const data = await res.json();
         if (res.ok) {

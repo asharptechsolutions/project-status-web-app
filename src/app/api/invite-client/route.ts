@@ -1,15 +1,19 @@
+// Redirects to the main /api/invite route — kept for backward compat
 import { NextRequest, NextResponse } from "next/server";
 
 const CLERK_SECRET_KEY = process.env.CLERK_SECRET_KEY || "sk_test_LIsoTTHB4mPaBhw3PQ4Ris4Xu4ff03P9GbB5FeZQ04";
 
 export async function POST(req: NextRequest) {
   try {
-    const { email } = await req.json();
+    const { email, orgId } = await req.json();
     if (!email) {
       return NextResponse.json({ error: "Email is required" }, { status: 400 });
     }
+    if (!orgId) {
+      return NextResponse.json({ error: "Organization ID is required" }, { status: 400 });
+    }
 
-    const res = await fetch("https://api.clerk.com/v1/invitations", {
+    const res = await fetch(`https://api.clerk.com/v1/organizations/${orgId}/invitations`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${CLERK_SECRET_KEY}`,
@@ -17,14 +21,14 @@ export async function POST(req: NextRequest) {
       },
       body: JSON.stringify({
         email_address: email,
-        public_metadata: { role: "client" },
+        role: "org:member",
+        public_metadata: { appRole: "client" },
         redirect_url: "https://projectstatus.app/",
       }),
     });
 
     if (res.status === 422) {
-      // Already has account or already invited
-      return NextResponse.json({ message: "Client already has an account or invitation" }, { status: 200 });
+      return NextResponse.json({ message: "Already has an account or invitation" }, { status: 200 });
     }
 
     if (!res.ok) {

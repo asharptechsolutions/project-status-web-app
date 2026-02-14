@@ -89,7 +89,7 @@ function MembersInner() {
         const res = await fetch("/api/invite", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email: formEmail.trim(), role: "member" }),
+          body: JSON.stringify({ email: formEmail.trim(), role: "member", orgId }),
         });
         if (res.ok) {
           toast.success(`Invitation sent to ${formEmail.trim()}`);
