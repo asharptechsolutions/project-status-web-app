@@ -1,7 +1,7 @@
 // Redirects to the main /api/invite route — kept for backward compat
 import { NextRequest, NextResponse } from "next/server";
 
-const CLERK_SECRET_KEY = process.env.CLERK_SECRET_KEY || "sk_test_LIsoTTHB4mPaBhw3PQ4Ris4Xu4ff03P9GbB5FeZQ04";
+const CLERK_SECRET_KEY = process.env.CLERK_SECRET_KEY || "sk_live_8QI7MICx80p84Nz1hRQHurO0E895H9qbqbFmOMBMsX";
 
 export async function POST(req: NextRequest) {
   try {
