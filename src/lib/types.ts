@@ -23,6 +23,7 @@ export interface Project {
   client_name: string;
   client_email: string;
   client_phone: string;
+  client_id: string | null;
   created_by: string;
   created_at: string;
   updated_at: string;
@@ -81,6 +82,18 @@ export interface PresetStage {
   name: string;
   created_by: string;
   created_at: string;
+}
+
+export interface Client {
+  id: string;
+  org_id: string;
+  company: string | null;
+  name: string;
+  email: string;
+  phone: string | null;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
 }
 
 export type UserRole = "admin" | "worker" | "client" | "platform_admin";

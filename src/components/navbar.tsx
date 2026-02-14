@@ -21,6 +21,7 @@ export function Navbar() {
     { href: "/", label: "Dashboard" },
     { href: "/projects/", label: "Projects" },
     ...(isAdmin ? [
+      { href: "/clients/", label: "Clients" },
       { href: "/templates/", label: "Templates" },
       { href: "/members/", label: "Members" },
     ] : []),

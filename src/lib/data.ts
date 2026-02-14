@@ -8,6 +8,7 @@ import type {
   Template,
   PresetStage,
   Member,
+  Client,
 } from "./types";
 
 // ============ PROJECTS ============
@@ -390,4 +391,76 @@ export async function getAssignedProjects(
     .eq("member_id", memberId);
   if (error) throw new Error(error.message);
   return (data || []).map((d: any) => d.projects).filter(Boolean) as Project[];
+}
+
+// ============ CLIENTS ============
+
+export async function getClients(orgId: string): Promise<Client[]> {
+  const { data, error } = await supabaseAdmin
+    .from("clients")
+    .select("*")
+    .eq("org_id", orgId)
+    .order("name", { ascending: true });
+  if (error) throw new Error(error.message);
+  return (data || []) as Client[];
+}
+
+export async function getClient(id: string): Promise<Client | null> {
+  const { data, error } = await supabaseAdmin
+    .from("clients")
+    .select("*")
+    .eq("id", id)
+    .single();
+  if (error) return null;
+  return data as Client;
+}
+
+export async function createClient(
+  client: Omit<Client, "id" | "created_at" | "updated_at">
+): Promise<Client> {
+  const { data, error } = await supabaseAdmin
+    .from("clients")
+    .insert(client)
+    .select("*")
+    .single();
+  if (error) throw new Error(error.message);
+  return data as Client;
+}
+
+export async function updateClient(
+  id: string,
+  updates: Partial<Client>
+): Promise<void> {
+  const { error } = await supabaseAdmin
+    .from("clients")
+    .update({ ...updates, updated_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) throw new Error(error.message);
+}
+
+export async function deleteClient(id: string): Promise<void> {
+  const { error } = await supabaseAdmin
+    .from("clients")
+    .delete()
+    .eq("id", id);
+  if (error) throw new Error(error.message);
+}
+
+export async function getClientProjectCount(clientId: string): Promise<number> {
+  const { count, error } = await supabaseAdmin
+    .from("projects")
+    .select("id", { count: "exact", head: true })
+    .eq("client_id", clientId);
+  if (error) return 0;
+  return count || 0;
+}
+
+export async function getClientProjects(clientId: string): Promise<Project[]> {
+  const { data, error } = await supabaseAdmin
+    .from("projects")
+    .select("*")
+    .eq("client_id", clientId)
+    .order("created_at", { ascending: false });
+  if (error) throw new Error(error.message);
+  return (data || []) as Project[];
 }

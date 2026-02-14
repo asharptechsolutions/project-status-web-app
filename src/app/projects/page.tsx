@@ -8,9 +8,9 @@ import {
   getProjects, createProject, updateProject, deleteProject,
   getProjectStages, createProjectStage, updateProjectStage, deleteProjectStage,
   getProjectFiles, getProjectMessages, getTemplates, getPresetStages,
-  getAssignedProjects, getMembers,
+  getAssignedProjects, getMembers, getClients, createClient, getClient,
 } from "@/lib/data";
-import type { Project, ProjectStage, ProjectFile, Template, PresetStage, Member } from "@/lib/types";
+import type { Project, ProjectStage, ProjectFile, Template, PresetStage, Member, Client } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -46,7 +46,14 @@ function ProjectsList() {
   const [newClientName, setNewClientName] = useState("");
   const [newClientEmail, setNewClientEmail] = useState("");
   const [newClientPhone, setNewClientPhone] = useState("");
+  const [newClientCompany, setNewClientCompany] = useState("");
   const [selectedTemplate, setSelectedTemplate] = useState("");
+  const [clients, setClients] = useState<Client[]>([]);
+  const [selectedClientId, setSelectedClientId] = useState<string>("");
+  const [clientMode, setClientMode] = useState<"existing" | "new">("existing");
+  const [clientSearch, setClientSearch] = useState("");
+  const [showClientDropdown, setShowClientDropdown] = useState(false);
+  const [detailClient, setDetailClient] = useState<Client | null>(null);
   const [newStageName, setNewStageName] = useState("");
   const [loading, setLoading] = useState(true);
   const [showEdit, setShowEdit] = useState(false);
@@ -60,16 +67,18 @@ function ProjectsList() {
   const load = useCallback(async () => {
     if (!orgId) return;
     try {
-      const [p, t, ps, m] = await Promise.all([
+      const [p, t, ps, m, cl] = await Promise.all([
         isClient && member ? getAssignedProjects(member.id) : getProjects(orgId),
         isAdmin ? getTemplates(orgId) : Promise.resolve([]),
         isAdmin ? getPresetStages(orgId) : Promise.resolve([]),
         getMembers(orgId),
+        isAdmin ? getClients(orgId) : Promise.resolve([]),
       ]);
       setProjects(p);
       setTemplates(t);
       setPresetStages(ps);
       setMembers(m);
+      setClients(cl);
     } catch (err: any) {
       toast.error(err.message || "Failed to load data");
     } finally {
@@ -81,9 +90,14 @@ function ProjectsList() {
 
   // Load stages when viewing a project
   useEffect(() => {
-    if (!selectedProject) { setStages([]); setFiles([]); return; }
+    if (!selectedProject) { setStages([]); setFiles([]); setDetailClient(null); return; }
     getProjectStages(selectedProject.id).then(setStages).catch(() => {});
     getProjectFiles(selectedProject.id).then(setFiles).catch(() => {});
+    if (selectedProject.client_id) {
+      getClient(selectedProject.client_id).then(setDetailClient).catch(() => {});
+    } else {
+      setDetailClient(null);
+    }
     window.scrollTo(0, 0);
   }, [selectedProject?.id]);
 
@@ -107,6 +121,43 @@ function ProjectsList() {
     if (!orgId || !userId) return;
     if (!newName.trim()) { toast.error("Project name is required"); return; }
     try {
+      let clientId: string | null = null;
+      let clientEmail = "";
+
+      if (clientMode === "existing" && selectedClientId) {
+        clientId = selectedClientId;
+        const c = clients.find((cl) => cl.id === selectedClientId);
+        if (c) {
+          clientEmail = c.email;
+        }
+      } else if (clientMode === "new" && newClientName.trim() && newClientEmail.trim()) {
+        const newClient = await createClient({
+          org_id: orgId,
+          name: newClientName.trim(),
+          company: newClientCompany.trim() || null,
+          email: newClientEmail.trim(),
+          phone: newClientPhone.trim() || null,
+          created_by: userId,
+        });
+        clientId = newClient.id;
+        clientEmail = newClientEmail.trim();
+        setClients([...clients, newClient]);
+      }
+
+      // Send Clerk invitation if we have a client email
+      if (clientEmail) {
+        try {
+          const res = await fetch("/api/invite-client", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email: clientEmail }),
+          });
+          if (res.ok) {
+            toast.success(`Invitation sent to ${clientEmail}`);
+          }
+        } catch {}
+      }
+
       const id = await createProject({
         org_id: orgId,
         name: newName.trim(),
@@ -114,6 +165,7 @@ function ProjectsList() {
         client_name: newClientName.trim(),
         client_email: newClientEmail.trim(),
         client_phone: newClientPhone.trim(),
+        client_id: clientId,
         status: "active",
         created_by: userId,
       });
@@ -134,7 +186,7 @@ function ProjectsList() {
           }
         }
       }
-      setNewName(""); setNewDescription(""); setNewClientName(""); setNewClientEmail(""); setNewClientPhone(""); setSelectedTemplate(""); setShowNew(false);
+      setNewName(""); setNewDescription(""); setNewClientName(""); setNewClientEmail(""); setNewClientPhone(""); setNewClientCompany(""); setSelectedTemplate(""); setSelectedClientId(""); setClientMode("existing"); setClientSearch(""); setShowNew(false);
       toast.success("Project created");
       await load();
     } catch (err: any) {
@@ -332,6 +384,23 @@ function ProjectsList() {
             )}
           </div>
         </div>
+
+        {/* Client Info */}
+        {(detailClient || selectedProject.client_name) && (
+          <Card className="mb-6">
+            <CardContent className="pt-4 pb-4">
+              <p className="text-sm font-medium mb-1">Client</p>
+              <p className="font-medium">
+                {detailClient ? detailClient.name : selectedProject.client_name}
+                {detailClient?.company && <span className="text-muted-foreground font-normal"> · {detailClient.company}</span>}
+              </p>
+              <p className="text-sm text-muted-foreground">{detailClient ? detailClient.email : selectedProject.client_email}</p>
+              {(detailClient?.phone || selectedProject.client_phone) && (
+                <p className="text-sm text-muted-foreground">{detailClient?.phone || selectedProject.client_phone}</p>
+              )}
+            </CardContent>
+          </Card>
+        )}
 
         {/* Progress */}
         <div className="mb-6">
@@ -581,12 +650,71 @@ function ProjectsList() {
             <div><Label>Project Name</Label><Input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="e.g. Custom Gear Assembly" /></div>
             <div><Label>Description (optional)</Label><Textarea value={newDescription} onChange={(e) => setNewDescription(e.target.value)} placeholder="Brief description" rows={2} /></div>
             <div className="border-t pt-3 mt-1">
-              <p className="text-sm font-medium mb-2">Client Info (optional)</p>
-              <div className="space-y-3">
-                <div><Label>Client Name</Label><Input value={newClientName} onChange={(e) => setNewClientName(e.target.value)} placeholder="e.g. John Smith" /></div>
-                <div><Label>Client Email</Label><Input type="email" value={newClientEmail} onChange={(e) => setNewClientEmail(e.target.value)} placeholder="e.g. john@example.com" /></div>
-                <div><Label>Client Phone</Label><Input type="tel" value={newClientPhone} onChange={(e) => setNewClientPhone(e.target.value)} placeholder="e.g. (555) 123-4567" /></div>
+              <p className="text-sm font-medium mb-2">Client (optional)</p>
+              <div className="flex gap-2 mb-3">
+                <Button type="button" variant={clientMode === "existing" ? "default" : "outline"} size="sm" onClick={() => setClientMode("existing")}>Select Existing</Button>
+                <Button type="button" variant={clientMode === "new" ? "default" : "outline"} size="sm" onClick={() => setClientMode("new")}>Create New</Button>
               </div>
+              {clientMode === "existing" ? (
+                <div className="relative">
+                  <Input
+                    placeholder="Search clients..."
+                    value={clientSearch}
+                    onChange={(e) => { setClientSearch(e.target.value); setShowClientDropdown(true); }}
+                    onFocus={() => setShowClientDropdown(true)}
+                  />
+                  {selectedClientId && (
+                    <div className="mt-2 flex items-center gap-2">
+                      <Badge variant="secondary">
+                        {clients.find((c) => c.id === selectedClientId)?.name}
+                        {clients.find((c) => c.id === selectedClientId)?.company && ` (${clients.find((c) => c.id === selectedClientId)?.company})`}
+                      </Badge>
+                      <button onClick={() => { setSelectedClientId(""); setClientSearch(""); }} className="text-muted-foreground hover:text-foreground"><X className="h-3 w-3" /></button>
+                    </div>
+                  )}
+                  {showClientDropdown && clientSearch && (
+                    <div className="absolute z-50 w-full mt-1 bg-popover border rounded-md shadow-md max-h-40 overflow-y-auto">
+                      {clients
+                        .filter((c) => {
+                          const q = clientSearch.toLowerCase();
+                          return c.name.toLowerCase().includes(q) || (c.company || "").toLowerCase().includes(q) || c.email.toLowerCase().includes(q);
+                        })
+                        .map((c) => (
+                          <button
+                            key={c.id}
+                            className="w-full text-left px-3 py-2 hover:bg-accent text-sm"
+                            onClick={() => {
+                              setSelectedClientId(c.id);
+                              setClientSearch("");
+                              setShowClientDropdown(false);
+                              setNewClientName(c.name);
+                              setNewClientEmail(c.email);
+                              setNewClientPhone(c.phone || "");
+                            }}
+                          >
+                            <span className="font-medium">{c.name}</span>
+                            {c.company && <span className="text-muted-foreground"> · {c.company}</span>}
+                            <br />
+                            <span className="text-xs text-muted-foreground">{c.email}</span>
+                          </button>
+                        ))}
+                      {clients.filter((c) => {
+                        const q = clientSearch.toLowerCase();
+                        return c.name.toLowerCase().includes(q) || (c.company || "").toLowerCase().includes(q) || c.email.toLowerCase().includes(q);
+                      }).length === 0 && (
+                        <p className="px-3 py-2 text-sm text-muted-foreground">No clients found</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <div><Label>Client Name *</Label><Input value={newClientName} onChange={(e) => setNewClientName(e.target.value)} placeholder="e.g. John Smith" /></div>
+                  <div><Label>Company</Label><Input value={newClientCompany} onChange={(e) => setNewClientCompany(e.target.value)} placeholder="e.g. Acme Corp" /></div>
+                  <div><Label>Client Email *</Label><Input type="email" value={newClientEmail} onChange={(e) => setNewClientEmail(e.target.value)} placeholder="e.g. john@example.com" /></div>
+                  <div><Label>Client Phone</Label><Input type="tel" value={newClientPhone} onChange={(e) => setNewClientPhone(e.target.value)} placeholder="e.g. (555) 123-4567" /></div>
+                </div>
+              )}
             </div>
             {templates.length > 0 && (
               <div>
