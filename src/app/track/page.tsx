@@ -6,7 +6,13 @@ import { supabaseAdmin } from "@/lib/supabase";
 import type { Project, ProjectStage } from "@/lib/types";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Workflow, CheckCircle2, Clock, Loader2 } from "lucide-react";
+import { Workflow, CheckCircle2, Clock, Loader2, LayoutGrid, Workflow as WorkflowIcon } from "lucide-react";
+import dynamic from "next/dynamic";
+
+const WorkflowCanvas = dynamic(
+  () => import("@/components/workflow-canvas").then((m) => m.WorkflowCanvas),
+  { ssr: false, loading: () => <div className="h-[400px] flex items-center justify-center border rounded-lg"><Loader2 className="h-6 w-6 animate-spin" /></div> },
+);
 
 function TrackInner() {
   const searchParams = useSearchParams();
@@ -14,6 +20,7 @@ function TrackInner() {
   const [stages, setStages] = useState<ProjectStage[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [viewMode, setViewMode] = useState<"canvas" | "list">("canvas");
 
   useEffect(() => {
     const id = searchParams.get("id");
@@ -71,25 +78,48 @@ function TrackInner() {
           </CardContent>
         </Card>
 
-        <h2 className="text-lg font-semibold mb-3">Workflow Stages</h2>
-        <div className="space-y-3">
-          {stages.map((stage) => (
-            <Card key={stage.id}>
-              <CardContent className="pt-4 pb-4 flex items-center gap-3">
-                {stage.status === "completed" && <CheckCircle2 className="h-5 w-5 text-green-500" />}
-                {stage.status === "in_progress" && <Loader2 className="h-5 w-5 text-blue-500 animate-spin" />}
-                {stage.status === "pending" && <Clock className="h-5 w-5 text-muted-foreground" />}
-                <div className="flex-1">
-                  <p className="font-medium">{stage.name}</p>
-                  <p className="text-xs text-muted-foreground capitalize">{stage.status.replace("_", " ")}</p>
-                </div>
-                <Badge variant={stage.status === "completed" ? "default" : stage.status === "in_progress" ? "secondary" : "outline"} className="capitalize">
-                  {stage.status.replace("_", " ")}
-                </Badge>
-              </CardContent>
-            </Card>
-          ))}
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-lg font-semibold">Workflow Stages</h2>
+          <div className="flex items-center border rounded-md overflow-hidden">
+            <button
+              onClick={() => setViewMode("canvas")}
+              className={`p-1.5 ${viewMode === "canvas" ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:text-foreground"}`}
+              title="Canvas view"
+            >
+              <WorkflowIcon className="h-4 w-4" />
+            </button>
+            <button
+              onClick={() => setViewMode("list")}
+              className={`p-1.5 ${viewMode === "list" ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:text-foreground"}`}
+              title="List view"
+            >
+              <LayoutGrid className="h-4 w-4" />
+            </button>
+          </div>
         </div>
+
+        {viewMode === "canvas" && stages.length > 0 ? (
+          <WorkflowCanvas stages={stages} readOnly />
+        ) : (
+          <div className="space-y-3">
+            {stages.map((stage) => (
+              <Card key={stage.id}>
+                <CardContent className="pt-4 pb-4 flex items-center gap-3">
+                  {stage.status === "completed" && <CheckCircle2 className="h-5 w-5 text-green-500" />}
+                  {stage.status === "in_progress" && <Loader2 className="h-5 w-5 text-blue-500 animate-spin" />}
+                  {stage.status === "pending" && <Clock className="h-5 w-5 text-muted-foreground" />}
+                  <div className="flex-1">
+                    <p className="font-medium">{stage.name}</p>
+                    <p className="text-xs text-muted-foreground capitalize">{stage.status.replace("_", " ")}</p>
+                  </div>
+                  <Badge variant={stage.status === "completed" ? "default" : stage.status === "in_progress" ? "secondary" : "outline"} className="capitalize">
+                    {stage.status.replace("_", " ")}
+                  </Badge>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
       </main>
 
       <footer className="border-t py-4 px-4 mt-8">
