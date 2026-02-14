@@ -69,7 +69,7 @@ function ProjectsList() {
   const [statusFilter, setStatusFilter] = useState("active-completed");
   const [sortBy, setSortBy] = useState("newest");
   const [files, setFiles] = useState<ProjectFile[]>([]);
-  const [viewMode, setViewMode] = useState<"canvas" | "list">("canvas");
+  // Canvas-only view (no list mode)
 
   const load = useCallback(async () => {
     if (!orgId) return;
@@ -422,30 +422,13 @@ function ProjectsList() {
         {/* Stages */}
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-lg font-semibold">Workflow Stages</h2>
-          <div className="flex items-center border rounded-md overflow-hidden">
-            <button
-              onClick={() => setViewMode("canvas")}
-              className={`p-1.5 ${viewMode === "canvas" ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:text-foreground"}`}
-              title="Canvas view"
-            >
-              <WorkflowIcon className="h-4 w-4" />
-            </button>
-            <button
-              onClick={() => setViewMode("list")}
-              className={`p-1.5 ${viewMode === "list" ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:text-foreground"}`}
-              title="List view"
-            >
-              <LayoutGrid className="h-4 w-4" />
-            </button>
-          </div>
         </div>
 
-        {viewMode === "canvas" ? (
-          <div className="mb-4">
-            {stages.length === 0 ? (
-              <Card><CardContent className="pt-6 text-center text-muted-foreground">No stages yet. {isAdmin || isWorker ? "Add your first one below!" : ""}</CardContent></Card>
-            ) : (
-              <WorkflowCanvas
+        <div className="mb-4">
+          {stages.length === 0 && !(isAdmin || isWorker) ? (
+            <Card><CardContent className="pt-6 text-center text-muted-foreground">No stages yet.</CardContent></Card>
+          ) : (
+            <WorkflowCanvas
                 stages={stages}
                 readOnly={isClient}
                 isAdmin={isAdmin}
@@ -472,71 +455,7 @@ function ProjectsList() {
               />
             )}
           </div>
-        ) : (
-          <>
-            <div className="space-y-3 mb-4">
-              {stages.length === 0 ? (
-                <Card><CardContent className="pt-6 text-center text-muted-foreground">No stages yet. {isAdmin || isWorker ? "Add your first one below!" : ""}</CardContent></Card>
-              ) : (
-                stages.map((stage) => (
-                  <Card key={stage.id}>
-                    <CardContent className="pt-4 pb-4">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <div className="flex items-center gap-2">
-                            {stage.status === "completed" && <CheckCircle2 className="h-5 w-5 text-green-500" />}
-                            {stage.status === "in_progress" && <Loader2 className="h-5 w-5 text-blue-500 animate-spin" />}
-                            {stage.status === "pending" && <Clock className="h-5 w-5 text-muted-foreground" />}
-                          </div>
-                          <div>
-                            <p className="font-medium">{stage.name}</p>
-                            <p className="text-xs text-muted-foreground">
-                              {stage.status === "completed" && stage.completed_at && `Completed ${new Date(stage.completed_at).toLocaleDateString()}`}
-                              {stage.status === "in_progress" && stage.started_at && `Started ${new Date(stage.started_at).toLocaleDateString()}`}
-                              {stage.status === "pending" && "Pending"}
-                            </p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          {(isAdmin || isWorker) && stage.status === "pending" && (
-                            <Button size="sm" variant="outline" onClick={() => updateStageStatus(stage.id, "in_progress")}>
-                              <Play className="h-3 w-3 mr-1" /> Start
-                            </Button>
-                          )}
-                          {(isAdmin || isWorker) && stage.status === "in_progress" && (
-                            <Button size="sm" className="bg-green-600 hover:bg-green-700" onClick={() => updateStageStatus(stage.id, "completed")}>
-                              <CheckCircle2 className="h-3 w-3 mr-1" /> Complete
-                            </Button>
-                          )}
-                          {isAdmin && (
-                            <Button size="sm" variant="ghost" className="text-destructive" onClick={() => removeStage(stage.id)}>
-                              <Trash2 className="h-3 w-3" />
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))
-              )}
-            </div>
-
-            {/* Add stage (list view) */}
-            {(isAdmin || isWorker) && (
-              <div className="flex gap-2 mb-8">
-                <Input
-                  placeholder="New stage name (e.g. Metal Cutting)"
-                  value={newStageName}
-                  onChange={(e) => setNewStageName(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && addStage()}
-                />
-                <Button onClick={addStage} disabled={!newStageName.trim()}>
-                  <Plus className="h-4 w-4 mr-1" /> Add
-                </Button>
-              </div>
-            )}
-          </>
-        )}
+        )
 
         {/* Preset stages quick-add */}
         {(isAdmin || isWorker) && presetStages.length > 0 && (
