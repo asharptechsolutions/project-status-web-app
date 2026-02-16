@@ -5,6 +5,7 @@ import type { UserRole } from "./types";
 import type { User, Session } from "@supabase/supabase-js";
 
 interface TeamMember {
+  id: string;
   team_id: string;
   user_id: string;
   role: string;
@@ -78,7 +79,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .single();
 
       if (memberData) {
-        setMember(memberData as TeamMember);
+        setMember({ ...memberData, id: memberData.user_id } as TeamMember);
         const team = (memberData as any).teams;
         if (team) {
           setOrgId(team.id);

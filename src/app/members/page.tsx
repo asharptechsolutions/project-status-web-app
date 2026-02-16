@@ -43,8 +43,8 @@ function MembersInner() {
     if (!orgId || !name.trim() || !email.trim()) return;
     try {
       await createMember({
-        clerk_user_id: `pending_${email.toLowerCase().trim()}`,
-        org_id: orgId,
+        user_id: `pending_${email.toLowerCase().trim()}`,
+        team_id: orgId,
         role,
         email: email.toLowerCase().trim(),
         name: name.trim(),
@@ -141,7 +141,7 @@ function MembersInner() {
                   <Button variant="ghost" size="sm" onClick={() => openEdit(m)}>
                     <Pencil className="h-4 w-4" />
                   </Button>
-                  {m.clerk_user_id !== userId && (
+                  {m.user_id !== userId && (
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
                         <Button variant="ghost" size="sm"><Trash2 className="h-4 w-4" /></Button>

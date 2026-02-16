@@ -6,8 +6,8 @@ export interface Organization {
 
 export interface Member {
   id: string;
-  clerk_user_id: string;
-  org_id: string;
+  user_id: string;
+  team_id: string;
   role: "admin" | "worker" | "client";
   email: string;
   name: string;
@@ -16,7 +16,7 @@ export interface Member {
 
 export interface Project {
   id: string;
-  org_id: string;
+  team_id: string;
   name: string;
   description: string;
   status: "active" | "completed" | "archived";
@@ -67,7 +67,7 @@ export interface ProjectFile {
 
 export interface Template {
   id: string;
-  org_id: string;
+  team_id: string;
   name: string;
   description: string;
   stages: { name: string; position: number }[];
@@ -77,7 +77,7 @@ export interface Template {
 
 export interface PresetStage {
   id: string;
-  org_id: string;
+  team_id: string;
   name: string;
   created_by: string;
   created_at: string;

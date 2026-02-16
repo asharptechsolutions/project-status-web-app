@@ -2,7 +2,7 @@
 import { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
-import { supabaseAdmin } from "@/lib/supabase";
+import { createClient } from "@/lib/supabase";
 import type { Project, ProjectStage } from "@/lib/types";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -21,11 +21,11 @@ function TrackInner() {
 
     (async () => {
       try {
-        const { data: proj } = await supabaseAdmin.from("projects").select("*").eq("id", id).single();
+        const { data: proj } = await createClient().from("projects").select("*").eq("id", id).single();
         if (!proj) { setError("Project not found."); setLoading(false); return; }
         setProject(proj as Project);
 
-        const { data: stgs } = await supabaseAdmin.from("project_stages").select("*").eq("project_id", id).order("position");
+        const { data: stgs } = await createClient().from("project_stages").select("*").eq("project_id", id).order("position");
         setStages((stgs || []) as ProjectStage[]);
       } catch {
         setError("Failed to load project.");

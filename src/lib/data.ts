@@ -1,4 +1,6 @@
-import { supabaseAdmin } from "./supabase";
+import { createClient } from "./supabase";
+
+const supabase = createClient();
 import type {
   Project,
   ProjectStage,
@@ -13,17 +15,17 @@ import type {
 // ============ PROJECTS ============
 
 export async function getProjects(orgId: string): Promise<Project[]> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await supabase
     .from("projects")
     .select("*")
-    .eq("org_id", orgId)
+    .eq("team_id", orgId)
     .order("created_at", { ascending: false });
   if (error) throw new Error(error.message);
   return (data || []) as Project[];
 }
 
 export async function getProject(id: string): Promise<Project | null> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await supabase
     .from("projects")
     .select("*")
     .eq("id", id)
@@ -35,7 +37,7 @@ export async function getProject(id: string): Promise<Project | null> {
 export async function createProject(
   project: Omit<Project, "id" | "created_at" | "updated_at">
 ): Promise<string> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await supabase
     .from("projects")
     .insert(project)
     .select("id")
@@ -48,7 +50,7 @@ export async function updateProject(
   id: string,
   updates: Partial<Project>
 ): Promise<void> {
-  const { error } = await supabaseAdmin
+  const { error } = await supabase
     .from("projects")
     .update({ ...updates, updated_at: new Date().toISOString() })
     .eq("id", id);
@@ -56,7 +58,7 @@ export async function updateProject(
 }
 
 export async function deleteProject(id: string): Promise<void> {
-  const { error } = await supabaseAdmin
+  const { error } = await supabase
     .from("projects")
     .delete()
     .eq("id", id);
@@ -66,7 +68,7 @@ export async function deleteProject(id: string): Promise<void> {
 // ============ PROJECT STAGES ============
 
 export async function getProjectStages(projectId: string): Promise<ProjectStage[]> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await supabase
     .from("project_stages")
     .select("*")
     .eq("project_id", projectId)
@@ -78,7 +80,7 @@ export async function getProjectStages(projectId: string): Promise<ProjectStage[
 export async function createProjectStage(
   stage: Omit<ProjectStage, "id">
 ): Promise<ProjectStage> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await supabase
     .from("project_stages")
     .insert(stage)
     .select("*")
@@ -91,7 +93,7 @@ export async function updateProjectStage(
   id: string,
   updates: Partial<ProjectStage>
 ): Promise<void> {
-  const { error } = await supabaseAdmin
+  const { error } = await supabase
     .from("project_stages")
     .update(updates)
     .eq("id", id);
@@ -99,7 +101,7 @@ export async function updateProjectStage(
 }
 
 export async function deleteProjectStage(id: string): Promise<void> {
-  const { error } = await supabaseAdmin
+  const { error } = await supabase
     .from("project_stages")
     .delete()
     .eq("id", id);
@@ -111,7 +113,7 @@ export async function reorderStages(
   stageIds: string[]
 ): Promise<void> {
   for (let i = 0; i < stageIds.length; i++) {
-    await supabaseAdmin
+    await supabase
       .from("project_stages")
       .update({ position: i })
       .eq("id", stageIds[i]);
@@ -123,7 +125,7 @@ export async function reorderStages(
 export async function getProjectAssignments(
   projectId: string
 ): Promise<ProjectAssignment[]> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await supabase
     .from("project_assignments")
     .select("*")
     .eq("project_id", projectId);
@@ -135,7 +137,7 @@ export async function assignProject(
   projectId: string,
   memberId: string
 ): Promise<void> {
-  const { error } = await supabaseAdmin
+  const { error } = await supabase
     .from("project_assignments")
     .upsert({ project_id: projectId, member_id: memberId }, {
       onConflict: "project_id,member_id",
@@ -147,7 +149,7 @@ export async function unassignProject(
   projectId: string,
   memberId: string
 ): Promise<void> {
-  const { error } = await supabaseAdmin
+  const { error } = await supabase
     .from("project_assignments")
     .delete()
     .eq("project_id", projectId)
@@ -160,7 +162,7 @@ export async function unassignProject(
 export async function getProjectMessages(
   projectId: string
 ): Promise<ProjectMessage[]> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await supabase
     .from("messages")
     .select("*")
     .eq("project_id", projectId)
@@ -172,7 +174,7 @@ export async function getProjectMessages(
 export async function sendProjectMessage(
   message: Omit<ProjectMessage, "id" | "created_at">
 ): Promise<string> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await supabase
     .from("messages")
     .insert(message)
     .select("id")
@@ -186,7 +188,7 @@ export async function sendProjectMessage(
 export async function getProjectFiles(
   projectId: string
 ): Promise<ProjectFile[]> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await supabase
     .from("files")
     .select("*")
     .eq("project_id", projectId)
@@ -198,7 +200,7 @@ export async function getProjectFiles(
 export async function createFileRecord(
   file: Omit<ProjectFile, "id" | "created_at">
 ): Promise<ProjectFile> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await supabase
     .from("files")
     .insert(file)
     .select("*")
@@ -208,7 +210,7 @@ export async function createFileRecord(
 }
 
 export async function deleteFileRecord(id: string): Promise<void> {
-  const { error } = await supabaseAdmin
+  const { error } = await supabase
     .from("files")
     .delete()
     .eq("id", id);
@@ -224,7 +226,7 @@ export async function uploadFile(
   const fileName = `${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
   const path = `project-files/${projectId}/${fileName}`;
 
-  const { error: uploadError } = await supabaseAdmin.storage
+  const { error: uploadError } = await supabase.storage
     .from("files")
     .upload(path, file, { contentType: file.type });
   
@@ -233,7 +235,7 @@ export async function uploadFile(
     console.warn("Storage upload failed, using placeholder:", uploadError.message);
   }
 
-  const { data: urlData } = supabaseAdmin.storage
+  const { data: urlData } = supabase.storage
     .from("files")
     .getPublicUrl(path);
 
@@ -250,10 +252,10 @@ export async function uploadFile(
 // ============ TEMPLATES ============
 
 export async function getTemplates(orgId: string): Promise<Template[]> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await supabase
     .from("templates")
     .select("*")
-    .eq("org_id", orgId)
+    .eq("team_id", orgId)
     .order("created_at", { ascending: false });
   if (error) throw new Error(error.message);
   return (data || []) as Template[];
@@ -262,7 +264,7 @@ export async function getTemplates(orgId: string): Promise<Template[]> {
 export async function createTemplate(
   template: Omit<Template, "id" | "created_at">
 ): Promise<string> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await supabase
     .from("templates")
     .insert(template)
     .select("id")
@@ -275,7 +277,7 @@ export async function updateTemplate(
   id: string,
   updates: Partial<Template>
 ): Promise<void> {
-  const { error } = await supabaseAdmin
+  const { error } = await supabase
     .from("templates")
     .update(updates)
     .eq("id", id);
@@ -283,7 +285,7 @@ export async function updateTemplate(
 }
 
 export async function deleteTemplate(id: string): Promise<void> {
-  const { error } = await supabaseAdmin
+  const { error } = await supabase
     .from("templates")
     .delete()
     .eq("id", id);
@@ -293,10 +295,10 @@ export async function deleteTemplate(id: string): Promise<void> {
 // ============ PRESET STAGES ============
 
 export async function getPresetStages(orgId: string): Promise<PresetStage[]> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await supabase
     .from("preset_stages")
     .select("*")
-    .eq("org_id", orgId)
+    .eq("team_id", orgId)
     .order("name", { ascending: true });
   if (error) throw new Error(error.message);
   return (data || []) as PresetStage[];
@@ -305,7 +307,7 @@ export async function getPresetStages(orgId: string): Promise<PresetStage[]> {
 export async function createPresetStage(
   stage: Omit<PresetStage, "id" | "created_at">
 ): Promise<string> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await supabase
     .from("preset_stages")
     .insert(stage)
     .select("id")
@@ -315,7 +317,7 @@ export async function createPresetStage(
 }
 
 export async function deletePresetStage(id: string): Promise<void> {
-  const { error } = await supabaseAdmin
+  const { error } = await supabase
     .from("preset_stages")
     .delete()
     .eq("id", id);
@@ -325,10 +327,10 @@ export async function deletePresetStage(id: string): Promise<void> {
 // ============ MEMBERS ============
 
 export async function getMembers(orgId: string): Promise<Member[]> {
-  const { data, error } = await supabaseAdmin
-    .from("members")
+  const { data, error } = await supabase
+    .from("team_members")
     .select("*")
-    .eq("org_id", orgId)
+    .eq("team_id", orgId)
     .order("name", { ascending: true });
   if (error) throw new Error(error.message);
   return (data || []) as Member[];
@@ -338,11 +340,11 @@ export async function getMember(
   userId: string,
   orgId: string
 ): Promise<Member | null> {
-  const { data, error } = await supabaseAdmin
-    .from("members")
+  const { data, error } = await supabase
+    .from("team_members")
     .select("*")
-    .eq("clerk_user_id", userId)
-    .eq("org_id", orgId)
+    .eq("user_id", userId)
+    .eq("team_id", orgId)
     .single();
   if (error) return null;
   return data as Member;
@@ -351,8 +353,8 @@ export async function getMember(
 export async function createMember(
   member: Omit<Member, "id" | "created_at">
 ): Promise<Member> {
-  const { data, error } = await supabaseAdmin
-    .from("members")
+  const { data, error } = await supabase
+    .from("team_members")
     .insert(member)
     .select("*")
     .single();
@@ -364,16 +366,16 @@ export async function updateMember(
   id: string,
   updates: Partial<Member>
 ): Promise<void> {
-  const { error } = await supabaseAdmin
-    .from("members")
+  const { error } = await supabase
+    .from("team_members")
     .update(updates)
     .eq("id", id);
   if (error) throw new Error(error.message);
 }
 
 export async function deleteMember(id: string): Promise<void> {
-  const { error } = await supabaseAdmin
-    .from("members")
+  const { error } = await supabase
+    .from("team_members")
     .delete()
     .eq("id", id);
   if (error) throw new Error(error.message);
@@ -384,7 +386,7 @@ export async function deleteMember(id: string): Promise<void> {
 export async function getAssignedProjects(
   memberId: string
 ): Promise<Project[]> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await supabase
     .from("project_assignments")
     .select("project_id, projects(*)")
     .eq("member_id", memberId);

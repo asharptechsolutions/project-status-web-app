@@ -108,7 +108,7 @@ function ProjectsList() {
     if (!newName.trim()) { toast.error("Project name is required"); return; }
     try {
       const id = await createProject({
-        org_id: orgId,
+        team_id: orgId,
         name: newName.trim(),
         description: newDescription.trim(),
         client_name: newClientName.trim(),

@@ -55,7 +55,7 @@ function TemplatesInner() {
     }
     try {
       await createTemplate({
-        org_id: orgId,
+        team_id: orgId,
         name: name.trim(),
         description: "",
         stages: stageNames.map((s, i) => ({ name: s, position: i })),
@@ -95,7 +95,7 @@ function TemplatesInner() {
     if (!orgId || !userId) return;
     try {
       await createTemplate({
-        org_id: orgId,
+        team_id: orgId,
         name: sample.name,
         description: "",
         stages: sample.stages.map((s, i) => ({ name: s, position: i })),
@@ -210,12 +210,12 @@ function TemplatesInner() {
         <div className="flex gap-2 mb-4">
           <Input placeholder="Stage name (e.g. Quality Check)" value={newPresetName} onChange={(e) => setNewPresetName(e.target.value)} onKeyDown={async (e) => {
             if (e.key === "Enter" && orgId && userId && newPresetName.trim()) {
-              try { await createPresetStage({ org_id: orgId, name: newPresetName.trim(), created_by: userId }); setNewPresetName(""); toast.success("Added"); load(); } catch (err: any) { toast.error(err.message); }
+              try { await createPresetStage({ team_id: orgId, name: newPresetName.trim(), created_by: userId }); setNewPresetName(""); toast.success("Added"); load(); } catch (err: any) { toast.error(err.message); }
             }
           }} className="max-w-md" />
           <Button onClick={async () => {
             if (!orgId || !userId || !newPresetName.trim()) return;
-            try { await createPresetStage({ org_id: orgId, name: newPresetName.trim(), created_by: userId }); setNewPresetName(""); toast.success("Added"); load(); } catch (err: any) { toast.error(err.message); }
+            try { await createPresetStage({ team_id: orgId, name: newPresetName.trim(), created_by: userId }); setNewPresetName(""); toast.success("Added"); load(); } catch (err: any) { toast.error(err.message); }
           }} disabled={!newPresetName.trim()}><Plus className="h-4 w-4 mr-1" /> Add</Button>
         </div>
         {presetStages.length > 0 ? (
