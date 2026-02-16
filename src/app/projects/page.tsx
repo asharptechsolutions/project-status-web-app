@@ -9,6 +9,7 @@ import {
   getProjectStages, createProjectStage, updateProjectStage, deleteProjectStage,
   getProjectFiles, getProjectMessages, getTemplates, getPresetStages,
   getAssignedProjects, getMembers, getClients, createNewClient,
+  setProjectClients,
 } from "@/lib/data";
 import type { Project, ProjectStage, ProjectFile, Template, PresetStage, Member, Client } from "@/lib/types";
 import { Button } from "@/components/ui/button";
@@ -44,7 +45,7 @@ function ProjectsList() {
   const [showNew, setShowNew] = useState(false);
   const [newName, setNewName] = useState("");
   const [newDescription, setNewDescription] = useState("");
-  const [selectedClientId, setSelectedClientId] = useState("");
+  const [selectedClientIds, setSelectedClientIds] = useState<string[]>([]);
   const [showNewClient, setShowNewClient] = useState(false);
   const [newClientName, setNewClientName] = useState("");
   const [newClientEmail, setNewClientEmail] = useState("");
@@ -121,7 +122,7 @@ function ProjectsList() {
         created_by: userId,
       });
       setClients((prev) => [...prev, client].sort((a, b) => a.name.localeCompare(b.name)));
-      setSelectedClientId(client.id);
+      setSelectedClientIds((prev) => [...prev, client.id]);
       setShowNewClient(false);
       setNewClientName(""); setNewClientEmail(""); setNewClientPhone("");
       toast.success("Client created");
@@ -135,19 +136,23 @@ function ProjectsList() {
   const handleCreate = async () => {
     if (!orgId || !userId) return;
     if (!newName.trim()) { toast.error("Project name is required"); return; }
+    if (selectedClientIds.length === 0) { toast.error("At least one client is required"); return; }
     try {
-      const selectedClient = clients.find((c) => c.id === selectedClientId);
+      // Use first client for backward-compat fields
+      const primaryClient = clients.find((c) => c.id === selectedClientIds[0]);
       const id = await createProject({
         team_id: orgId,
         name: newName.trim(),
         description: newDescription.trim(),
-        client_name: selectedClient?.name || "",
-        client_email: selectedClient?.email || "",
-        client_phone: selectedClient?.phone || "",
-        client_id: selectedClientId || undefined,
+        client_name: primaryClient?.name || "",
+        client_email: primaryClient?.email || "",
+        client_phone: primaryClient?.phone || "",
+        client_id: selectedClientIds[0] || undefined,
         status: "active",
         created_by: userId,
       });
+      // Save all clients to junction table
+      await setProjectClients(id, selectedClientIds);
       // If template selected, create stages from it
       if (selectedTemplate) {
         const tmpl = templates.find((t) => t.id === selectedTemplate);
@@ -165,7 +170,7 @@ function ProjectsList() {
           }
         }
       }
-      setNewName(""); setNewDescription(""); setSelectedClientId(""); setShowNewClient(false); setNewClientName(""); setNewClientEmail(""); setNewClientPhone(""); setSelectedTemplate(""); setShowNew(false);
+      setNewName(""); setNewDescription(""); setSelectedClientIds([]); setShowNewClient(false); setNewClientName(""); setNewClientEmail(""); setNewClientPhone(""); setSelectedTemplate(""); setShowNew(false);
       toast.success("Project created");
       await load();
     } catch (err: any) {
@@ -612,18 +617,46 @@ function ProjectsList() {
             <div><Label>Project Name</Label><Input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="e.g. Custom Gear Assembly" /></div>
             <div><Label>Description (optional)</Label><Textarea value={newDescription} onChange={(e) => setNewDescription(e.target.value)} placeholder="Brief description" rows={2} /></div>
             <div className="border-t pt-3 mt-1">
-              <p className="text-sm font-medium mb-2">Client (optional)</p>
+              <p className="text-sm font-medium mb-2">Clients <span className="text-destructive">*</span></p>
               <div className="space-y-3">
-                <Select value={selectedClientId} onValueChange={(v) => { setSelectedClientId(v); setShowNewClient(false); }}>
-                  <SelectTrigger><SelectValue placeholder="Select a client" /></SelectTrigger>
-                  <SelectContent>
-                    {clients.map((c) => (
-                      <SelectItem key={c.id} value={c.id}>{c.name}{c.email ? ` (${c.email})` : ""}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                {/* Selected clients as chips */}
+                {selectedClientIds.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {selectedClientIds.map((cid) => {
+                      const c = clients.find((cl) => cl.id === cid);
+                      if (!c) return null;
+                      return (
+                        <Badge key={cid} variant="secondary" className="flex items-center gap-1 py-1 px-2 text-sm">
+                          {c.name}
+                          <button
+                            type="button"
+                            onClick={() => setSelectedClientIds((prev) => prev.filter((id) => id !== cid))}
+                            className="ml-1 hover:text-destructive"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </Badge>
+                      );
+                    })}
+                  </div>
+                )}
+                {/* Dropdown to add more clients */}
+                {(() => {
+                  const available = clients.filter((c) => !selectedClientIds.includes(c.id));
+                  if (available.length === 0 && !showNewClient) return null;
+                  return available.length > 0 ? (
+                    <Select value="" onValueChange={(v) => { if (v) setSelectedClientIds((prev) => [...prev, v]); }}>
+                      <SelectTrigger><SelectValue placeholder="Add a client…" /></SelectTrigger>
+                      <SelectContent>
+                        {available.map((c) => (
+                          <SelectItem key={c.id} value={c.id}>{c.name}{c.email ? ` (${c.email})` : ""}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : null;
+                })()}
                 {!showNewClient ? (
-                  <Button type="button" variant="outline" size="sm" onClick={() => { setShowNewClient(true); setSelectedClientId(""); }}>
+                  <Button type="button" variant="outline" size="sm" onClick={() => setShowNewClient(true)}>
                     <UserPlus className="h-4 w-4 mr-1" /> Add New Client
                   </Button>
                 ) : (
@@ -656,7 +689,7 @@ function ProjectsList() {
                 </Select>
               </div>
             )}
-            <Button onClick={handleCreate} className="w-full" disabled={!newName.trim()}>Create Project</Button>
+            <Button onClick={handleCreate} className="w-full" disabled={!newName.trim() || selectedClientIds.length === 0}>Create Project</Button>
           </div>
         </DialogContent>
       </Dialog>

@@ -24,7 +24,7 @@ export interface Project {
   client_email: string;
   client_phone: string;
   created_by: string;
-  client_id?: string;
+  client_id?: string; // deprecated, use project_clients junction
   created_at: string;
   updated_at: string;
 }
@@ -91,6 +91,13 @@ export interface Client {
   email: string;
   phone: string;
   created_by: string;
+  created_at: string;
+}
+
+export interface ProjectClient {
+  id: string;
+  project_id: string;
+  client_id: string;
   created_at: string;
 }
 

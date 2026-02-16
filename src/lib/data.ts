@@ -56,6 +56,50 @@ export async function deleteClient(id: string): Promise<void> {
   if (error) throw new Error(error.message);
 }
 
+// ============ PROJECT CLIENTS (junction) ============
+
+export async function getProjectClients(projectId: string): Promise<string[]> {
+  const { data, error } = await supabase
+    .from("project_clients")
+    .select("client_id")
+    .eq("project_id", projectId);
+  if (error) throw new Error(error.message);
+  return (data || []).map((d: any) => d.client_id);
+}
+
+export async function setProjectClients(projectId: string, clientIds: string[]): Promise<void> {
+  // Delete existing
+  const { error: delError } = await supabase
+    .from("project_clients")
+    .delete()
+    .eq("project_id", projectId);
+  if (delError) throw new Error(delError.message);
+  // Insert new
+  if (clientIds.length > 0) {
+    const rows = clientIds.map((cid) => ({ project_id: projectId, client_id: cid }));
+    const { error: insError } = await supabase
+      .from("project_clients")
+      .insert(rows);
+    if (insError) throw new Error(insError.message);
+  }
+}
+
+export async function addProjectClient(projectId: string, clientId: string): Promise<void> {
+  const { error } = await supabase
+    .from("project_clients")
+    .upsert({ project_id: projectId, client_id: clientId }, { onConflict: "project_id,client_id" });
+  if (error) throw new Error(error.message);
+}
+
+export async function removeProjectClient(projectId: string, clientId: string): Promise<void> {
+  const { error } = await supabase
+    .from("project_clients")
+    .delete()
+    .eq("project_id", projectId)
+    .eq("client_id", clientId);
+  if (error) throw new Error(error.message);
+}
+
 // ============ PROJECTS ============
 
 export async function getProjects(orgId: string): Promise<Project[]> {
