@@ -29,6 +29,12 @@ import {
 import { toast } from "sonner";
 import { FileUpload } from "@/components/file-upload";
 import { ProjectChat } from "@/components/project-chat";
+import dynamic from "next/dynamic";
+
+const WorkflowCanvas = dynamic(
+  () => import("@/components/workflow-canvas").then((m) => m.WorkflowCanvas),
+  { ssr: false, loading: () => <div className="h-[400px] flex items-center justify-center border rounded-lg"><Loader2 className="h-6 w-6 animate-spin" /></div> },
+);
 
 function ProjectsList() {
   const { orgId, userId, isAdmin, isWorker, isClient, member } = useAuth();
@@ -380,69 +386,35 @@ function ProjectsList() {
           </div>
         </div>
 
-        {/* Stages */}
+        {/* Workflow Canvas */}
         <h2 className="text-lg font-semibold mb-3">Workflow Stages</h2>
-        <div className="space-y-3 mb-4">
-          {stages.length === 0 ? (
-            <Card><CardContent className="pt-6 text-center text-muted-foreground">No stages yet. {isAdmin || isWorker ? "Add your first one below!" : ""}</CardContent></Card>
-          ) : (
-            stages.map((stage) => (
-              <Card key={stage.id}>
-                <CardContent className="pt-4 pb-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="flex items-center gap-2">
-                        {stage.status === "completed" && <CheckCircle2 className="h-5 w-5 text-green-500" />}
-                        {stage.status === "in_progress" && <Loader2 className="h-5 w-5 text-blue-500 animate-spin" />}
-                        {stage.status === "pending" && <Clock className="h-5 w-5 text-muted-foreground" />}
-                      </div>
-                      <div>
-                        <p className="font-medium">{stage.name}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {stage.status === "completed" && stage.completed_at && `Completed ${new Date(stage.completed_at).toLocaleDateString()}`}
-                          {stage.status === "in_progress" && stage.started_at && `Started ${new Date(stage.started_at).toLocaleDateString()}`}
-                          {stage.status === "pending" && "Pending"}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {(isAdmin || isWorker) && stage.status === "pending" && (
-                        <Button size="sm" variant="outline" onClick={() => updateStageStatus(stage.id, "in_progress")}>
-                          <Play className="h-3 w-3 mr-1" /> Start
-                        </Button>
-                      )}
-                      {(isAdmin || isWorker) && stage.status === "in_progress" && (
-                        <Button size="sm" className="bg-green-600 hover:bg-green-700" onClick={() => updateStageStatus(stage.id, "completed")}>
-                          <CheckCircle2 className="h-3 w-3 mr-1" /> Complete
-                        </Button>
-                      )}
-                      {isAdmin && (
-                        <Button size="sm" variant="ghost" className="text-destructive" onClick={() => removeStage(stage.id)}>
-                          <Trash2 className="h-3 w-3" />
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))
-          )}
+        <div className="mb-4">
+          <WorkflowCanvas
+            stages={stages}
+            readOnly={isClient}
+            isAdmin={isAdmin}
+            isWorker={isWorker}
+            onUpdateStatus={(stageId, status) => updateStageStatus(stageId, status)}
+            onRemoveStage={(stageId) => removeStage(stageId)}
+            onAddStage={async (name) => {
+              if (!selectedProject) return;
+              try {
+                const stage = await createProjectStage({
+                  project_id: selectedProject.id,
+                  name,
+                  status: "pending",
+                  position: stages.length,
+                  started_at: null,
+                  completed_at: null,
+                  started_by: null,
+                });
+                setStages((prev) => [...prev, stage]);
+              } catch (err: any) {
+                toast.error(err.message || "Failed to add stage");
+              }
+            }}
+          />
         </div>
-
-        {/* Add stage */}
-        {(isAdmin || isWorker) && (
-          <div className="flex gap-2 mb-8">
-            <Input
-              placeholder="New stage name (e.g. Metal Cutting)"
-              value={newStageName}
-              onChange={(e) => setNewStageName(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && addStage()}
-            />
-            <Button onClick={addStage} disabled={!newStageName.trim()}>
-              <Plus className="h-4 w-4 mr-1" /> Add
-            </Button>
-          </div>
-        )}
 
         {/* Preset stages quick-add */}
         {(isAdmin || isWorker) && presetStages.length > 0 && (
