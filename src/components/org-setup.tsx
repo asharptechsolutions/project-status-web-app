@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
-import { supabaseAdmin } from "@/lib/supabase";
+import { createClient } from "@/lib/supabase";
 import { useAuth } from "@/lib/auth-context";
 
 export function OrgSetup() {
@@ -20,26 +20,34 @@ export function OrgSetup() {
     setLoading(true);
     setError("");
 
+    const supabase = createClient();
+
     try {
-      // Create organization
-      const { data: org, error: orgErr } = await supabaseAdmin
-        .from("organizations")
-        .insert({ name: name.trim() })
+      // Create team
+      const { data: team, error: teamErr } = await supabase
+        .from("teams")
+        .insert({ name: name.trim(), created_by: userId })
         .select("id")
         .single();
-      if (orgErr) throw orgErr;
+      if (teamErr) throw teamErr;
 
-      // Create member record as admin
-      const { error: memErr } = await supabaseAdmin
-        .from("members")
+      // Add self as owner member
+      const { error: memErr } = await supabase
+        .from("team_members")
         .insert({
-          clerk_user_id: userId,
-          org_id: org.id,
-          role: "admin",
-          email: "",
-          name: name.trim(),
+          user_id: userId,
+          team_id: team.id,
+          role: "owner",
+          joined_at: new Date().toISOString(),
         });
       if (memErr) throw memErr;
+
+      // Update profile with team_id
+      const { error: profErr } = await supabase
+        .from("profiles")
+        .update({ team_id: team.id })
+        .eq("id", userId);
+      if (profErr) throw profErr;
 
       await refreshMember();
     } catch (err: any) {

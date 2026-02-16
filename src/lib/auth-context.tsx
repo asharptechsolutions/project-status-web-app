@@ -1,9 +1,17 @@
 "use client";
 import { createContext, useContext, useEffect, useState, ReactNode, useCallback } from "react";
 import { createClient } from "./supabase";
-import { supabaseAdmin } from "./supabase";
-import type { Member, UserRole } from "./types";
+import type { UserRole } from "./types";
 import type { User, Session } from "@supabase/supabase-js";
+
+interface TeamMember {
+  team_id: string;
+  user_id: string;
+  role: string;
+  invited_at: string;
+  joined_at: string | null;
+  teams?: { id: string; name: string };
+}
 
 interface AuthCtx {
   user: User | null;
@@ -12,7 +20,7 @@ interface AuthCtx {
   orgId: string | null;
   orgName: string | null;
   role: UserRole | null;
-  member: Member | null;
+  member: TeamMember | null;
   loading: boolean;
   isPlatformAdmin: boolean;
   isAdmin: boolean;
@@ -39,16 +47,16 @@ const AuthContext = createContext<AuthCtx>({
   signOut: async () => {},
 });
 
-const supabase = createClient();
-
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
-  const [member, setMember] = useState<Member | null>(null);
+  const [member, setMember] = useState<TeamMember | null>(null);
   const [orgId, setOrgId] = useState<string | null>(null);
   const [orgName, setOrgName] = useState<string | null>(null);
   const [isPlatformAdmin, setIsPlatformAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
+
+  const supabase = createClient();
 
   const refreshMember = useCallback(async () => {
     if (!user) {
@@ -61,29 +69,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      // Check platform admin status
-      const { data: adminData } = await supabaseAdmin
-        .from("platform_admins")
-        .select("clerk_user_id")
-        .eq("clerk_user_id", user.id)
-        .single();
-      setIsPlatformAdmin(!!adminData);
-
-      // Get the user's first organization membership
-      const { data: memberData } = await supabaseAdmin
-        .from("members")
-        .select("*, organizations(id, name)")
-        .eq("clerk_user_id", user.id)
+      // Get the user's first team membership
+      const { data: memberData } = await supabase
+        .from("team_members")
+        .select("*, teams(id, name)")
+        .eq("user_id", user.id)
         .limit(1)
         .single();
 
       if (memberData) {
-        setMember(memberData as Member);
-        const org = (memberData as any).organizations;
-        if (org) {
-          setOrgId(org.id);
-          setOrgName(org.name);
+        setMember(memberData as TeamMember);
+        const team = (memberData as any).teams;
+        if (team) {
+          setOrgId(team.id);
+          setOrgName(team.name);
         }
+        // Owner role = admin equivalent
+        setIsPlatformAdmin(memberData.role === "owner");
       } else {
         setMember(null);
         setOrgId(null);
@@ -97,6 +99,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [user]);
 
   useEffect(() => {
+    const supabase = createClient();
     // Get initial session
     supabase.auth.getSession().then(({ data: { session: s } }) => {
       setSession(s);
@@ -124,6 +127,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [user, refreshMember]);
 
   const signOut = useCallback(async () => {
+    const supabase = createClient();
     await supabase.auth.signOut();
     setUser(null);
     setSession(null);
@@ -134,7 +138,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const role: UserRole | null = isPlatformAdmin
     ? "platform_admin"
-    : member?.role || null;
+    : member?.role as UserRole || null;
 
   return (
     <AuthContext.Provider
@@ -146,9 +150,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         orgName,
         role,
         member,
-        loading: loading,
+        loading,
         isPlatformAdmin,
-        isAdmin: role === "admin" || role === "platform_admin",
+        isAdmin: role === "admin" || role === "platform_admin" || role === "owner",
         isWorker: role === "worker",
         isClient: role === "client",
         refreshMember,
