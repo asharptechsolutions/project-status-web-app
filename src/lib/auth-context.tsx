@@ -166,7 +166,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         member,
         loading,
         isPlatformAdmin,
-        isAdmin: role === "admin" || role === "owner",
+        isAdmin: role === "owner",
         isWorker: role === "worker",
         isClient: role === "client",
         refreshMember,
