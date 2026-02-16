@@ -3,8 +3,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTheme } from "next-themes";
-import { UserButton, OrganizationSwitcher } from "@clerk/clerk-react";
-import { Menu, Sun, Moon, Workflow } from "lucide-react";
+import { Menu, Sun, Moon, Workflow, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
@@ -15,7 +14,7 @@ export function Navbar() {
   const [open, setOpen] = useState(false);
   const { theme, setTheme } = useTheme();
   const pathname = usePathname();
-  const { isAdmin, isWorker, isClient, isPlatformAdmin } = useAuth();
+  const { isAdmin, isPlatformAdmin, signOut, user } = useAuth();
 
   const links = [
     { href: "/", label: "Dashboard" },
@@ -64,7 +63,11 @@ export function Navbar() {
             <Sun className="h-4 w-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
             <Moon className="absolute h-4 w-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
           </Button>
-          <UserButton afterSignOutUrl="/" />
+          {user && (
+            <Button variant="ghost" size="icon" onClick={signOut} title="Sign out">
+              <LogOut className="h-4 w-4" />
+            </Button>
+          )}
           <Button variant="ghost" size="icon" className="md:hidden" onClick={() => setOpen(true)}>
             <Menu className="h-5 w-5" />
           </Button>

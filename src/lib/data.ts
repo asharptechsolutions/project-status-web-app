@@ -335,13 +335,13 @@ export async function getMembers(orgId: string): Promise<Member[]> {
 }
 
 export async function getMember(
-  clerkUserId: string,
+  userId: string,
   orgId: string
 ): Promise<Member | null> {
   const { data, error } = await supabaseAdmin
     .from("members")
     .select("*")
-    .eq("clerk_user_id", clerkUserId)
+    .eq("clerk_user_id", userId)
     .eq("org_id", orgId)
     .single();
   if (error) return null;

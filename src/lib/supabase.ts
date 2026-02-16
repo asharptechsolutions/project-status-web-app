@@ -1,9 +1,13 @@
-import { createClient } from "@supabase/supabase-js";
+import { createBrowserClient } from "@supabase/ssr";
+import { createClient as createJsClient } from "@supabase/supabase-js";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://gzykxphmixqjxmwvsuiy.supabase.co";
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "sb_publishable_F5pKXtICiTQePPpFaFs4SQ_RrL4KdcL";
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.placeholder";
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+export function createClient() {
+  return createBrowserClient(supabaseUrl, supabaseAnonKey);
+}
 
-// Use anon client for everything - RLS policies handle access control
+// Legacy exports for data.ts compatibility
+export const supabase = createJsClient(supabaseUrl, supabaseAnonKey);
 export const supabaseAdmin = supabase;
