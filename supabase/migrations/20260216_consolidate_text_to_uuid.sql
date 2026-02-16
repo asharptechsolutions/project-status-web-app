@@ -19,12 +19,6 @@ BEGIN
     SELECT policyname, tablename
     FROM pg_policies
     WHERE schemaname = 'public'
-      AND tablename IN (
-        'projects', 'project_stages', 'project_assignments',
-        'messages', 'files', 'templates', 'preset_stages',
-        'clients', 'project_clients',
-        'organizations', 'members', 'platform_admins'
-      )
   LOOP
     EXECUTE format('DROP POLICY IF EXISTS %I ON public.%I', pol.policyname, pol.tablename);
   END LOOP;
