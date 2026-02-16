@@ -83,4 +83,4 @@ export interface PresetStage {
   created_at: string;
 }
 
-export type UserRole = "admin" | "worker" | "client" | "platform_admin";
+export type UserRole = "admin" | "worker" | "client" | "owner";

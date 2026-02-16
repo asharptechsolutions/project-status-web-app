@@ -14,7 +14,7 @@ interface ProjectChatProps {
 }
 
 export function ProjectChat({ projectId }: ProjectChatProps) {
-  const { userId, member } = useAuth();
+  const { userId, user, member } = useAuth();
   const [messages, setMessages] = useState<ProjectMessage[]>([]);
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
@@ -53,7 +53,7 @@ export function ProjectChat({ projectId }: ProjectChatProps) {
       await sendProjectMessage({
         project_id: projectId,
         sender_id: userId,
-        sender_name: member.name,
+        sender_name: user?.user_metadata?.full_name || user?.email || "Unknown",
         content: trimmed,
       });
       setText("");

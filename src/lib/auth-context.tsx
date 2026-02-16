@@ -9,6 +9,8 @@ interface TeamMember {
   team_id: string;
   user_id: string;
   role: string;
+  name: string;
+  email: string;
   invited_at: string;
   joined_at: string | null;
   teams?: { id: string; name: string };
@@ -79,7 +81,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .single();
 
       if (memberData) {
-        setMember({ ...memberData, id: memberData.user_id } as TeamMember);
+        // Get profile for name/email
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("display_name, email")
+          .eq("id", user.id)
+          .single();
+        setMember({
+          ...memberData,
+          id: memberData.user_id,
+          name: profile?.display_name || user.email?.split("@")[0] || "",
+          email: profile?.email || user.email || "",
+        } as TeamMember);
         const team = (memberData as any).teams;
         if (team) {
           setOrgId(team.id);
@@ -138,7 +151,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const role: UserRole | null = isPlatformAdmin
-    ? "platform_admin"
+    ? "owner"
     : member?.role as UserRole || null;
 
   return (
