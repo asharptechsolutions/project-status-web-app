@@ -8,9 +8,9 @@ import {
   getProjects, createProject, updateProject, deleteProject,
   getProjectStages, createProjectStage, updateProjectStage, deleteProjectStage,
   getProjectFiles, getProjectMessages, getTemplates, getPresetStages,
-  getAssignedProjects, getMembers,
+  getAssignedProjects, getMembers, getClients, createNewClient,
 } from "@/lib/data";
-import type { Project, ProjectStage, ProjectFile, Template, PresetStage, Member } from "@/lib/types";
+import type { Project, ProjectStage, ProjectFile, Template, PresetStage, Member, Client } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -23,7 +23,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import {
   Plus, Trash2, ArrowLeft, Play, CheckCircle2, ChevronRight,
   Pencil, Search, X, ArrowUpDown, Archive, ArchiveRestore,
-  Clock, Loader2, GripVertical,
+  Clock, Loader2, GripVertical, UserPlus,
 } from "lucide-react";
 import { toast } from "sonner";
 import { FileUpload } from "@/components/file-upload";
@@ -38,14 +38,18 @@ function ProjectsList() {
   const [templates, setTemplates] = useState<Template[]>([]);
   const [presetStages, setPresetStages] = useState<PresetStage[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
+  const [clients, setClients] = useState<Client[]>([]);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [stages, setStages] = useState<ProjectStage[]>([]);
   const [showNew, setShowNew] = useState(false);
   const [newName, setNewName] = useState("");
   const [newDescription, setNewDescription] = useState("");
+  const [selectedClientId, setSelectedClientId] = useState("");
+  const [showNewClient, setShowNewClient] = useState(false);
   const [newClientName, setNewClientName] = useState("");
   const [newClientEmail, setNewClientEmail] = useState("");
   const [newClientPhone, setNewClientPhone] = useState("");
+  const [creatingClient, setCreatingClient] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState("");
   const [newStageName, setNewStageName] = useState("");
   const [loading, setLoading] = useState(true);
@@ -60,16 +64,18 @@ function ProjectsList() {
   const load = useCallback(async () => {
     if (!orgId) return;
     try {
-      const [p, t, ps, m] = await Promise.all([
+      const [p, t, ps, m, c] = await Promise.all([
         isClient && member ? getAssignedProjects(member.id) : getProjects(orgId),
         isAdmin ? getTemplates(orgId) : Promise.resolve([]),
         isAdmin ? getPresetStages(orgId) : Promise.resolve([]),
         getMembers(orgId),
+        getClients(orgId),
       ]);
       setProjects(p);
       setTemplates(t);
       setPresetStages(ps);
       setMembers(m);
+      setClients(c);
     } catch (err: any) {
       toast.error(err.message || "Failed to load data");
     } finally {
@@ -103,17 +109,42 @@ function ProjectsList() {
     }
   }, [searchParams, projects, router]);
 
+  const handleCreateNewClient = async () => {
+    if (!orgId || !userId || !newClientName.trim()) return;
+    setCreatingClient(true);
+    try {
+      const client = await createNewClient({
+        team_id: orgId,
+        name: newClientName.trim(),
+        email: newClientEmail.trim(),
+        phone: newClientPhone.trim(),
+        created_by: userId,
+      });
+      setClients((prev) => [...prev, client].sort((a, b) => a.name.localeCompare(b.name)));
+      setSelectedClientId(client.id);
+      setShowNewClient(false);
+      setNewClientName(""); setNewClientEmail(""); setNewClientPhone("");
+      toast.success("Client created");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to create client");
+    } finally {
+      setCreatingClient(false);
+    }
+  };
+
   const handleCreate = async () => {
     if (!orgId || !userId) return;
     if (!newName.trim()) { toast.error("Project name is required"); return; }
     try {
+      const selectedClient = clients.find((c) => c.id === selectedClientId);
       const id = await createProject({
         team_id: orgId,
         name: newName.trim(),
         description: newDescription.trim(),
-        client_name: newClientName.trim(),
-        client_email: newClientEmail.trim(),
-        client_phone: newClientPhone.trim(),
+        client_name: selectedClient?.name || "",
+        client_email: selectedClient?.email || "",
+        client_phone: selectedClient?.phone || "",
+        client_id: selectedClientId || undefined,
         status: "active",
         created_by: userId,
       });
@@ -134,7 +165,7 @@ function ProjectsList() {
           }
         }
       }
-      setNewName(""); setNewDescription(""); setNewClientName(""); setNewClientEmail(""); setNewClientPhone(""); setSelectedTemplate(""); setShowNew(false);
+      setNewName(""); setNewDescription(""); setSelectedClientId(""); setShowNewClient(false); setNewClientName(""); setNewClientEmail(""); setNewClientPhone(""); setSelectedTemplate(""); setShowNew(false);
       toast.success("Project created");
       await load();
     } catch (err: any) {
@@ -581,11 +612,35 @@ function ProjectsList() {
             <div><Label>Project Name</Label><Input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="e.g. Custom Gear Assembly" /></div>
             <div><Label>Description (optional)</Label><Textarea value={newDescription} onChange={(e) => setNewDescription(e.target.value)} placeholder="Brief description" rows={2} /></div>
             <div className="border-t pt-3 mt-1">
-              <p className="text-sm font-medium mb-2">Client Info (optional)</p>
+              <p className="text-sm font-medium mb-2">Client (optional)</p>
               <div className="space-y-3">
-                <div><Label>Client Name</Label><Input value={newClientName} onChange={(e) => setNewClientName(e.target.value)} placeholder="e.g. John Smith" /></div>
-                <div><Label>Client Email</Label><Input type="email" value={newClientEmail} onChange={(e) => setNewClientEmail(e.target.value)} placeholder="e.g. john@example.com" /></div>
-                <div><Label>Client Phone</Label><Input type="tel" value={newClientPhone} onChange={(e) => setNewClientPhone(e.target.value)} placeholder="e.g. (555) 123-4567" /></div>
+                <Select value={selectedClientId} onValueChange={(v) => { setSelectedClientId(v); setShowNewClient(false); }}>
+                  <SelectTrigger><SelectValue placeholder="Select a client" /></SelectTrigger>
+                  <SelectContent>
+                    {clients.map((c) => (
+                      <SelectItem key={c.id} value={c.id}>{c.name}{c.email ? ` (${c.email})` : ""}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {!showNewClient ? (
+                  <Button type="button" variant="outline" size="sm" onClick={() => { setShowNewClient(true); setSelectedClientId(""); }}>
+                    <UserPlus className="h-4 w-4 mr-1" /> Add New Client
+                  </Button>
+                ) : (
+                  <div className="space-y-3 border rounded-md p-3">
+                    <div><Label>Client Name</Label><Input value={newClientName} onChange={(e) => setNewClientName(e.target.value)} placeholder="e.g. John Smith" /></div>
+                    <div><Label>Client Email</Label><Input type="email" value={newClientEmail} onChange={(e) => setNewClientEmail(e.target.value)} placeholder="e.g. john@example.com" /></div>
+                    <div><Label>Client Phone</Label><Input type="tel" value={newClientPhone} onChange={(e) => setNewClientPhone(e.target.value)} placeholder="e.g. (555) 123-4567" /></div>
+                    <div className="flex gap-2">
+                      <Button type="button" size="sm" onClick={handleCreateNewClient} disabled={!newClientName.trim() || creatingClient}>
+                        {creatingClient ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Plus className="h-4 w-4 mr-1" />} Save Client
+                      </Button>
+                      <Button type="button" variant="ghost" size="sm" onClick={() => { setShowNewClient(false); setNewClientName(""); setNewClientEmail(""); setNewClientPhone(""); }}>
+                        <X className="h-4 w-4 mr-1" /> Cancel
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
             {templates.length > 0 && (

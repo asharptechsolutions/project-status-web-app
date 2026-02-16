@@ -10,7 +10,51 @@ import type {
   Template,
   PresetStage,
   Member,
+  Client,
 } from "./types";
+
+// ============ CLIENTS ============
+
+export async function getClients(teamId: string): Promise<Client[]> {
+  const { data, error } = await supabase
+    .from("clients")
+    .select("*")
+    .eq("team_id", teamId)
+    .order("name", { ascending: true });
+  if (error) throw new Error(error.message);
+  return (data || []) as Client[];
+}
+
+export async function createNewClient(
+  client: Omit<Client, "id" | "created_at">
+): Promise<Client> {
+  const { data, error } = await supabase
+    .from("clients")
+    .insert(client)
+    .select("*")
+    .single();
+  if (error) throw new Error(error.message);
+  return data as Client;
+}
+
+export async function updateClient(
+  id: string,
+  updates: Partial<Client>
+): Promise<void> {
+  const { error } = await supabase
+    .from("clients")
+    .update(updates)
+    .eq("id", id);
+  if (error) throw new Error(error.message);
+}
+
+export async function deleteClient(id: string): Promise<void> {
+  const { error } = await supabase
+    .from("clients")
+    .delete()
+    .eq("id", id);
+  if (error) throw new Error(error.message);
+}
 
 // ============ PROJECTS ============
 

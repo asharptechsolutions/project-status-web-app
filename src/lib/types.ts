@@ -24,6 +24,7 @@ export interface Project {
   client_email: string;
   client_phone: string;
   created_by: string;
+  client_id?: string;
   created_at: string;
   updated_at: string;
 }
@@ -79,6 +80,16 @@ export interface PresetStage {
   id: string;
   team_id: string;
   name: string;
+  created_by: string;
+  created_at: string;
+}
+
+export interface Client {
+  id: string;
+  team_id: string;
+  name: string;
+  email: string;
+  phone: string;
   created_by: string;
   created_at: string;
 }
