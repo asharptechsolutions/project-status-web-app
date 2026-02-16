@@ -329,11 +329,18 @@ export async function deletePresetStage(id: string): Promise<void> {
 export async function getMembers(orgId: string): Promise<Member[]> {
   const { data, error } = await supabase
     .from("team_members")
-    .select("*")
-    .eq("team_id", orgId)
-    .order("name", { ascending: true });
+    .select("*, profiles(display_name, email)")
+    .eq("team_id", orgId);
   if (error) throw new Error(error.message);
-  return (data || []) as Member[];
+  return (data || []).map((d: any) => ({
+    id: d.user_id,
+    user_id: d.user_id,
+    team_id: d.team_id,
+    role: d.role,
+    name: d.profiles?.display_name || d.profiles?.email || "",
+    email: d.profiles?.email || "",
+    created_at: d.invited_at,
+  })) as Member[];
 }
 
 export async function getMember(
@@ -342,12 +349,20 @@ export async function getMember(
 ): Promise<Member | null> {
   const { data, error } = await supabase
     .from("team_members")
-    .select("*")
+    .select("*, profiles(display_name, email)")
     .eq("user_id", userId)
     .eq("team_id", orgId)
     .single();
   if (error) return null;
-  return data as Member;
+  return {
+    id: data.user_id,
+    user_id: data.user_id,
+    team_id: data.team_id,
+    role: data.role,
+    name: (data as any).profiles?.display_name || (data as any).profiles?.email || "",
+    email: (data as any).profiles?.email || "",
+    created_at: data.invited_at,
+  } as Member;
 }
 
 export async function createMember(
@@ -363,21 +378,21 @@ export async function createMember(
 }
 
 export async function updateMember(
-  id: string,
-  updates: Partial<Member>
+  userId: string,
+  updates: Partial<Pick<Member, "role" | "name" | "email">>
 ): Promise<void> {
   const { error } = await supabase
     .from("team_members")
     .update(updates)
-    .eq("id", id);
+    .eq("user_id", userId);
   if (error) throw new Error(error.message);
 }
 
-export async function deleteMember(id: string): Promise<void> {
+export async function deleteMember(userId: string): Promise<void> {
   const { error } = await supabase
     .from("team_members")
     .delete()
-    .eq("id", id);
+    .eq("user_id", userId);
   if (error) throw new Error(error.message);
 }
 
