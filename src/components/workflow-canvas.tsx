@@ -211,6 +211,49 @@ export function WorkflowCanvas({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stages.map((s) => `${s.id}:${s.status}`).join(","), direction]);
 
+  // Empty state — no stages yet
+  if (stages.length === 0) {
+    return (
+      <div className="relative w-full" style={{ height: isMobile ? 300 : 400 }}>
+        <div className="flex flex-col items-center justify-center h-full rounded-lg border bg-background text-center p-8">
+          <Clock className="h-12 w-12 text-muted-foreground mb-4" />
+          <h3 className="text-lg font-semibold text-foreground mb-2">No workflow stages yet</h3>
+          <p className="text-sm text-muted-foreground mb-4">
+            Add your first stage to start building the workflow.
+          </p>
+          {!readOnly && (isAdmin || isWorker) && onAddStage && (
+            <div className="flex gap-2">
+              <Input
+                placeholder="New stage name..."
+                value={newStageName}
+                onChange={(e) => setNewStageName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && newStageName.trim()) {
+                    onAddStage(newStageName.trim());
+                    setNewStageName("");
+                  }
+                }}
+                className="w-48 sm:w-56"
+              />
+              <Button
+                size="sm"
+                disabled={!newStageName.trim()}
+                onClick={() => {
+                  if (newStageName.trim()) {
+                    onAddStage(newStageName.trim());
+                    setNewStageName("");
+                  }
+                }}
+              >
+                <Plus className="h-4 w-4 mr-1" /> Add
+              </Button>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="relative w-full" style={{ height: isMobile ? 400 : 500 }}>
       <ReactFlow

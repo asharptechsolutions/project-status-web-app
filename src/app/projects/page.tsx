@@ -48,6 +48,7 @@ function ProjectsList() {
   const [clients, setClients] = useState<Client[]>([]);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [stages, setStages] = useState<ProjectStage[]>([]);
+  const [stagesLoading, setStagesLoading] = useState(false);
   const [showNew, setShowNew] = useState(false);
   const [newName, setNewName] = useState("");
   const [newDescription, setNewDescription] = useState("");
@@ -94,8 +95,9 @@ function ProjectsList() {
 
   // Load stages when viewing a project
   useEffect(() => {
-    if (!selectedProject) { setStages([]); setFiles([]); return; }
-    getProjectStages(selectedProject.id).then(setStages).catch(() => {});
+    if (!selectedProject) { setStages([]); setFiles([]); setStagesLoading(false); return; }
+    setStagesLoading(true);
+    getProjectStages(selectedProject.id).then(setStages).catch(() => {}).finally(() => setStagesLoading(false));
     getProjectFiles(selectedProject.id).then(setFiles).catch(() => {});
     window.scrollTo(0, 0);
   }, [selectedProject?.id]);
@@ -389,6 +391,14 @@ function ProjectsList() {
         {/* Workflow Canvas */}
         <h2 className="text-lg font-semibold mb-3">Workflow Stages</h2>
         <div className="mb-4">
+          {stagesLoading ? (
+            <div className="flex items-center justify-center h-[400px] rounded-lg border bg-background">
+              <div className="flex flex-col items-center gap-2">
+                <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+                <p className="text-sm text-muted-foreground">Loading stages…</p>
+              </div>
+            </div>
+          ) : (
           <WorkflowCanvas
             stages={stages}
             readOnly={isClient}
@@ -414,6 +424,7 @@ function ProjectsList() {
               }
             }}
           />
+          )}
         </div>
 
         {/* Preset stages quick-add */}
