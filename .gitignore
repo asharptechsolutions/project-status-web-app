@@ -1,4 +1,23 @@
 node_modules
 .next
 out
+dist/
+
+# env
+.env
 .env.local
+.env.*.local
+
+# secrets
+*.key
+*.pem
+*.secret
+
+# coverage
+coverage/
+.nyc_output/
+
+# misc
+.DS_Store
+*.log
+__pycache__/
