@@ -42,6 +42,7 @@ type StageNodeData = {
   readOnly: boolean;
   isAdmin: boolean;
   isWorker: boolean;
+  sourceOnly?: boolean;
   onStart: () => void;
   onComplete: () => void;
   onDelete: () => void;
@@ -72,7 +73,7 @@ function StageNode({ data }: { data: StageNodeData }) {
     <div
       className={`rounded-lg border-2 shadow-sm px-4 py-3 min-w-[180px] max-w-[220px] ${statusColor}`}
     >
-      <Handle type="target" position={Position.Top} className="!bg-primary !w-2 !h-2" />
+      {!data.sourceOnly && <Handle type="target" position={Position.Top} className="!bg-primary !w-2 !h-2" />}
       <div className="flex items-center gap-2 mb-1">
         {statusIcon}
         <span className="font-medium text-sm truncate text-foreground">{data.label}</span>
@@ -169,7 +170,7 @@ export function WorkflowCanvas({
 
   const direction = isMobile ? "TB" : "LR";
 
-  const rawNodes: Node[] = sorted.map((s) => ({
+  const rawNodes: Node[] = sorted.map((s, i) => ({
     id: s.id,
     type: "stage",
     position: { x: 0, y: 0 },
@@ -180,6 +181,7 @@ export function WorkflowCanvas({
       readOnly,
       isAdmin,
       isWorker,
+      sourceOnly: i === 0,
       onStart: () => onUpdateStatus?.(s.id, "in_progress"),
       onComplete: () => onUpdateStatus?.(s.id, "completed"),
       onDelete: () => onRemoveStage?.(s.id),

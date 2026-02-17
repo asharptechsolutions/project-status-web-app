@@ -190,6 +190,16 @@ function ProjectsList() {
             });
           }
         }
+      } else {
+        await createProjectStage({
+          project_id: id,
+          name: "Order Processing",
+          status: "pending",
+          position: 0,
+          started_at: null,
+          completed_at: null,
+          started_by: null,
+        });
       }
       setNewName(""); setNewDescription(""); setNewClientName(""); setNewClientEmail(""); setNewClientPhone(""); setNewClientCompany(""); setSelectedTemplate(""); setSelectedClientIds([]); setClientMode("existing"); setClientSearch(""); setShowNew(false);
       toast.success("Project created");
