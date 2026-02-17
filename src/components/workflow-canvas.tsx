@@ -39,6 +39,7 @@ interface WorkflowCanvasProps {
 type StageNodeData = {
   label: string;
   status: ProjectStage["status"];
+  isSourceOnly?: boolean;
   readOnly: boolean;
   isAdmin: boolean;
   isWorker: boolean;
@@ -72,7 +73,7 @@ function StageNode({ data }: { data: StageNodeData }) {
     <div
       className={`rounded-lg border-2 shadow-sm px-4 py-3 min-w-[180px] max-w-[220px] ${statusColor}`}
     >
-      <Handle type="target" position={Position.Top} className="!bg-primary !w-2 !h-2" />
+      {!data.isSourceOnly && <Handle type="target" position={Position.Top} className="!bg-primary !w-2 !h-2" />}
       <div className="flex items-center gap-2 mb-1">
         {statusIcon}
         <span className="font-medium text-sm truncate text-foreground">{data.label}</span>
@@ -177,6 +178,7 @@ export function WorkflowCanvas({
     data: {
       label: s.name,
       status: s.status,
+      isSourceOnly: s.position === 0,
       readOnly,
       isAdmin,
       isWorker,

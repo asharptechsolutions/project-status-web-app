@@ -175,6 +175,17 @@ function ProjectsList() {
             });
           }
         }
+      } else {
+        // No template selected — create default "Order Processing" stage
+        await createProjectStage({
+          project_id: id,
+          name: "Order Processing",
+          status: "pending",
+          position: 0,
+          started_at: null,
+          completed_at: null,
+          started_by: null,
+        });
       }
       setNewName(""); setNewDescription(""); setSelectedClientIds([]); setShowNewClient(false); setNewClientName(""); setNewClientEmail(""); setNewClientPhone(""); setSelectedTemplate(""); setShowNew(false);
       toast.success("Project created");
