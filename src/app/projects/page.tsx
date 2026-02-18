@@ -186,9 +186,26 @@ function ProjectsList() {
           started_by: null,
         });
       }
+      // Build the project object before clearing form state so we can navigate to it
+      const createdProject: Project = {
+        id,
+        team_id: orgId,
+        name: newName.trim(),
+        description: newDescription.trim(),
+        client_name: primaryClient?.name || "",
+        client_email: primaryClient?.email || "",
+        client_phone: primaryClient?.phone || "",
+        client_id: selectedClientIds[0] || undefined,
+        status: "active",
+        created_by: userId,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
       setNewName(""); setNewDescription(""); setSelectedClientIds([]); setShowNewClient(false); setNewClientName(""); setNewClientEmail(""); setNewClientPhone(""); setSelectedTemplate(""); setShowNew(false);
       toast.success("Project created");
-      await load();
+      load();
+      // Navigate to the newly created project's detail page
+      setSelectedProject(createdProject);
     } catch (err: any) {
       toast.error(err.message || "Failed to create project");
     }
