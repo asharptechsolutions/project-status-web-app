@@ -17,9 +17,8 @@ import "@xyflow/react/dist/style.css";
 import dagre from "@dagrejs/dagre";
 import type { ProjectStage } from "@/lib/types";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
-  Play, CheckCircle2, Clock, Loader2, Trash2, Plus,
+  Play, CheckCircle2, Clock, Loader2, Trash2,
 } from "lucide-react";
 
 /* ------------------------------------------------------------------ */
@@ -33,7 +32,6 @@ interface WorkflowCanvasProps {
   isWorker?: boolean;
   onUpdateStatus?: (stageId: string, status: ProjectStage["status"]) => void;
   onRemoveStage?: (stageId: string) => void;
-  onAddStage?: (name: string) => void;
 }
 
 type StageNodeData = {
@@ -215,10 +213,8 @@ export function WorkflowCanvas({
   isWorker = false,
   onUpdateStatus,
   onRemoveStage,
-  onAddStage,
 }: WorkflowCanvasProps) {
   const [isMobile, setIsMobile] = useState(false);
-  const [newStageName, setNewStageName] = useState("");
 
   useEffect(() => {
     const check = () => setIsMobile(window.innerWidth < 768);
@@ -297,36 +293,6 @@ export function WorkflowCanvas({
         <Background gap={16} size={1} />
       </ReactFlow>
 
-      {/* Floating add stage button */}
-      {!readOnly && (isAdmin || isWorker) && onAddStage && (
-        <div className="absolute bottom-4 left-4 right-4 sm:left-4 sm:right-auto flex gap-2 z-10">
-          <Input
-            placeholder="New stage name..."
-            value={newStageName}
-            onChange={(e) => setNewStageName(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && newStageName.trim()) {
-                onAddStage(newStageName.trim());
-                setNewStageName("");
-              }
-            }}
-            className="w-48 sm:w-56 bg-background shadow-md"
-          />
-          <Button
-            size="sm"
-            disabled={!newStageName.trim()}
-            onClick={() => {
-              if (newStageName.trim()) {
-                onAddStage(newStageName.trim());
-                setNewStageName("");
-              }
-            }}
-            className="shadow-md"
-          >
-            <Plus className="h-4 w-4 mr-1" /> Add
-          </Button>
-        </div>
-      )}
     </div>
   );
 }
