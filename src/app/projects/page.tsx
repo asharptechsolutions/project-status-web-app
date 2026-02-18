@@ -69,6 +69,11 @@ function ProjectsList() {
   const [files, setFiles] = useState<ProjectFile[]>([]);
   const [projectClientIds, setProjectClientIds] = useState<string[]>([]);
   const [addingClient, setAddingClient] = useState(false);
+  const [detailShowNewClient, setDetailShowNewClient] = useState(false);
+  const [detailNewClientName, setDetailNewClientName] = useState("");
+  const [detailNewClientEmail, setDetailNewClientEmail] = useState("");
+  const [detailNewClientPhone, setDetailNewClientPhone] = useState("");
+  const [detailCreatingClient, setDetailCreatingClient] = useState(false);
   const [detailNewStageName, setDetailNewStageName] = useState("");
 
   const load = useCallback(async () => {
@@ -97,7 +102,7 @@ function ProjectsList() {
 
   // Load stages, files, and clients when viewing a project
   useEffect(() => {
-    if (!selectedProject) { setStages([]); setFiles([]); setProjectClientIds([]); return; }
+    if (!selectedProject) { setStages([]); setFiles([]); setProjectClientIds([]); setDetailShowNewClient(false); setDetailNewClientName(""); setDetailNewClientEmail(""); setDetailNewClientPhone(""); return; }
     getProjectStages(selectedProject.id).then(setStages).catch(() => {});
     getProjectFiles(selectedProject.id).then(setFiles).catch(() => {});
     getProjectClients(selectedProject.id).then(setProjectClientIds).catch(() => {});
@@ -140,6 +145,30 @@ function ProjectsList() {
       toast.error(err.message || "Failed to create client");
     } finally {
       setCreatingClient(false);
+    }
+  };
+
+  const handleCreateNewClientForProject = async () => {
+    if (!orgId || !userId || !selectedProject || !detailNewClientName.trim()) return;
+    setDetailCreatingClient(true);
+    try {
+      const client = await createNewClient({
+        team_id: orgId,
+        name: detailNewClientName.trim(),
+        email: detailNewClientEmail.trim(),
+        phone: detailNewClientPhone.trim(),
+        created_by: userId,
+      });
+      setClients((prev) => [...prev, client].sort((a, b) => a.name.localeCompare(b.name)));
+      await addProjectClient(selectedProject.id, client.id);
+      setProjectClientIds((prev) => [...prev, client.id]);
+      setDetailShowNewClient(false);
+      setDetailNewClientName(""); setDetailNewClientEmail(""); setDetailNewClientPhone("");
+      toast.success("Client created and added");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to create client");
+    } finally {
+      setDetailCreatingClient(false);
     }
   };
 
@@ -440,37 +469,60 @@ function ProjectsList() {
                 </Badge>
               );
             })}
-            {isAdmin && (() => {
-              const available = clients.filter((c) => !projectClientIds.includes(c.id));
-              if (available.length === 0) return null;
-              return (
-                <Select
-                  value=""
-                  onValueChange={async (v) => {
-                    if (!v) return;
-                    setAddingClient(true);
-                    try {
-                      await addProjectClient(selectedProject.id, v);
-                      setProjectClientIds((prev) => [...prev, v]);
-                      toast.success("Client added");
-                    } catch (err: any) {
-                      toast.error(err.message || "Failed to add client");
-                    } finally {
-                      setAddingClient(false);
-                    }
-                  }}
-                >
-                  <SelectTrigger className="w-[200px] h-8 text-xs">
-                    <SelectValue placeholder={addingClient ? "Adding..." : "Add client..."} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {available.map((c) => (
-                      <SelectItem key={c.id} value={c.id}>{c.name}{c.email ? ` (${c.email})` : ""}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              );
-            })()}
+            {isAdmin && (
+              <>
+                {(() => {
+                  const available = clients.filter((c) => !projectClientIds.includes(c.id));
+                  if (available.length === 0) return null;
+                  return (
+                    <Select
+                      value=""
+                      onValueChange={async (v) => {
+                        if (!v) return;
+                        setAddingClient(true);
+                        try {
+                          await addProjectClient(selectedProject.id, v);
+                          setProjectClientIds((prev) => [...prev, v]);
+                          toast.success("Client added");
+                        } catch (err: any) {
+                          toast.error(err.message || "Failed to add client");
+                        } finally {
+                          setAddingClient(false);
+                        }
+                      }}
+                    >
+                      <SelectTrigger className="w-[200px] h-8 text-xs">
+                        <SelectValue placeholder={addingClient ? "Adding..." : "Add client..."} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {available.map((c) => (
+                          <SelectItem key={c.id} value={c.id}>{c.name}{c.email ? ` (${c.email})` : ""}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  );
+                })()}
+                {!detailShowNewClient ? (
+                  <Button type="button" variant="outline" size="sm" className="h-8" onClick={() => setDetailShowNewClient(true)}>
+                    <UserPlus className="h-4 w-4 mr-1" /> New Client
+                  </Button>
+                ) : (
+                  <div className="w-full space-y-3 border rounded-md p-3 mt-2">
+                    <div><Label>Client Name</Label><Input value={detailNewClientName} onChange={(e) => setDetailNewClientName(e.target.value)} placeholder="e.g. John Smith" /></div>
+                    <div><Label>Client Email</Label><Input type="email" value={detailNewClientEmail} onChange={(e) => setDetailNewClientEmail(e.target.value)} placeholder="e.g. john@example.com" /></div>
+                    <div><Label>Client Phone</Label><Input type="tel" value={detailNewClientPhone} onChange={(e) => setDetailNewClientPhone(e.target.value)} placeholder="e.g. (555) 123-4567" /></div>
+                    <div className="flex gap-2">
+                      <Button type="button" size="sm" onClick={handleCreateNewClientForProject} disabled={!detailNewClientName.trim() || detailCreatingClient}>
+                        {detailCreatingClient ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Plus className="h-4 w-4 mr-1" />} Save Client
+                      </Button>
+                      <Button type="button" variant="ghost" size="sm" onClick={() => { setDetailShowNewClient(false); setDetailNewClientName(""); setDetailNewClientEmail(""); setDetailNewClientPhone(""); }}>
+                        <X className="h-4 w-4 mr-1" /> Cancel
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
           </div>
         </div>
 

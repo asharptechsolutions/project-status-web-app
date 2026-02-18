@@ -1,10 +1,10 @@
 "use client";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ReactFlow,
   Controls,
-  MiniMap,
   Background,
+  Panel,
   useNodesState,
   useEdgesState,
   type Node,
@@ -18,7 +18,7 @@ import dagre from "@dagrejs/dagre";
 import type { ProjectStage } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import {
-  Play, CheckCircle2, Clock, Loader2, Trash2,
+  Play, CheckCircle2, Clock, Loader2, Trash2, AlignHorizontalDistributeCenter,
 } from "lucide-react";
 
 /* ------------------------------------------------------------------ */
@@ -230,6 +230,10 @@ export function WorkflowCanvas({
 
   const direction = isMobile ? "TB" : "LR";
 
+  const isInitialMount = useRef(true);
+  const prevDirection = useRef(direction);
+  const prevStageIds = useRef<string[]>([]);
+
   const rawNodes: Node[] = sorted.map((s, i) => ({
     id: s.id,
     type: i === 0 ? "starter" : "stage",
@@ -264,13 +268,71 @@ export function WorkflowCanvas({
   const [nodes, setNodes, onNodesChange] = useNodesState(layoutedNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(layoutedEdges);
 
-  // Re-layout when stages change
+  // Sync nodes/edges when stages change, preserving user-dragged positions
   useEffect(() => {
+    const currentIds = sorted.map((s) => s.id);
+    const directionChanged = prevDirection.current !== direction;
+    prevDirection.current = direction;
+
+    // Initial mount or direction change → full Dagre layout
+    if (isInitialMount.current || directionChanged) {
+      isInitialMount.current = false;
+      prevStageIds.current = currentIds;
+      const { nodes: ln, edges: le } = getLayoutedElements(rawNodes, rawEdges, direction);
+      setNodes(ln);
+      setEdges(le);
+      return;
+    }
+
+    const prevIds = prevStageIds.current;
+    const addedIds = currentIds.filter((id) => !prevIds.includes(id));
+    prevStageIds.current = currentIds;
+
+    // Build position map from current nodes state (includes user-dragged positions)
+    const positionMap = new Map<string, { x: number; y: number }>();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    nodes.forEach((n) => positionMap.set(n.id, n.position));
+
+    // Update nodes: preserve existing positions, calculate new positions for added nodes
+    const updatedNodes: Node[] = rawNodes.map((rn) => {
+      const existingPos = positionMap.get(rn.id);
+      if (existingPos && !addedIds.includes(rn.id)) {
+        return { ...rn, position: existingPos };
+      }
+      return rn;
+    });
+
+    // Place newly added nodes after the last existing node
+    if (addedIds.length > 0) {
+      const existingNodes = updatedNodes.filter((n) => !addedIds.includes(n.id));
+      let lastPos = { x: 0, y: 0 };
+      if (existingNodes.length > 0) {
+        lastPos = existingNodes[existingNodes.length - 1].position;
+      }
+      addedIds.forEach((id, i) => {
+        const nodeIdx = updatedNodes.findIndex((n) => n.id === id);
+        if (nodeIdx !== -1) {
+          updatedNodes[nodeIdx] = {
+            ...updatedNodes[nodeIdx],
+            position: direction === "LR"
+              ? { x: lastPos.x + 280 * (i + 1), y: lastPos.y }
+              : { x: lastPos.x, y: lastPos.y + 180 * (i + 1) },
+          };
+        }
+      });
+    }
+
+    setNodes(updatedNodes);
+    setEdges(rawEdges);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stages.map((s) => `${s.id}:${s.status}`).join(","), direction]);
+
+  const handleAutoAlign = useCallback(() => {
+    prevStageIds.current = sorted.map((s) => s.id);
     const { nodes: ln, edges: le } = getLayoutedElements(rawNodes, rawEdges, direction);
     setNodes(ln);
     setEdges(le);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stages.map((s) => `${s.id}:${s.status}`).join(","), direction]);
+  }, [sorted, rawNodes, rawEdges, direction, setNodes, setEdges]);
 
   return (
     <div className="relative w-full" style={{ height: isMobile ? 400 : 500 }}>
@@ -289,8 +351,21 @@ export function WorkflowCanvas({
         className="rounded-lg border bg-background"
       >
         <Controls showInteractive={false} />
-        {!isMobile && <MiniMap zoomable pannable className="!bg-muted" />}
         <Background gap={16} size={1} />
+        {!readOnly && (
+          <Panel position="top-right">
+            <Button
+              size="sm"
+              variant="outline"
+              className="bg-background shadow-sm"
+              onClick={handleAutoAlign}
+              title="Auto-align nodes"
+            >
+              <AlignHorizontalDistributeCenter className="h-4 w-4 mr-1" />
+              Auto Align
+            </Button>
+          </Panel>
+        )}
       </ReactFlow>
 
     </div>
