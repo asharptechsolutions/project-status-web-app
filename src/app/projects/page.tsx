@@ -159,7 +159,7 @@ function ProjectsList() {
       });
       // Save all clients to junction table
       await setProjectClients(id, selectedClientIds);
-      // If template selected, create stages from it
+      // If template selected, create stages from it; otherwise create default starter stage
       if (selectedTemplate) {
         const tmpl = templates.find((t) => t.id === selectedTemplate);
         if (tmpl?.stages) {
@@ -175,6 +175,16 @@ function ProjectsList() {
             });
           }
         }
+      } else {
+        await createProjectStage({
+          project_id: id,
+          name: "Order Processing",
+          status: "pending",
+          position: 0,
+          started_at: null,
+          completed_at: null,
+          started_by: null,
+        });
       }
       setNewName(""); setNewDescription(""); setSelectedClientIds([]); setShowNewClient(false); setNewClientName(""); setNewClientEmail(""); setNewClientPhone(""); setSelectedTemplate(""); setShowNew(false);
       toast.success("Project created");

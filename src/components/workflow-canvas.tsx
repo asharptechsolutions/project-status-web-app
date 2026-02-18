@@ -114,6 +114,71 @@ function StageNode({ data }: { data: StageNodeData }) {
 }
 
 /* ------------------------------------------------------------------ */
+/*  Starter node (source-only, no target handle)                       */
+/* ------------------------------------------------------------------ */
+
+function StarterNode({ data }: { data: StageNodeData }) {
+  const statusIcon =
+    data.status === "completed" ? (
+      <CheckCircle2 className="h-5 w-5 text-green-500 shrink-0" />
+    ) : data.status === "in_progress" ? (
+      <Loader2 className="h-5 w-5 text-blue-500 animate-spin shrink-0" />
+    ) : (
+      <Clock className="h-5 w-5 text-muted-foreground shrink-0" />
+    );
+
+  const statusColor =
+    data.status === "completed"
+      ? "border-green-500/50 bg-green-50 dark:bg-green-950/30"
+      : data.status === "in_progress"
+        ? "border-blue-500/50 bg-blue-50 dark:bg-blue-950/30"
+        : "border-border bg-card";
+
+  return (
+    <div
+      className={`rounded-lg border-2 shadow-sm px-4 py-3 min-w-[180px] max-w-[220px] ${statusColor}`}
+    >
+      <div className="flex items-center gap-2 mb-1">
+        {statusIcon}
+        <span className="font-medium text-sm truncate text-foreground">{data.label}</span>
+      </div>
+      <p className="text-xs text-muted-foreground capitalize mb-2">
+        {data.status.replace("_", " ")}
+      </p>
+      {!data.readOnly && (
+        <div className="flex items-center gap-1 flex-wrap">
+          {(data.isAdmin || data.isWorker) && data.status === "pending" && (
+            <Button size="sm" variant="outline" className="h-6 text-xs px-2" onClick={data.onStart}>
+              <Play className="h-3 w-3 mr-1" /> Start
+            </Button>
+          )}
+          {(data.isAdmin || data.isWorker) && data.status === "in_progress" && (
+            <Button
+              size="sm"
+              className="h-6 text-xs px-2 bg-green-600 hover:bg-green-700 text-white"
+              onClick={data.onComplete}
+            >
+              <CheckCircle2 className="h-3 w-3 mr-1" /> Done
+            </Button>
+          )}
+          {data.isAdmin && (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-6 text-xs px-1 text-destructive"
+              onClick={data.onDelete}
+            >
+              <Trash2 className="h-3 w-3" />
+            </Button>
+          )}
+        </div>
+      )}
+      <Handle type="source" position={Position.Bottom} className="!bg-primary !w-2 !h-2" />
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /*  Dagre layout                                                       */
 /* ------------------------------------------------------------------ */
 
@@ -141,7 +206,7 @@ function getLayoutedElements(
 /*  Main component                                                     */
 /* ------------------------------------------------------------------ */
 
-const nodeTypes: NodeTypes = { stage: StageNode as any };
+const nodeTypes: NodeTypes = { stage: StageNode as any, starter: StarterNode as any };
 
 export function WorkflowCanvas({
   stages,
@@ -169,9 +234,9 @@ export function WorkflowCanvas({
 
   const direction = isMobile ? "TB" : "LR";
 
-  const rawNodes: Node[] = sorted.map((s) => ({
+  const rawNodes: Node[] = sorted.map((s, i) => ({
     id: s.id,
-    type: "stage",
+    type: i === 0 ? "starter" : "stage",
     position: { x: 0, y: 0 },
     draggable: !readOnly,
     data: {
