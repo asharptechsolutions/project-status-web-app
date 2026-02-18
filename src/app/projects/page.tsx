@@ -9,7 +9,7 @@ import {
   getProjectStages, createProjectStage, updateProjectStage, deleteProjectStage,
   getProjectFiles, getProjectMessages, getTemplates, getPresetStages,
   getAssignedProjects, getMembers, getClients, createNewClient,
-  setProjectClients,
+  setProjectClients, getProjectClients, addProjectClient, removeProjectClient,
 } from "@/lib/data";
 import type { Project, ProjectStage, ProjectFile, Template, PresetStage, Member, Client } from "@/lib/types";
 import { Button } from "@/components/ui/button";
@@ -67,6 +67,9 @@ function ProjectsList() {
   const [statusFilter, setStatusFilter] = useState("active-completed");
   const [sortBy, setSortBy] = useState("newest");
   const [files, setFiles] = useState<ProjectFile[]>([]);
+  const [projectClientIds, setProjectClientIds] = useState<string[]>([]);
+  const [addingClient, setAddingClient] = useState(false);
+  const [detailNewStageName, setDetailNewStageName] = useState("");
 
   const load = useCallback(async () => {
     if (!orgId) return;
@@ -92,11 +95,12 @@ function ProjectsList() {
 
   useEffect(() => { load(); }, [load]);
 
-  // Load stages when viewing a project
+  // Load stages, files, and clients when viewing a project
   useEffect(() => {
-    if (!selectedProject) { setStages([]); setFiles([]); return; }
+    if (!selectedProject) { setStages([]); setFiles([]); setProjectClientIds([]); return; }
     getProjectStages(selectedProject.id).then(setStages).catch(() => {});
     getProjectFiles(selectedProject.id).then(setFiles).catch(() => {});
+    getProjectClients(selectedProject.id).then(setProjectClientIds).catch(() => {});
     window.scrollTo(0, 0);
   }, [selectedProject?.id]);
 
@@ -402,6 +406,74 @@ function ProjectsList() {
           </div>
         </div>
 
+        {/* Clients */}
+        <div className="mb-6">
+          <h2 className="text-lg font-semibold mb-3">Clients</h2>
+          <div className="flex flex-wrap items-center gap-2">
+            {projectClientIds.length === 0 && (
+              <p className="text-sm text-muted-foreground">No clients assigned.</p>
+            )}
+            {projectClientIds.map((cid) => {
+              const c = clients.find((cl) => cl.id === cid);
+              if (!c) return null;
+              return (
+                <Badge key={cid} variant="secondary" className="flex items-center gap-1 py-1 px-2 text-sm">
+                  {c.name}
+                  {c.email && <span className="text-muted-foreground ml-1">({c.email})</span>}
+                  {isAdmin && (
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        try {
+                          await removeProjectClient(selectedProject.id, cid);
+                          setProjectClientIds((prev) => prev.filter((id) => id !== cid));
+                          toast.success("Client removed");
+                        } catch (err: any) {
+                          toast.error(err.message || "Failed to remove client");
+                        }
+                      }}
+                      className="ml-1 hover:text-destructive"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  )}
+                </Badge>
+              );
+            })}
+            {isAdmin && (() => {
+              const available = clients.filter((c) => !projectClientIds.includes(c.id));
+              if (available.length === 0) return null;
+              return (
+                <Select
+                  value=""
+                  onValueChange={async (v) => {
+                    if (!v) return;
+                    setAddingClient(true);
+                    try {
+                      await addProjectClient(selectedProject.id, v);
+                      setProjectClientIds((prev) => [...prev, v]);
+                      toast.success("Client added");
+                    } catch (err: any) {
+                      toast.error(err.message || "Failed to add client");
+                    } finally {
+                      setAddingClient(false);
+                    }
+                  }}
+                >
+                  <SelectTrigger className="w-[200px] h-8 text-xs">
+                    <SelectValue placeholder={addingClient ? "Adding..." : "Add client..."} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {available.map((c) => (
+                      <SelectItem key={c.id} value={c.id}>{c.name}{c.email ? ` (${c.email})` : ""}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              );
+            })()}
+          </div>
+        </div>
+
         {/* Progress */}
         <div className="mb-6">
           <div className="flex items-center justify-between mb-1">
@@ -415,33 +487,69 @@ function ProjectsList() {
 
         {/* Workflow Canvas */}
         <h2 className="text-lg font-semibold mb-3">Workflow Stages</h2>
-        <div className="mb-4">
-          <WorkflowCanvas
-            stages={stages}
-            readOnly={isClient}
-            isAdmin={isAdmin}
-            isWorker={isWorker}
-            onUpdateStatus={(stageId, status) => updateStageStatus(stageId, status)}
-            onRemoveStage={(stageId) => removeStage(stageId)}
-            onAddStage={async (name) => {
-              if (!selectedProject) return;
-              try {
-                const stage = await createProjectStage({
-                  project_id: selectedProject.id,
-                  name,
-                  status: "pending",
-                  position: stages.length,
-                  started_at: null,
-                  completed_at: null,
-                  started_by: null,
-                });
-                setStages((prev) => [...prev, stage]);
-              } catch (err: any) {
-                toast.error(err.message || "Failed to add stage");
-              }
-            }}
-          />
-        </div>
+        <WorkflowCanvas
+          stages={stages}
+          readOnly={isClient}
+          isAdmin={isAdmin}
+          isWorker={isWorker}
+          onUpdateStatus={(stageId, status) => updateStageStatus(stageId, status)}
+          onRemoveStage={(stageId) => removeStage(stageId)}
+        />
+
+        {/* Add stage input - below the canvas */}
+        {!isClient && (isAdmin || isWorker) && (
+          <div className="flex gap-2 mt-3 mb-4">
+            <Input
+              placeholder="New stage name..."
+              value={detailNewStageName}
+              onChange={(e) => setDetailNewStageName(e.target.value)}
+              onKeyDown={async (e) => {
+                if (e.key === "Enter" && detailNewStageName.trim()) {
+                  try {
+                    const stage = await createProjectStage({
+                      project_id: selectedProject.id,
+                      name: detailNewStageName.trim(),
+                      status: "pending",
+                      position: stages.length,
+                      started_at: null,
+                      completed_at: null,
+                      started_by: null,
+                    });
+                    setStages((prev) => [...prev, stage]);
+                    setDetailNewStageName("");
+                  } catch (err: any) {
+                    toast.error(err.message || "Failed to add stage");
+                  }
+                }
+              }}
+              className="max-w-xs"
+            />
+            <Button
+              size="sm"
+              disabled={!detailNewStageName.trim()}
+              onClick={async () => {
+                if (!detailNewStageName.trim()) return;
+                try {
+                  const stage = await createProjectStage({
+                    project_id: selectedProject.id,
+                    name: detailNewStageName.trim(),
+                    status: "pending",
+                    position: stages.length,
+                    started_at: null,
+                    completed_at: null,
+                    started_by: null,
+                  });
+                  setStages((prev) => [...prev, stage]);
+                  setDetailNewStageName("");
+                } catch (err: any) {
+                  toast.error(err.message || "Failed to add stage");
+                }
+              }}
+            >
+              <Plus className="h-4 w-4 mr-1" /> Add Stage
+            </Button>
+          </div>
+        )}
 
         {/* Preset stages quick-add */}
         {(isAdmin || isWorker) && presetStages.length > 0 && (
