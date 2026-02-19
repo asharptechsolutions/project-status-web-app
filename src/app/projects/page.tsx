@@ -63,12 +63,18 @@ function ProjectsList() {
   const [showEdit, setShowEdit] = useState(false);
   const [editName, setEditName] = useState("");
   const [editDescription, setEditDescription] = useState("");
+  const [editClientIds, setEditClientIds] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("active-completed");
   const [sortBy, setSortBy] = useState("newest");
   const [files, setFiles] = useState<ProjectFile[]>([]);
   const [projectClientIds, setProjectClientIds] = useState<string[]>([]);
   const [addingClient, setAddingClient] = useState(false);
+  const [detailShowNewClient, setDetailShowNewClient] = useState(false);
+  const [detailNewClientName, setDetailNewClientName] = useState("");
+  const [detailNewClientEmail, setDetailNewClientEmail] = useState("");
+  const [detailNewClientPhone, setDetailNewClientPhone] = useState("");
+  const [detailCreatingClient, setDetailCreatingClient] = useState(false);
   const [detailNewStageName, setDetailNewStageName] = useState("");
 
   const load = useCallback(async () => {
@@ -97,7 +103,7 @@ function ProjectsList() {
 
   // Load stages, files, and clients when viewing a project
   useEffect(() => {
-    if (!selectedProject) { setStages([]); setFiles([]); setProjectClientIds([]); return; }
+    if (!selectedProject) { setStages([]); setFiles([]); setProjectClientIds([]); setDetailShowNewClient(false); setDetailNewClientName(""); setDetailNewClientEmail(""); setDetailNewClientPhone(""); return; }
     getProjectStages(selectedProject.id).then(setStages).catch(() => {});
     getProjectFiles(selectedProject.id).then(setFiles).catch(() => {});
     getProjectClients(selectedProject.id).then(setProjectClientIds).catch(() => {});
@@ -133,6 +139,53 @@ function ProjectsList() {
       });
       setClients((prev) => [...prev, client].sort((a, b) => a.name.localeCompare(b.name)));
       setSelectedClientIds((prev) => [...prev, client.id]);
+      setShowNewClient(false);
+      setNewClientName(""); setNewClientEmail(""); setNewClientPhone("");
+      toast.success("Client created");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to create client");
+    } finally {
+      setCreatingClient(false);
+    }
+  };
+
+  const handleCreateNewClientForProject = async () => {
+    if (!orgId || !userId || !selectedProject || !detailNewClientName.trim()) return;
+    setDetailCreatingClient(true);
+    try {
+      const client = await createNewClient({
+        team_id: orgId,
+        name: detailNewClientName.trim(),
+        email: detailNewClientEmail.trim(),
+        phone: detailNewClientPhone.trim(),
+        created_by: userId,
+      });
+      setClients((prev) => [...prev, client].sort((a, b) => a.name.localeCompare(b.name)));
+      await addProjectClient(selectedProject.id, client.id);
+      setProjectClientIds((prev) => [...prev, client.id]);
+      setDetailShowNewClient(false);
+      setDetailNewClientName(""); setDetailNewClientEmail(""); setDetailNewClientPhone("");
+      toast.success("Client created and added");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to create client");
+    } finally {
+      setDetailCreatingClient(false);
+    }
+  };
+
+  const handleCreateClientForEdit = async () => {
+    if (!orgId || !userId || !newClientName.trim()) return;
+    setCreatingClient(true);
+    try {
+      const client = await createNewClient({
+        team_id: orgId,
+        name: newClientName.trim(),
+        email: newClientEmail.trim(),
+        phone: newClientPhone.trim(),
+        created_by: userId,
+      });
+      setClients((prev) => [...prev, client].sort((a, b) => a.name.localeCompare(b.name)));
+      setEditClientIds((prev) => [...prev, client.id]);
       setShowNewClient(false);
       setNewClientName(""); setNewClientEmail(""); setNewClientPhone("");
       toast.success("Client created");
@@ -309,6 +362,9 @@ function ProjectsList() {
     if (!selectedProject) return;
     setEditName(selectedProject.name);
     setEditDescription(selectedProject.description || "");
+    setEditClientIds([...projectClientIds]);
+    setShowNewClient(false);
+    setNewClientName(""); setNewClientEmail(""); setNewClientPhone("");
     setShowEdit(true);
   };
 
@@ -319,6 +375,8 @@ function ProjectsList() {
         name: editName.trim(),
         description: editDescription.trim(),
       });
+      await setProjectClients(selectedProject.id, editClientIds);
+      setProjectClientIds(editClientIds);
       setSelectedProject({ ...selectedProject, name: editName.trim(), description: editDescription.trim() });
       setShowEdit(false);
       toast.success("Project updated");
@@ -440,37 +498,60 @@ function ProjectsList() {
                 </Badge>
               );
             })}
-            {isAdmin && (() => {
-              const available = clients.filter((c) => !projectClientIds.includes(c.id));
-              if (available.length === 0) return null;
-              return (
-                <Select
-                  value=""
-                  onValueChange={async (v) => {
-                    if (!v) return;
-                    setAddingClient(true);
-                    try {
-                      await addProjectClient(selectedProject.id, v);
-                      setProjectClientIds((prev) => [...prev, v]);
-                      toast.success("Client added");
-                    } catch (err: any) {
-                      toast.error(err.message || "Failed to add client");
-                    } finally {
-                      setAddingClient(false);
-                    }
-                  }}
-                >
-                  <SelectTrigger className="w-[200px] h-8 text-xs">
-                    <SelectValue placeholder={addingClient ? "Adding..." : "Add client..."} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {available.map((c) => (
-                      <SelectItem key={c.id} value={c.id}>{c.name}{c.email ? ` (${c.email})` : ""}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              );
-            })()}
+            {isAdmin && (
+              <>
+                {(() => {
+                  const available = clients.filter((c) => !projectClientIds.includes(c.id));
+                  if (available.length === 0) return null;
+                  return (
+                    <Select
+                      value=""
+                      onValueChange={async (v) => {
+                        if (!v) return;
+                        setAddingClient(true);
+                        try {
+                          await addProjectClient(selectedProject.id, v);
+                          setProjectClientIds((prev) => [...prev, v]);
+                          toast.success("Client added");
+                        } catch (err: any) {
+                          toast.error(err.message || "Failed to add client");
+                        } finally {
+                          setAddingClient(false);
+                        }
+                      }}
+                    >
+                      <SelectTrigger className="w-[200px] h-8 text-xs">
+                        <SelectValue placeholder={addingClient ? "Adding..." : "Add client..."} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {available.map((c) => (
+                          <SelectItem key={c.id} value={c.id}>{c.name}{c.email ? ` (${c.email})` : ""}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  );
+                })()}
+                {!detailShowNewClient ? (
+                  <Button type="button" variant="outline" size="sm" className="h-8" onClick={() => setDetailShowNewClient(true)}>
+                    <UserPlus className="h-4 w-4 mr-1" /> New Client
+                  </Button>
+                ) : (
+                  <div className="w-full space-y-3 border rounded-md p-3 mt-2">
+                    <div><Label>Client Name</Label><Input value={detailNewClientName} onChange={(e) => setDetailNewClientName(e.target.value)} placeholder="e.g. John Smith" /></div>
+                    <div><Label>Client Email</Label><Input type="email" value={detailNewClientEmail} onChange={(e) => setDetailNewClientEmail(e.target.value)} placeholder="e.g. john@example.com" /></div>
+                    <div><Label>Client Phone</Label><Input type="tel" value={detailNewClientPhone} onChange={(e) => setDetailNewClientPhone(e.target.value)} placeholder="e.g. (555) 123-4567" /></div>
+                    <div className="flex gap-2">
+                      <Button type="button" size="sm" onClick={handleCreateNewClientForProject} disabled={!detailNewClientName.trim() || detailCreatingClient}>
+                        {detailCreatingClient ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Plus className="h-4 w-4 mr-1" />} Save Client
+                      </Button>
+                      <Button type="button" variant="ghost" size="sm" onClick={() => { setDetailShowNewClient(false); setDetailNewClientName(""); setDetailNewClientEmail(""); setDetailNewClientPhone(""); }}>
+                        <X className="h-4 w-4 mr-1" /> Cancel
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
           </div>
         </div>
 
@@ -611,6 +692,64 @@ function ProjectsList() {
             <div className="space-y-4">
               <div><Label>Project Name</Label><Input value={editName} onChange={(e) => setEditName(e.target.value)} /></div>
               <div><Label>Description (optional)</Label><Textarea value={editDescription} onChange={(e) => setEditDescription(e.target.value)} rows={3} /></div>
+              <div className="border-t pt-3 mt-1">
+                <p className="text-sm font-medium mb-2">Clients</p>
+                <div className="space-y-3">
+                  {editClientIds.length > 0 && (
+                    <div className="flex flex-wrap gap-2">
+                      {editClientIds.map((cid) => {
+                        const c = clients.find((cl) => cl.id === cid);
+                        if (!c) return null;
+                        return (
+                          <Badge key={cid} variant="secondary" className="flex items-center gap-1 py-1 px-2 text-sm">
+                            {c.name}
+                            <button
+                              type="button"
+                              onClick={() => setEditClientIds((prev) => prev.filter((id) => id !== cid))}
+                              className="ml-1 hover:text-destructive"
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </Badge>
+                        );
+                      })}
+                    </div>
+                  )}
+                  {(() => {
+                    const available = clients.filter((c) => !editClientIds.includes(c.id));
+                    if (available.length === 0) return null;
+                    return (
+                      <Select value="" onValueChange={(v) => { if (v) setEditClientIds((prev) => [...prev, v]); }}>
+                        <SelectTrigger><SelectValue placeholder="Add a client…" /></SelectTrigger>
+                        <SelectContent>
+                          {available.map((c) => (
+                            <SelectItem key={c.id} value={c.id}>{c.name}{c.email ? ` (${c.email})` : ""}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    );
+                  })()}
+                  {!showNewClient ? (
+                    <Button type="button" variant="outline" size="sm" onClick={() => setShowNewClient(true)}>
+                      <UserPlus className="h-4 w-4 mr-1" /> Add New Client
+                    </Button>
+                  ) : (
+                    <div className="space-y-3 border rounded-md p-3">
+                      <div><Label>Client Name</Label><Input value={newClientName} onChange={(e) => setNewClientName(e.target.value)} placeholder="e.g. John Smith" /></div>
+                      <div><Label>Client Email</Label><Input type="email" value={newClientEmail} onChange={(e) => setNewClientEmail(e.target.value)} placeholder="e.g. john@example.com" /></div>
+                      <div><Label>Client Phone</Label><Input type="tel" value={newClientPhone} onChange={(e) => setNewClientPhone(e.target.value)} placeholder="e.g. (555) 123-4567" /></div>
+                      <div className="flex gap-2">
+                        <Button type="button" size="sm" onClick={handleCreateClientForEdit} disabled={!newClientName.trim() || creatingClient}>
+                          {creatingClient ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Plus className="h-4 w-4 mr-1" />} Save Client
+                        </Button>
+                        <Button type="button" variant="ghost" size="sm" onClick={() => { setShowNewClient(false); setNewClientName(""); setNewClientEmail(""); setNewClientPhone(""); }}>
+                          <X className="h-4 w-4 mr-1" /> Cancel
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
               <Button onClick={handleEdit} className="w-full" disabled={!editName.trim()}>Save Changes</Button>
             </div>
           </DialogContent>
