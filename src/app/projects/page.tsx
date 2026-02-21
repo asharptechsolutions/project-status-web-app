@@ -18,13 +18,14 @@ import { Label } from "@/components/ui/label";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Plus, Trash2, ArrowLeft, Play, CheckCircle2, ChevronRight,
   Pencil, Search, X, ArrowUpDown, Archive, ArchiveRestore,
   Clock, Loader2, GripVertical, UserPlus, Mail, Users, Building2, Save,
-  AlertTriangle, TrendingUp, Link, FolderOpen,
+  AlertTriangle, TrendingUp, Link, FolderOpen, MoreHorizontal,
 } from "lucide-react";
 import { toast } from "sonner";
 import { DatePicker } from "@/components/ui/date-picker";
@@ -108,6 +109,8 @@ function ProjectsList() {
   const [showSaveTemplate, setShowSaveTemplate] = useState(false);
   const [templateName, setTemplateName] = useState("");
   const [savingTemplate, setSavingTemplate] = useState(false);
+  const [showArchiveConfirm, setShowArchiveConfirm] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const chatBubbleRef = useRef<ChatBubbleHandle>(null);
   const workflowLocked = selectedProject?.workflow_locked ?? false;
 
@@ -661,67 +664,81 @@ function ProjectsList() {
               {selectedProject.status}
             </Badge>
           </div>
-          <div className="flex items-center gap-2 flex-wrap">
-            <Button variant="outline" size="sm" onClick={() => setShowClientsModal(true)}>
-              <Users className="h-4 w-4 mr-1" /> View Clients
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => chatBubbleRef.current?.openFiles()}>
-              <FolderOpen className="h-4 w-4 mr-1" /> View Files
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => {
-              const url = `${window.location.origin}/track/?id=${selectedProject.id}`;
-              navigator.clipboard.writeText(url).then(() => toast.success("Client link copied to clipboard")).catch(() => toast.error("Failed to copy link"));
-            }}>
-              <Link className="h-4 w-4 mr-1" /> Client Link
-            </Button>
+          <div className="flex items-center gap-2">
             {isAdmin && (
-              <>
-                {stages.length > 0 && (
-                  <Button variant="outline" size="sm" onClick={() => { setTemplateName(selectedProject.name); setShowSaveTemplate(true); }}>
-                    <Save className="h-4 w-4 mr-1" /> Save as Template
-                  </Button>
-                )}
-                <Button variant="outline" size="sm" onClick={openEdit}>
-                  <Pencil className="h-4 w-4 mr-1" /> Edit
-                </Button>
-                {selectedProject.status === "archived" ? (
-                  <Button variant="outline" size="sm" onClick={() => handleRestore(selectedProject.id)}>
-                    <ArchiveRestore className="h-4 w-4 mr-1" /> Restore
-                  </Button>
-                ) : (
-                  <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                      <Button variant="outline" size="sm"><Archive className="h-4 w-4 mr-1" /> Archive</Button>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent>
-                      <AlertDialogHeader>
-                        <AlertDialogTitle>Archive Project</AlertDialogTitle>
-                        <AlertDialogDescription>Archive &quot;{selectedProject.name}&quot;? It will be hidden from the default view.</AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel>Cancel</AlertDialogCancel>
-                        <AlertDialogAction onClick={() => handleArchive(selectedProject.id)}>Archive</AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
-                )}
-                <AlertDialog>
-                  <AlertDialogTrigger asChild>
-                    <Button variant="destructive" size="sm"><Trash2 className="h-4 w-4" /></Button>
-                  </AlertDialogTrigger>
-                  <AlertDialogContent>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>Delete Project</AlertDialogTitle>
-                      <AlertDialogDescription>Permanently delete &quot;{selectedProject.name}&quot;? This cannot be undone.</AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel>Cancel</AlertDialogCancel>
-                      <AlertDialogAction onClick={() => handleDelete(selectedProject.id)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Delete</AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
-              </>
+              <Button variant="outline" size="sm" onClick={openEdit}>
+                <Pencil className="h-4 w-4 mr-1" /> Edit
+              </Button>
             )}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm">
+                  <MoreHorizontal className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => setShowClientsModal(true)}>
+                  <Users className="h-4 w-4" /> View Clients
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => chatBubbleRef.current?.openFiles()}>
+                  <FolderOpen className="h-4 w-4" /> View Files
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => {
+                  const url = `${window.location.origin}/track/?id=${selectedProject.id}`;
+                  navigator.clipboard.writeText(url).then(() => toast.success("Client link copied to clipboard")).catch(() => toast.error("Failed to copy link"));
+                }}>
+                  <Link className="h-4 w-4" /> Copy Client Link
+                </DropdownMenuItem>
+                {isAdmin && stages.length > 0 && (
+                  <DropdownMenuItem onClick={() => { setTemplateName(selectedProject.name); setShowSaveTemplate(true); }}>
+                    <Save className="h-4 w-4" /> Save as Template
+                  </DropdownMenuItem>
+                )}
+                {isAdmin && (
+                  <>
+                    <DropdownMenuSeparator />
+                    {selectedProject.status === "archived" ? (
+                      <DropdownMenuItem onClick={() => handleRestore(selectedProject.id)}>
+                        <ArchiveRestore className="h-4 w-4" /> Restore
+                      </DropdownMenuItem>
+                    ) : (
+                      <DropdownMenuItem onClick={() => setShowArchiveConfirm(true)}>
+                        <Archive className="h-4 w-4" /> Archive
+                      </DropdownMenuItem>
+                    )}
+                    <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => setShowDeleteConfirm(true)}>
+                      <Trash2 className="h-4 w-4" /> Delete
+                    </DropdownMenuItem>
+                  </>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            {/* Controlled AlertDialogs for Archive and Delete */}
+            <AlertDialog open={showArchiveConfirm} onOpenChange={setShowArchiveConfirm}>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Archive Project</AlertDialogTitle>
+                  <AlertDialogDescription>Archive &quot;{selectedProject.name}&quot;? It will be hidden from the default view.</AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction onClick={() => handleArchive(selectedProject.id)}>Archive</AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+            <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Delete Project</AlertDialogTitle>
+                  <AlertDialogDescription>Permanently delete &quot;{selectedProject.name}&quot;? This cannot be undone.</AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction onClick={() => handleDelete(selectedProject.id)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Delete</AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           </div>
         </div>
 
@@ -985,6 +1002,24 @@ function ProjectsList() {
             <div className="space-y-4">
               <div>
                 <Label>Stage Name</Label>
+                {!editingStageId && presetStages.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mb-2">
+                    {presetStages.map((ps) => (
+                      <button
+                        key={ps.id}
+                        type="button"
+                        className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium transition-colors cursor-pointer ${
+                          stageModalName === ps.name
+                            ? "bg-primary text-primary-foreground border-primary"
+                            : "bg-muted/50 hover:bg-muted border-transparent"
+                        }`}
+                        onClick={() => setStageModalName(ps.name)}
+                      >
+                        {ps.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
                 <Input
                   value={stageModalName}
                   onChange={(e) => setStageModalName(e.target.value)}
