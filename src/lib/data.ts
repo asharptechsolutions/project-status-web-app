@@ -6,55 +6,13 @@ import type {
   ProjectStage,
   ProjectAssignment,
   ProjectMessage,
+  ProjectNote,
   ProjectFile,
   Template,
   PresetStage,
   Member,
-  Client,
+  Company,
 } from "./types";
-
-// ============ CLIENTS ============
-
-export async function getClients(teamId: string): Promise<Client[]> {
-  const { data, error } = await supabase
-    .from("clients")
-    .select("*")
-    .eq("team_id", teamId)
-    .order("name", { ascending: true });
-  if (error) throw new Error(error.message);
-  return (data || []) as Client[];
-}
-
-export async function createNewClient(
-  client: Omit<Client, "id" | "created_at">
-): Promise<Client> {
-  const { data, error } = await supabase
-    .from("clients")
-    .insert(client)
-    .select("*")
-    .single();
-  if (error) throw new Error(error.message);
-  return data as Client;
-}
-
-export async function updateClient(
-  id: string,
-  updates: Partial<Client>
-): Promise<void> {
-  const { error } = await supabase
-    .from("clients")
-    .update(updates)
-    .eq("id", id);
-  if (error) throw new Error(error.message);
-}
-
-export async function deleteClient(id: string): Promise<void> {
-  const { error } = await supabase
-    .from("clients")
-    .delete()
-    .eq("id", id);
-  if (error) throw new Error(error.message);
-}
 
 // ============ PROJECT CLIENTS (junction) ============
 
@@ -165,6 +123,16 @@ export async function getProjectStages(projectId: string): Promise<ProjectStage[
   return (data || []) as ProjectStage[];
 }
 
+export async function getStagesForProjects(projectIds: string[]): Promise<ProjectStage[]> {
+  if (projectIds.length === 0) return [];
+  const { data, error } = await supabase
+    .from("project_stages")
+    .select("*")
+    .in("project_id", projectIds);
+  if (error) throw new Error(error.message);
+  return (data || []) as ProjectStage[];
+}
+
 export async function createProjectStage(
   stage: Omit<ProjectStage, "id">
 ): Promise<ProjectStage> {
@@ -245,6 +213,38 @@ export async function unassignProject(
   if (error) throw new Error(error.message);
 }
 
+// ============ PROJECT NOTES ============
+
+export async function getProjectNotes(projectId: string): Promise<ProjectNote[]> {
+  const { data, error } = await supabase
+    .from("project_notes")
+    .select("*")
+    .eq("project_id", projectId)
+    .order("created_at", { ascending: false });
+  if (error) throw new Error(error.message);
+  return (data || []) as ProjectNote[];
+}
+
+export async function addProjectNote(
+  note: Omit<ProjectNote, "id" | "created_at">
+): Promise<string> {
+  const { data, error } = await supabase
+    .from("project_notes")
+    .insert(note)
+    .select("id")
+    .single();
+  if (error) throw new Error(error.message);
+  return data.id;
+}
+
+export async function deleteProjectNote(id: string): Promise<void> {
+  const { error } = await supabase
+    .from("project_notes")
+    .delete()
+    .eq("id", id);
+  if (error) throw new Error(error.message);
+}
+
 // ============ MESSAGES ============
 
 export async function getProjectMessages(
@@ -252,7 +252,7 @@ export async function getProjectMessages(
 ): Promise<ProjectMessage[]> {
   const { data, error } = await supabase
     .from("messages")
-    .select("*")
+    .select("*, file:files(*)")
     .eq("project_id", projectId)
     .order("created_at", { ascending: true });
   if (error) throw new Error(error.message);
@@ -260,7 +260,7 @@ export async function getProjectMessages(
 }
 
 export async function sendProjectMessage(
-  message: Omit<ProjectMessage, "id" | "created_at">
+  message: Omit<ProjectMessage, "id" | "created_at" | "file">
 ): Promise<string> {
   const { data, error } = await supabase
     .from("messages")
@@ -269,6 +269,28 @@ export async function sendProjectMessage(
     .single();
   if (error) throw new Error(error.message);
   return data.id;
+}
+
+export async function sendFileMessage(
+  projectId: string,
+  senderId: string,
+  senderName: string,
+  file: File
+): Promise<ProjectMessage> {
+  const uploaded = await uploadFile(projectId, file, senderId);
+  const { data, error } = await supabase
+    .from("messages")
+    .insert({
+      project_id: projectId,
+      sender_id: senderId,
+      sender_name: senderName,
+      content: "",
+      file_id: uploaded.id,
+    })
+    .select("*, file:files(*)")
+    .single();
+  if (error) throw new Error(error.message);
+  return data as ProjectMessage;
 }
 
 // ============ FILES ============
@@ -412,12 +434,55 @@ export async function deletePresetStage(id: string): Promise<void> {
   if (error) throw new Error(error.message);
 }
 
+// ============ COMPANIES ============
+
+export async function getCompanies(orgId: string): Promise<Company[]> {
+  const { data, error } = await supabase
+    .from("companies")
+    .select("*")
+    .eq("team_id", orgId)
+    .order("name", { ascending: true });
+  if (error) throw new Error(error.message);
+  return (data || []) as Company[];
+}
+
+export async function createCompany(
+  company: Omit<Company, "id" | "created_at" | "updated_at">
+): Promise<string> {
+  const { data, error } = await supabase
+    .from("companies")
+    .insert(company)
+    .select("id")
+    .single();
+  if (error) throw new Error(error.message);
+  return data.id;
+}
+
+export async function updateCompany(
+  id: string,
+  updates: Partial<Company>
+): Promise<void> {
+  const { error } = await supabase
+    .from("companies")
+    .update({ ...updates, updated_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) throw new Error(error.message);
+}
+
+export async function deleteCompany(id: string): Promise<void> {
+  const { error } = await supabase
+    .from("companies")
+    .delete()
+    .eq("id", id);
+  if (error) throw new Error(error.message);
+}
+
 // ============ MEMBERS ============
 
 export async function getMembers(orgId: string): Promise<Member[]> {
   const { data, error } = await supabase
     .from("team_members")
-    .select("*, profiles(display_name, email)")
+    .select("*, profiles(display_name, email, phone), companies(name)")
     .eq("team_id", orgId);
   if (error) throw new Error(error.message);
   return (data || []).map((d: any) => ({
@@ -427,7 +492,11 @@ export async function getMembers(orgId: string): Promise<Member[]> {
     role: d.role,
     name: d.profiles?.display_name || d.profiles?.email || "",
     email: d.profiles?.email || "",
+    phone: d.profiles?.phone || "",
+    company_id: d.company_id || null,
+    company_name: d.companies?.name || null,
     created_at: d.invited_at,
+    joined_at: d.joined_at || null,
   })) as Member[];
 }
 
@@ -437,7 +506,7 @@ export async function getMember(
 ): Promise<Member | null> {
   const { data, error } = await supabase
     .from("team_members")
-    .select("*, profiles(display_name, email)")
+    .select("*, profiles(display_name, email, phone), companies(name)")
     .eq("user_id", userId)
     .eq("team_id", orgId)
     .single();
@@ -449,31 +518,67 @@ export async function getMember(
     role: data.role,
     name: (data as any).profiles?.display_name || (data as any).profiles?.email || "",
     email: (data as any).profiles?.email || "",
+    phone: (data as any).profiles?.phone || "",
+    company_id: (data as any).company_id || null,
+    company_name: (data as any).companies?.name || null,
     created_at: data.invited_at,
+    joined_at: data.joined_at || null,
   } as Member;
 }
 
 export async function createMember(
   member: Omit<Member, "id" | "created_at">
 ): Promise<Member> {
+  const row: Record<string, any> = {
+    team_id: member.team_id,
+    user_id: member.user_id,
+    role: member.role,
+  };
+  if (member.company_id) row.company_id = member.company_id;
   const { data, error } = await supabase
     .from("team_members")
-    .insert(member)
+    .insert(row)
     .select("*")
     .single();
   if (error) throw new Error(error.message);
-  return data as Member;
+  return {
+    ...data,
+    id: data.user_id,
+    name: member.name || "",
+    email: member.email || "",
+    company_id: data.company_id || null,
+    company_name: null,
+    created_at: data.invited_at,
+  } as Member;
 }
 
 export async function updateMember(
   userId: string,
-  updates: Partial<Pick<Member, "role" | "name" | "email">>
+  updates: Partial<Pick<Member, "role" | "name" | "email" | "phone" | "company_id">>
 ): Promise<void> {
-  const { error } = await supabase
-    .from("team_members")
-    .update(updates)
-    .eq("user_id", userId);
-  if (error) throw new Error(error.message);
+  // Update role/company_id on team_members
+  const teamUpdates: Record<string, any> = {};
+  if (updates.role) teamUpdates.role = updates.role;
+  if (updates.company_id !== undefined) teamUpdates.company_id = updates.company_id;
+  if (Object.keys(teamUpdates).length > 0) {
+    const { error } = await supabase
+      .from("team_members")
+      .update(teamUpdates)
+      .eq("user_id", userId);
+    if (error) throw new Error(error.message);
+  }
+  // Update name/email/phone on profiles
+  if (updates.name || updates.email || updates.phone !== undefined) {
+    const profileUpdates: Record<string, string> = {};
+    if (updates.name) profileUpdates.display_name = updates.name;
+    if (updates.email) profileUpdates.email = updates.email;
+    if (updates.phone !== undefined) profileUpdates.phone = updates.phone;
+    const { error } = await supabase
+      .from("profiles")
+      .update(profileUpdates)
+      .eq("id", userId);
+    if (error) throw new Error(error.message);
+  }
 }
 
 export async function deleteMember(userId: string): Promise<void> {
@@ -481,6 +586,35 @@ export async function deleteMember(userId: string): Promise<void> {
     .from("team_members")
     .delete()
     .eq("user_id", userId);
+  if (error) throw new Error(error.message);
+}
+
+// ============ MESSAGE READ STATUS ============
+
+export async function getMessageReadStatus(
+  userId: string,
+  projectId: string
+): Promise<string | null> {
+  const { data, error } = await supabase
+    .from("message_read_status")
+    .select("last_read_at")
+    .eq("user_id", userId)
+    .eq("project_id", projectId)
+    .single();
+  if (error || !data) return null;
+  return data.last_read_at;
+}
+
+export async function markMessagesRead(
+  userId: string,
+  projectId: string
+): Promise<void> {
+  const { error } = await supabase
+    .from("message_read_status")
+    .upsert(
+      { user_id: userId, project_id: projectId, last_read_at: new Date().toISOString() },
+      { onConflict: "user_id,project_id" }
+    );
   if (error) throw new Error(error.message);
 }
 
@@ -493,6 +627,17 @@ export async function getAssignedProjects(
     .from("project_assignments")
     .select("project_id, projects(*)")
     .eq("member_id", memberId);
+  if (error) throw new Error(error.message);
+  return (data || []).map((d: any) => d.projects).filter(Boolean) as Project[];
+}
+
+export async function getClientProjects(
+  userId: string
+): Promise<Project[]> {
+  const { data, error } = await supabase
+    .from("project_clients")
+    .select("project_id, projects(*)")
+    .eq("client_id", userId);
   if (error) throw new Error(error.message);
   return (data || []).map((d: any) => d.projects).filter(Boolean) as Project[];
 }

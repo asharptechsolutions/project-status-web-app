@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { Navbar } from "@/components/navbar";
 import { AuthGate } from "@/components/auth-gate";
 import { useAuth } from "@/lib/auth-context";
-import { getProjects, getAssignedProjects } from "@/lib/data";
+import { getProjects, getAssignedProjects, getClientProjects } from "@/lib/data";
 import type { Project } from "@/lib/types";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -21,7 +21,7 @@ function Dashboard() {
     const load = async () => {
       try {
         if (isClient && member) {
-          setProjects(await getAssignedProjects(member.id));
+          setProjects(await getClientProjects(member.id));
         } else {
           setProjects(await getProjects(orgId));
         }
@@ -97,9 +97,6 @@ function Dashboard() {
                     </div>
                   </CardHeader>
                   <CardContent>
-                    {p.description && (
-                      <p className="text-sm text-muted-foreground mb-2 line-clamp-2">{p.description}</p>
-                    )}
                     <p className="text-xs text-muted-foreground">
                       Created {new Date(p.created_at).toLocaleDateString()}
                     </p>

@@ -72,6 +72,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     try {
+      // Get profile (includes platform admin flag)
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("display_name, email, is_platform_admin")
+        .eq("id", user.id)
+        .single();
+
+      setIsPlatformAdmin(profile?.is_platform_admin === true);
+
       // Get the user's first team membership
       const { data: memberData } = await supabase
         .from("team_members")
@@ -81,12 +90,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .single();
 
       if (memberData) {
-        // Get profile for name/email
-        const { data: profile } = await supabase
-          .from("profiles")
-          .select("display_name, email")
-          .eq("id", user.id)
-          .single();
+        // Mark as joined if not already
+        if (!memberData.joined_at) {
+          await supabase
+            .from("team_members")
+            .update({ joined_at: new Date().toISOString() })
+            .eq("user_id", user.id)
+            .eq("team_id", memberData.team_id);
+          memberData.joined_at = new Date().toISOString();
+        }
+
         setMember({
           ...memberData,
           id: memberData.user_id,
@@ -98,8 +111,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setOrgId(team.id);
           setOrgName(team.name);
         }
-        // Owner role = admin equivalent
-        setIsPlatformAdmin(memberData.role === "owner");
       } else {
         setMember(null);
         setOrgId(null);
@@ -118,6 +129,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     supabase.auth.getSession().then(({ data: { session: s } }) => {
       setSession(s);
       setUser(s?.user ?? null);
+      // Only stop loading here if there's no user — if there IS a user,
+      // refreshMember will set loading=false after fetching member data.
+      if (!s?.user) {
+        setLoading(false);
+      }
     });
 
     // Listen for auth changes
@@ -136,7 +152,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setMember(null);
       setOrgId(null);
       setOrgName(null);
-      setLoading(false);
+      // Don't set loading=false here — on mount, user is null before getSession
+      // resolves, and setting loading=false would flash the landing page.
+      // loading=false is handled by: getSession (no user) or refreshMember (has user).
     }
   }, [user, refreshMember]);
 
@@ -150,9 +168,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setOrgName(null);
   }, []);
 
-  const role: UserRole | null = isPlatformAdmin
-    ? "owner"
-    : member?.role as UserRole || null;
+  const role: UserRole | null = member?.role as UserRole || null;
 
   return (
     <AuthContext.Provider

@@ -3,42 +3,35 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTheme } from "next-themes";
-import { Menu, Sun, Moon, Workflow, LogOut } from "lucide-react";
+import { Menu, Sun, Moon, Shield, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
 import basePath from "@/lib/base-path";
 
-export function Navbar() {
+const links = [
+  { href: "/admin/", label: "Overview" },
+  { href: "/admin/organizations/", label: "Organizations" },
+];
+
+export function AdminNavbar() {
   const [open, setOpen] = useState(false);
   const { theme, setTheme } = useTheme();
   const pathname = usePathname();
-  const { isAdmin, signOut, user } = useAuth();
-
-  const links = [
-    { href: "/", label: "Dashboard" },
-    { href: "/projects/", label: "Projects" },
-    ...(isAdmin ? [
-      { href: "/templates/", label: "Templates" },
-      { href: "/crm/", label: "CRM" },
-    ] : []),
-  ];
+  const { signOut, user } = useAuth();
 
   const isActive = (href: string) => {
     const full = basePath + href;
-    if (href === "/") {
-      return pathname === full || pathname === full.replace(/\/$/, "");
-    }
-    return pathname.startsWith(full) || pathname.startsWith(full.replace(/\/$/, ""));
+    return pathname === full || pathname === full.replace(/\/$/, "");
   };
 
   return (
     <header className="sticky top-0 z-40 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="flex h-14 items-center px-4">
-        <Link href="/" className="flex items-center gap-2 font-bold mr-6">
-          <Workflow className="h-5 w-5" />
-          <span className="hidden sm:inline">ProjectStatus</span>
+        <Link href="/admin/" className="flex items-center gap-2 font-bold mr-6">
+          <Shield className="h-5 w-5 text-red-500" />
+          <span className="hidden sm:inline">Platform Admin</span>
         </Link>
 
         <nav className="hidden md:flex items-center gap-1 flex-1 justify-center">
@@ -77,8 +70,8 @@ export function Navbar() {
       <Sheet open={open} onOpenChange={setOpen}>
         <SheetContent side="left">
           <SheetHeader>
-            <SheetTitle>ProjectStatus</SheetTitle>
-            <SheetDescription>Navigate the app</SheetDescription>
+            <SheetTitle>Platform Admin</SheetTitle>
+            <SheetDescription>Admin navigation</SheetDescription>
           </SheetHeader>
           <nav className="flex flex-col gap-2 mt-6">
             {links.map((l) => (
