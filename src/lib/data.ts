@@ -12,6 +12,10 @@ import type {
   PresetStage,
   Member,
   Company,
+  ClientVisibilitySettings,
+  OfficeHoursSettings,
+  AvailabilitySlot,
+  Appointment,
 } from "./types";
 
 // ============ PROJECT CLIENTS (junction) ============
@@ -640,4 +644,271 @@ export async function getClientProjects(
     .eq("client_id", userId);
   if (error) throw new Error(error.message);
   return (data || []).map((d: any) => d.projects).filter(Boolean) as Project[];
+}
+
+// ============ CLIENT VISIBILITY SETTINGS ============
+
+export async function getClientVisibilitySettings(
+  orgId: string
+): Promise<ClientVisibilitySettings | null> {
+  const { data, error } = await supabase
+    .from("client_visibility_settings")
+    .select("*")
+    .eq("team_id", orgId)
+    .single();
+  if (error) return null;
+  return data as ClientVisibilitySettings;
+}
+
+export async function upsertClientVisibilitySettings(
+  settings: Omit<ClientVisibilitySettings, "id" | "created_at" | "updated_at">
+): Promise<void> {
+  const { error } = await supabase
+    .from("client_visibility_settings")
+    .upsert(
+      { ...settings, updated_at: new Date().toISOString() },
+      { onConflict: "team_id" }
+    );
+  if (error) throw new Error(error.message);
+}
+
+// ============ OFFICE HOURS SETTINGS ============
+
+export async function getOfficeHoursSettings(
+  orgId: string
+): Promise<OfficeHoursSettings | null> {
+  const { data, error } = await supabase
+    .from("office_hours_settings")
+    .select("*")
+    .eq("team_id", orgId)
+    .single();
+  if (error) return null;
+  return data as OfficeHoursSettings;
+}
+
+export async function upsertOfficeHoursSettings(
+  settings: Omit<OfficeHoursSettings, "id" | "created_at" | "updated_at">
+): Promise<void> {
+  const { error } = await supabase
+    .from("office_hours_settings")
+    .upsert(
+      { ...settings, updated_at: new Date().toISOString() },
+      { onConflict: "team_id" }
+    );
+  if (error) throw new Error(error.message);
+}
+
+// ============ AVAILABILITY SLOTS ============
+
+export async function getAvailabilitySlots(
+  orgId: string,
+  startDate: string,
+  endDate: string
+): Promise<AvailabilitySlot[]> {
+  const { data, error } = await supabase
+    .from("availability_slots")
+    .select("*")
+    .eq("team_id", orgId)
+    .gte("start_time", startDate)
+    .lte("start_time", endDate)
+    .order("start_time", { ascending: true });
+  if (error) throw new Error(error.message);
+  return (data || []) as AvailabilitySlot[];
+}
+
+export async function getAvailableSlotsForClient(
+  orgId: string,
+  startDate: string,
+  endDate: string
+): Promise<AvailabilitySlot[]> {
+  const { data, error } = await supabase
+    .from("availability_slots")
+    .select("*")
+    .eq("team_id", orgId)
+    .eq("is_booked", false)
+    .gte("start_time", startDate)
+    .lte("start_time", endDate)
+    .order("start_time", { ascending: true });
+  if (error) throw new Error(error.message);
+  return (data || []) as AvailabilitySlot[];
+}
+
+export async function createAvailabilitySlots(
+  slots: Omit<AvailabilitySlot, "id" | "created_at">[]
+): Promise<void> {
+  if (slots.length === 0) return;
+  const { error } = await supabase
+    .from("availability_slots")
+    .insert(slots);
+  if (error) throw new Error(error.message);
+}
+
+export async function deleteAvailabilitySlot(id: string): Promise<void> {
+  const { error } = await supabase
+    .from("availability_slots")
+    .delete()
+    .eq("id", id)
+    .eq("is_booked", false);
+  if (error) throw new Error(error.message);
+}
+
+export async function deleteRecurringSlots(
+  recurrenceGroupId: string
+): Promise<void> {
+  const { error } = await supabase
+    .from("availability_slots")
+    .delete()
+    .eq("recurrence_group_id", recurrenceGroupId)
+    .eq("is_booked", false);
+  if (error) throw new Error(error.message);
+}
+
+// ============ APPOINTMENTS ============
+
+export async function getAppointments(
+  orgId: string,
+  startDate: string,
+  endDate: string
+): Promise<Appointment[]> {
+  const { data, error } = await supabase
+    .from("appointments")
+    .select("*, slot:availability_slots(*), project:projects(name)")
+    .eq("team_id", orgId)
+    .gte("created_at", startDate)
+    .lte("created_at", endDate)
+    .order("created_at", { ascending: true });
+  if (error) throw new Error(error.message);
+  return (data || []).map((d: any) => ({
+    ...d,
+    slot: d.slot || undefined,
+    project_name: d.project?.name || undefined,
+    project: undefined,
+  })) as Appointment[];
+}
+
+export async function getAppointmentsBySlots(
+  slotIds: string[]
+): Promise<Appointment[]> {
+  if (slotIds.length === 0) return [];
+  const { data, error } = await supabase
+    .from("appointments")
+    .select("*, project:projects(name)")
+    .in("slot_id", slotIds);
+  if (error) throw new Error(error.message);
+  return (data || []).map((d: any) => ({
+    ...d,
+    project_name: d.project?.name || undefined,
+    project: undefined,
+  })) as Appointment[];
+}
+
+export async function getTodaysAppointments(
+  orgId: string
+): Promise<Appointment[]> {
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const todayEnd = new Date();
+  todayEnd.setHours(23, 59, 59, 999);
+
+  const { data, error } = await supabase
+    .from("appointments")
+    .select("*, slot:availability_slots(*), project:projects(name)")
+    .eq("team_id", orgId)
+    .eq("status", "confirmed")
+    .gte("slot.start_time", todayStart.toISOString())
+    .lte("slot.start_time", todayEnd.toISOString())
+    .order("created_at", { ascending: true });
+  if (error) throw new Error(error.message);
+  // Filter out rows where the inner join didn't match (slot times outside range)
+  return (data || [])
+    .filter((d: any) => d.slot)
+    .map((d: any) => ({
+      ...d,
+      slot: d.slot || undefined,
+      project_name: d.project?.name || undefined,
+      project: undefined,
+    })) as Appointment[];
+}
+
+export async function getUpcomingAppointments(
+  orgId: string,
+  days: number = 7
+): Promise<Appointment[]> {
+  const now = new Date();
+  const end = new Date();
+  end.setDate(end.getDate() + days);
+  end.setHours(23, 59, 59, 999);
+
+  const { data, error } = await supabase
+    .from("appointments")
+    .select("*, slot:availability_slots(*), project:projects(name)")
+    .eq("team_id", orgId)
+    .eq("status", "confirmed");
+  if (error) throw new Error(error.message);
+  // Filter client-side by slot start_time (Supabase doesn't support filtering on joined fields reliably)
+  return (data || [])
+    .filter((d: any) => {
+      if (!d.slot) return false;
+      const slotStart = new Date(d.slot.start_time);
+      return slotStart >= now && slotStart <= end;
+    })
+    .sort((a: any, b: any) => new Date(a.slot.start_time).getTime() - new Date(b.slot.start_time).getTime())
+    .map((d: any) => ({
+      ...d,
+      slot: d.slot || undefined,
+      project_name: d.project?.name || undefined,
+      project: undefined,
+    })) as Appointment[];
+}
+
+export async function bookAppointment(data: {
+  team_id: string;
+  slot_id: string;
+  project_id: string;
+  client_id: string;
+  client_name: string;
+  notes?: string;
+}): Promise<void> {
+  // Insert appointment (UNIQUE on slot_id prevents double-booking)
+  const { error: apptError } = await supabase
+    .from("appointments")
+    .insert({
+      team_id: data.team_id,
+      slot_id: data.slot_id,
+      project_id: data.project_id,
+      client_id: data.client_id,
+      client_name: data.client_name,
+      notes: data.notes || null,
+      status: "confirmed",
+    });
+  if (apptError) {
+    if (apptError.message.includes("duplicate") || apptError.message.includes("unique")) {
+      throw new Error("This slot was just booked by someone else. Please pick another time.");
+    }
+    throw new Error(apptError.message);
+  }
+
+  // Mark slot as booked
+  const { error: slotError } = await supabase
+    .from("availability_slots")
+    .update({ is_booked: true })
+    .eq("id", data.slot_id);
+  if (slotError) throw new Error(slotError.message);
+}
+
+export async function cancelAppointment(
+  appointmentId: string,
+  slotId: string
+): Promise<void> {
+  const { error: apptError } = await supabase
+    .from("appointments")
+    .update({ status: "cancelled" })
+    .eq("id", appointmentId);
+  if (apptError) throw new Error(apptError.message);
+
+  const { error: slotError } = await supabase
+    .from("availability_slots")
+    .update({ is_booked: false })
+    .eq("id", slotId);
+  if (slotError) throw new Error(slotError.message);
 }

@@ -59,12 +59,14 @@ export interface ChatBubbleHandle {
 
 interface ChatBubbleProps {
   projectId: string;
+  chatDisabled?: boolean;
+  filesDisabled?: boolean;
 }
 
-export const ChatBubble = forwardRef<ChatBubbleHandle, ChatBubbleProps>(function ChatBubble({ projectId }, ref) {
+export const ChatBubble = forwardRef<ChatBubbleHandle, ChatBubbleProps>(function ChatBubble({ projectId, chatDisabled, filesDisabled }, ref) {
   const { userId, user, isAdmin, isClient } = useAuth();
   const [open, setOpen] = useState(false);
-  const [view, setView] = useState<"chat" | "files">("chat");
+  const [view, setView] = useState<"chat" | "files">(chatDisabled ? "files" : "chat");
   const [messages, setMessages] = useState<ProjectMessage[]>([]);
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
@@ -279,6 +281,8 @@ export const ChatBubble = forwardRef<ChatBubbleHandle, ChatBubbleProps>(function
       >
         {open ? (
           <X className="h-6 w-6" />
+        ) : chatDisabled ? (
+          <FolderOpen className="h-6 w-6" />
         ) : (
           <>
             <MessageCircle className="h-6 w-6" />
@@ -299,9 +303,11 @@ export const ChatBubble = forwardRef<ChatBubbleHandle, ChatBubbleProps>(function
             <div className="flex items-center gap-2">
               {view === "files" ? (
                 <>
-                  <button onClick={() => setView("chat")} className="text-muted-foreground hover:text-foreground">
-                    <ArrowLeft className="h-4 w-4" />
-                  </button>
+                  {!chatDisabled && (
+                    <button onClick={() => setView("chat")} className="text-muted-foreground hover:text-foreground">
+                      <ArrowLeft className="h-4 w-4" />
+                    </button>
+                  )}
                   <FolderOpen className="h-5 w-5 text-primary" />
                   <h3 className="font-semibold text-sm">Files</h3>
                 </>
@@ -316,7 +322,7 @@ export const ChatBubble = forwardRef<ChatBubbleHandle, ChatBubbleProps>(function
               )}
             </div>
             <div className="flex items-center gap-1">
-              {view === "chat" && (
+              {view === "chat" && !filesDisabled && (
                 <button onClick={() => setView("files")} className="text-muted-foreground hover:text-foreground p-1 rounded hover:bg-muted" title="View Files">
                   <FolderOpen className="h-4 w-4" />
                 </button>

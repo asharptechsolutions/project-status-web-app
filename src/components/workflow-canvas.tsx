@@ -25,7 +25,7 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import ELK from "elkjs/lib/elk.bundled.js";
-import type { ProjectStage } from "@/lib/types";
+import type { ProjectStage, ClientVisibilitySettings } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import {
   Play, CheckCircle2, Clock, Loader2, AlignHorizontalDistributeCenter,
@@ -54,6 +54,7 @@ interface WorkflowCanvasProps {
   onLockedChange?: (locked: boolean, positions?: Record<string, { x: number; y: number }>) => void;
   savedPositions?: Record<string, { x: number; y: number }> | null;
   onPositionsChange?: (positions: Record<string, { x: number; y: number }>) => void;
+  visibilitySettings?: ClientVisibilitySettings | null;
 }
 
 type StageNodeData = {
@@ -69,6 +70,9 @@ type StageNodeData = {
   onDelete: () => void;
   onAssignWorker: () => void;
   onEdit: () => void;
+  hideWorkerName?: boolean;
+  hideEstimatedCompletion?: boolean;
+  hideStatusText?: boolean;
 };
 
 /* ------------------------------------------------------------------ */
@@ -256,31 +260,35 @@ function NodeContent({ data, showTarget }: { data: StageNodeData; showTarget: bo
         {statusIcon}
         <span className="font-medium text-sm truncate text-foreground">{data.label}</span>
       </div>
-      <p className="text-xs text-muted-foreground capitalize mb-1">
-        {data.status.replace("_", " ")}
-      </p>
+      {!data.hideStatusText && (
+        <p className="text-xs text-muted-foreground capitalize mb-1">
+          {data.status.replace("_", " ")}
+        </p>
+      )}
       {/* Worker assignment */}
-      {data.assignedWorkerName ? (
-        <button
-          type="button"
-          onClick={data.isAdmin && !data.readOnly ? data.onAssignWorker : undefined}
-          className={`flex items-center gap-1 text-xs text-muted-foreground mb-2 max-w-full ${data.isAdmin && !data.readOnly ? "hover:text-foreground cursor-pointer" : ""}`}
-        >
-          <User className="h-3 w-3 shrink-0" />
-          <span className="truncate">{data.assignedWorkerName}</span>
-        </button>
-      ) : data.isAdmin && !data.readOnly ? (
-        <button
-          type="button"
-          onClick={data.onAssignWorker}
-          className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground mb-2 cursor-pointer"
-        >
-          <UserPlus className="h-3 w-3 shrink-0" />
-          <span>Assign</span>
-        </button>
-      ) : null}
+      {!data.hideWorkerName && (
+        data.assignedWorkerName ? (
+          <button
+            type="button"
+            onClick={data.isAdmin && !data.readOnly ? data.onAssignWorker : undefined}
+            className={`flex items-center gap-1 text-xs text-muted-foreground mb-2 max-w-full ${data.isAdmin && !data.readOnly ? "hover:text-foreground cursor-pointer" : ""}`}
+          >
+            <User className="h-3 w-3 shrink-0" />
+            <span className="truncate">{data.assignedWorkerName}</span>
+          </button>
+        ) : data.isAdmin && !data.readOnly ? (
+          <button
+            type="button"
+            onClick={data.onAssignWorker}
+            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground mb-2 cursor-pointer"
+          >
+            <UserPlus className="h-3 w-3 shrink-0" />
+            <span>Assign</span>
+          </button>
+        ) : null
+      )}
       {/* Estimated completion */}
-      {data.estimatedCompletion && (
+      {!data.hideEstimatedCompletion && data.estimatedCompletion && (
         <div className="flex items-center gap-1 text-xs text-muted-foreground mb-2">
           <Calendar className="h-3 w-3 shrink-0" />
           <span>{new Date(data.estimatedCompletion + "T00:00:00").toLocaleDateString()}</span>
@@ -392,6 +400,7 @@ function WorkflowCanvasInner({
   onLockedChange,
   savedPositions,
   onPositionsChange,
+  visibilitySettings,
 }: WorkflowCanvasProps) {
   const { fitView } = useReactFlow();
   const [isMobile, setIsMobile] = useState(false);
@@ -431,7 +440,10 @@ function WorkflowCanvasInner({
     onDelete: () => onRemoveStage?.(s.id),
     onAssignWorker: () => onAssignWorker?.(s.id),
     onEdit: () => onEditStage?.(s.id),
-  }), [readOnly, isAdmin, isWorker, workerNames, onUpdateStatus, onRemoveStage, onAssignWorker, onEditStage]);
+    hideWorkerName: visibilitySettings?.show_worker_names === false,
+    hideEstimatedCompletion: visibilitySettings?.show_estimated_completion === false,
+    hideStatusText: visibilitySettings?.show_stage_status === false,
+  }), [readOnly, isAdmin, isWorker, workerNames, onUpdateStatus, onRemoveStage, onAssignWorker, onEditStage, visibilitySettings]);
 
   const rawNodes: Node[] = sorted.map((s, i) => ({
     id: s.id,

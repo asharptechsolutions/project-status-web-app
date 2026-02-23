@@ -2,14 +2,16 @@
 import { Suspense, useRef, useEffect, useState, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase";
-import type { Project, ProjectStage } from "@/lib/types";
+import type { Project, ProjectStage, ClientVisibilitySettings } from "@/lib/types";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Workflow, Loader2, FolderOpen, Shield } from "lucide-react";
+import { Workflow, Loader2, FolderOpen, Shield, CalendarDays } from "lucide-react";
 import dynamic from "next/dynamic";
 import { ChatBubble, type ChatBubbleHandle } from "@/components/chat-bubble";
+import { BookingDialog } from "@/components/booking-dialog";
 import { useAuth } from "@/lib/auth-context";
 import { AuthForm } from "@/components/auth-form";
+import { getClientProjects, getClientVisibilitySettings } from "@/lib/data";
 
 const WorkflowCanvas = dynamic(
   () => import("@/components/workflow-canvas").then((m) => m.WorkflowCanvas),
@@ -39,7 +41,7 @@ async function checkTrackAccess(userId: string, projectId: string): Promise<bool
 
 function TrackInner() {
   const searchParams = useSearchParams();
-  const { userId, loading: authLoading } = useAuth();
+  const { userId, user, loading: authLoading } = useAuth();
   const chatBubbleRef = useRef<ChatBubbleHandle>(null);
   const [project, setProject] = useState<Project | null>(null);
   const [stages, setStages] = useState<ProjectStage[]>([]);
@@ -47,6 +49,10 @@ function TrackInner() {
   const [error, setError] = useState("");
   const [accessDenied, setAccessDenied] = useState(false);
   const [authMode, setAuthMode] = useState<"signin" | "signup">("signin");
+  const [bookingOpen, setBookingOpen] = useState(false);
+  const [clientProjects, setClientProjects] = useState<Project[]>([]);
+  const [orgId, setOrgId] = useState<string>("");
+  const [visibilitySettings, setVisibilitySettings] = useState<ClientVisibilitySettings | null>(null);
 
   const projectId = searchParams.get("id");
 
@@ -69,9 +75,26 @@ function TrackInner() {
       const { data: proj } = await createClient().from("projects").select("*").eq("id", projectId).single();
       if (!proj) { setError("Project not found."); setLoading(false); return; }
       setProject(proj as Project);
+      setOrgId(proj.team_id);
 
       const { data: stgs } = await createClient().from("project_stages").select("*").eq("project_id", projectId).order("position");
       setStages((stgs || []) as ProjectStage[]);
+
+      // Fetch client visibility settings
+      try {
+        const vs = await getClientVisibilitySettings(proj.team_id);
+        setVisibilitySettings(vs);
+      } catch {
+        // null = show everything (defaults)
+      }
+
+      // Load client's projects for booking dialog
+      try {
+        const cp = await getClientProjects(userId);
+        setClientProjects(cp.length > 0 ? cp : [proj as Project]);
+      } catch {
+        setClientProjects([proj as Project]);
+      }
     } catch {
       setError("Failed to load project.");
     } finally {
@@ -182,6 +205,13 @@ function TrackInner() {
   const completedCount = stages.filter((s) => s.status === "completed").length;
   const progress = stages.length ? Math.round((completedCount / stages.length) * 100) : 0;
 
+  // Visibility flags — null settings (no row) default to showing everything via !== false
+  const showProgress = visibilitySettings?.show_progress_percentage !== false;
+  const showBooking = visibilitySettings?.allow_booking !== false;
+  const showFiles = visibilitySettings?.allow_file_access !== false;
+  const showChat = visibilitySettings?.allow_chat !== false;
+  const showChatBubble = showChat || showFiles; // need ChatBubble for openFiles() if files enabled
+
   return (
     <div className="min-h-[100dvh] bg-background">
       <header className="border-b py-4 px-4">
@@ -194,9 +224,18 @@ function TrackInner() {
       <main className="p-4 max-w-4xl mx-auto">
         <div className="mb-6 flex items-center justify-between">
           <h1 className="text-2xl font-bold">{project.name}</h1>
-          <Button variant="outline" size="sm" onClick={() => chatBubbleRef.current?.openFiles()}>
-            <FolderOpen className="h-4 w-4 mr-1" /> View Files
-          </Button>
+          <div className="flex items-center gap-2">
+            {orgId && showBooking && (
+              <Button variant="outline" size="sm" onClick={() => setBookingOpen(true)}>
+                <CalendarDays className="h-4 w-4 mr-1" /> Book a Call
+              </Button>
+            )}
+            {showFiles && (
+              <Button variant="outline" size="sm" onClick={() => chatBubbleRef.current?.openFiles()}>
+                <FolderOpen className="h-4 w-4 mr-1" /> View Files
+              </Button>
+            )}
+          </div>
         </div>
 
         <WorkflowCanvas
@@ -204,13 +243,27 @@ function TrackInner() {
           readOnly
           isAdmin={false}
           isWorker={false}
-          progress={progress}
+          progress={showProgress ? progress : undefined}
           locked
           savedPositions={project.workflow_positions}
+          visibilitySettings={visibilitySettings}
         />
       </main>
 
-      {project && <ChatBubble ref={chatBubbleRef} projectId={project.id} />}
+      {project && showChatBubble && (
+        <ChatBubble ref={chatBubbleRef} projectId={project.id} chatDisabled={!showChat} filesDisabled={!showFiles} />
+      )}
+
+      {orgId && userId && showBooking && (
+        <BookingDialog
+          open={bookingOpen}
+          onOpenChange={setBookingOpen}
+          orgId={orgId}
+          userId={userId}
+          userName={user?.user_metadata?.full_name || user?.email || "Client"}
+          projects={clientProjects}
+        />
+      )}
 
       <footer className="border-t py-4 px-4 mt-8">
         <p className="text-center text-sm text-muted-foreground">Powered by ProjectStatus</p>

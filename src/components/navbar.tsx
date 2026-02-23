@@ -20,8 +20,10 @@ export function Navbar() {
     { href: "/", label: "Dashboard" },
     { href: "/projects/", label: "Projects" },
     ...(isAdmin ? [
+      { href: "/calendar/", label: "Calendar" },
       { href: "/templates/", label: "Templates" },
       { href: "/crm/", label: "CRM" },
+      { href: "/settings/", label: "Settings" },
     ] : []),
   ];
 

@@ -140,3 +140,58 @@ export interface AdminOrganization {
   memberCount: number;
   projectCount: number;
 }
+
+// ============ CLIENT VISIBILITY SETTINGS ============
+
+export interface ClientVisibilitySettings {
+  id: string;
+  team_id: string;
+  show_worker_names: boolean;
+  show_estimated_completion: boolean;
+  show_progress_percentage: boolean;
+  show_stage_status: boolean;
+  allow_file_access: boolean;
+  allow_chat: boolean;
+  allow_booking: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+// ============ APPOINTMENT SCHEDULING ============
+
+export interface OfficeHoursSettings {
+  id: string;
+  team_id: string;
+  day_start: string; // "HH:MM" time string
+  day_end: string;
+  timezone: string;
+  slot_duration_minutes: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AvailabilitySlot {
+  id: string;
+  team_id: string;
+  created_by: string;
+  start_time: string; // ISO timestamp
+  end_time: string;
+  is_booked: boolean;
+  recurrence_group_id: string | null;
+  created_at: string;
+}
+
+export interface Appointment {
+  id: string;
+  team_id: string;
+  slot_id: string;
+  project_id: string;
+  client_id: string;
+  client_name: string;
+  notes: string | null;
+  status: "confirmed" | "cancelled" | "completed";
+  created_at: string;
+  // joined fields
+  slot?: AvailabilitySlot;
+  project_name?: string;
+}
