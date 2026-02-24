@@ -25,7 +25,7 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import ELK from "elkjs/lib/elk.bundled.js";
-import type { ProjectStage, ClientVisibilitySettings } from "@/lib/types";
+import type { ProjectStage, ClientVisibilitySettings, StageDependency } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import {
   Play, CheckCircle2, Clock, Loader2, AlignHorizontalDistributeCenter,
@@ -55,6 +55,9 @@ interface WorkflowCanvasProps {
   savedPositions?: Record<string, { x: number; y: number }> | null;
   onPositionsChange?: (positions: Record<string, { x: number; y: number }>) => void;
   visibilitySettings?: ClientVisibilitySettings | null;
+  dependencies?: StageDependency[];
+  onAddDependency?: (sourceId: string, targetId: string) => void;
+  onRemoveDependency?: (dependencyId: string) => void;
 }
 
 type StageNodeData = {
@@ -401,6 +404,9 @@ function WorkflowCanvasInner({
   savedPositions,
   onPositionsChange,
   visibilitySettings,
+  dependencies,
+  onAddDependency,
+  onRemoveDependency,
 }: WorkflowCanvasProps) {
   const { fitView } = useReactFlow();
   const [isMobile, setIsMobile] = useState(false);
@@ -453,20 +459,40 @@ function WorkflowCanvasInner({
     data: buildNodeData(s),
   }));
 
-  const rawEdges: Edge[] = sorted.slice(1).map((s, i) => ({
-    id: `e-${sorted[i].id}-${s.id}`,
-    source: sorted[i].id,
-    target: s.id,
-    type: "floating",
-    animated: true,
-    markerEnd: {
-      type: MarkerType.ArrowClosed,
-      color: "hsl(var(--primary))",
-      width: 12,
-      height: 12,
-    },
-    style: { stroke: "hsl(var(--primary))", strokeWidth: 2 },
-  }));
+  const rawEdges: Edge[] = useMemo(() => {
+    if (dependencies && dependencies.length > 0) {
+      return dependencies.map((dep) => ({
+        id: `dep-${dep.id}`,
+        source: dep.source_stage_id,
+        target: dep.target_stage_id,
+        type: "floating",
+        animated: true,
+        markerEnd: {
+          type: MarkerType.ArrowClosed,
+          color: "hsl(var(--primary))",
+          width: 12,
+          height: 12,
+        },
+        style: { stroke: "hsl(var(--primary))", strokeWidth: 2 },
+        data: { dependencyId: dep.id },
+      }));
+    }
+    // Fallback: sequential edges based on position
+    return sorted.slice(1).map((s, i) => ({
+      id: `e-${sorted[i].id}-${s.id}`,
+      source: sorted[i].id,
+      target: s.id,
+      type: "floating",
+      animated: true,
+      markerEnd: {
+        type: MarkerType.ArrowClosed,
+        color: "hsl(var(--primary))",
+        width: 12,
+        height: 12,
+      },
+      style: { stroke: "hsl(var(--primary))", strokeWidth: 2 },
+    }));
+  }, [dependencies, sorted]);
 
   // Build initial nodes with saved positions so React Flow's first render has correct positions.
   // useNodesState wraps useState, so this only applies on mount.
@@ -485,8 +511,13 @@ function WorkflowCanvasInner({
 
   // Wire up edge deletion ref so FloatingEdge can remove edges
   const deleteEdge = useCallback((edgeId: string) => {
+    // If this is a dependency edge, also remove from DB
+    if (edgeId.startsWith("dep-") && onRemoveDependency) {
+      const depId = edgeId.replace("dep-", "");
+      onRemoveDependency(depId);
+    }
     setEdges((eds) => eds.filter((e) => e.id !== edgeId));
-  }, [setEdges]);
+  }, [setEdges, onRemoveDependency]);
 
   useEffect(() => {
     deleteEdgeRef.current = readOnly ? null : deleteEdge;
@@ -509,7 +540,11 @@ function WorkflowCanvasInner({
       style: { stroke: "hsl(var(--primary))", strokeWidth: 2 },
     };
     setEdges((eds) => addEdge(newEdge, eds));
-  }, [setEdges]);
+    // Persist the dependency
+    if (onAddDependency && connection.source && connection.target) {
+      onAddDependency(connection.source, connection.target);
+    }
+  }, [setEdges, onAddDependency]);
 
   // Debounced position save
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);

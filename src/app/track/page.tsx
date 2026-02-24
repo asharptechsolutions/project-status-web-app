@@ -2,20 +2,25 @@
 import { Suspense, useRef, useEffect, useState, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase";
-import type { Project, ProjectStage, ClientVisibilitySettings } from "@/lib/types";
+import type { Project, ProjectStage, ClientVisibilitySettings, StageDependency } from "@/lib/types";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Workflow, Loader2, FolderOpen, Shield, CalendarDays } from "lucide-react";
+import { Workflow, Loader2, FolderOpen, Shield, CalendarDays, Network, BarChart3 } from "lucide-react";
 import dynamic from "next/dynamic";
 import { ChatBubble, type ChatBubbleHandle } from "@/components/chat-bubble";
 import { BookingDialog } from "@/components/booking-dialog";
 import { useAuth } from "@/lib/auth-context";
 import { AuthForm } from "@/components/auth-form";
-import { getClientProjects, getClientVisibilitySettings } from "@/lib/data";
+import { getClientProjects, getClientVisibilitySettings, getStageDependencies } from "@/lib/data";
 
 const WorkflowCanvas = dynamic(
   () => import("@/components/workflow-canvas").then((m) => m.WorkflowCanvas),
   { ssr: false, loading: () => <div className="h-[400px] flex items-center justify-center border rounded-lg"><Loader2 className="h-6 w-6 animate-spin" /></div> },
+);
+
+const GanttChart = dynamic(
+  () => import("@/components/gantt-chart").then((m) => m.GanttChart),
+  { ssr: false, loading: () => <div className="h-[300px] flex items-center justify-center border rounded-lg"><Loader2 className="h-6 w-6 animate-spin" /></div> },
 );
 
 async function checkTrackAccess(userId: string, projectId: string): Promise<boolean> {
@@ -53,6 +58,8 @@ function TrackInner() {
   const [clientProjects, setClientProjects] = useState<Project[]>([]);
   const [orgId, setOrgId] = useState<string>("");
   const [visibilitySettings, setVisibilitySettings] = useState<ClientVisibilitySettings | null>(null);
+  const [dependencies, setDependencies] = useState<StageDependency[]>([]);
+  const [viewMode, setViewMode] = useState<"canvas" | "gantt">("canvas");
 
   const projectId = searchParams.get("id");
 
@@ -80,12 +87,19 @@ function TrackInner() {
       const { data: stgs } = await createClient().from("project_stages").select("*").eq("project_id", projectId).order("position");
       setStages((stgs || []) as ProjectStage[]);
 
-      // Fetch client visibility settings
+      // Fetch client visibility settings and dependencies
       try {
         const vs = await getClientVisibilitySettings(proj.team_id);
         setVisibilitySettings(vs);
       } catch {
         // null = show everything (defaults)
+      }
+
+      try {
+        const deps = await getStageDependencies(projectId);
+        setDependencies(deps);
+      } catch {
+        // empty deps is fine
       }
 
       // Load client's projects for booking dialog
@@ -238,16 +252,49 @@ function TrackInner() {
           </div>
         </div>
 
-        <WorkflowCanvas
-          stages={stages}
-          readOnly
-          isAdmin={false}
-          isWorker={false}
-          progress={showProgress ? progress : undefined}
-          locked
-          savedPositions={project.workflow_positions}
-          visibilitySettings={visibilitySettings}
-        />
+        {/* View toggle — only show if stages have dates */}
+        {stages.some((s) => s.planned_start || s.estimated_completion) && (
+          <div className="flex items-center gap-1 mb-3">
+            <Button
+              size="sm"
+              variant={viewMode === "canvas" ? "default" : "outline"}
+              onClick={() => setViewMode("canvas")}
+            >
+              <Network className="h-4 w-4 mr-1" /> Canvas
+            </Button>
+            <Button
+              size="sm"
+              variant={viewMode === "gantt" ? "default" : "outline"}
+              onClick={() => setViewMode("gantt")}
+            >
+              <BarChart3 className="h-4 w-4 mr-1" /> Timeline
+            </Button>
+          </div>
+        )}
+
+        {viewMode === "canvas" ? (
+          <WorkflowCanvas
+            stages={stages}
+            readOnly
+            isAdmin={false}
+            isWorker={false}
+            progress={showProgress ? progress : undefined}
+            locked
+            savedPositions={project.workflow_positions}
+            visibilitySettings={visibilitySettings}
+            dependencies={dependencies}
+          />
+        ) : (
+          <GanttChart
+            stages={stages}
+            dependencies={dependencies}
+            readOnly
+            isAdmin={false}
+            isWorker={false}
+            progress={showProgress ? progress : undefined}
+            visibilitySettings={visibilitySettings}
+          />
+        )}
       </main>
 
       {project && showChatBubble && (

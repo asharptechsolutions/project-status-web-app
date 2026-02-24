@@ -136,6 +136,7 @@ export function OrgSetup() {
         started_by: null,
         assigned_to: null,
         estimated_completion: null,
+        planned_start: null,
       });
       toast.success("Project created!");
       await finishWizard();

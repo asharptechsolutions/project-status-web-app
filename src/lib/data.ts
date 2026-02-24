@@ -16,6 +16,7 @@ import type {
   OfficeHoursSettings,
   AvailabilitySlot,
   Appointment,
+  StageDependency,
 } from "./types";
 
 // ============ PROJECT CLIENTS (junction) ============
@@ -178,6 +179,45 @@ export async function reorderStages(
       .update({ position: i })
       .eq("id", stageIds[i]);
   }
+}
+
+// ============ STAGE DEPENDENCIES ============
+
+export async function getStageDependencies(projectId: string): Promise<StageDependency[]> {
+  const { data, error } = await supabase
+    .from("stage_dependencies")
+    .select("*")
+    .eq("project_id", projectId);
+  if (error) throw new Error(error.message);
+  return (data || []) as StageDependency[];
+}
+
+export async function createStageDependency(
+  dep: Omit<StageDependency, "id" | "created_at">
+): Promise<StageDependency> {
+  const { data, error } = await supabase
+    .from("stage_dependencies")
+    .upsert(dep, { onConflict: "source_stage_id,target_stage_id" })
+    .select("*")
+    .single();
+  if (error) throw new Error(error.message);
+  return data as StageDependency;
+}
+
+export async function deleteStageDependency(id: string): Promise<void> {
+  const { error } = await supabase
+    .from("stage_dependencies")
+    .delete()
+    .eq("id", id);
+  if (error) throw new Error(error.message);
+}
+
+export async function deleteStageDependenciesForStage(stageId: string): Promise<void> {
+  const { error } = await supabase
+    .from("stage_dependencies")
+    .delete()
+    .or(`source_stage_id.eq.${stageId},target_stage_id.eq.${stageId}`);
+  if (error) throw new Error(error.message);
 }
 
 // ============ PROJECT ASSIGNMENTS ============

@@ -10,8 +10,9 @@ import {
   getTemplates, getPresetStages,
   getAssignedProjects, getClientProjects, getMembers, getCompanies, createCompany, createTemplate,
   setProjectClients, getProjectClients, addProjectClient, removeProjectClient,
+  getStageDependencies, createStageDependency, deleteStageDependency, deleteStageDependenciesForStage,
 } from "@/lib/data";
-import type { Project, ProjectStage, Template, PresetStage, Member, Company } from "@/lib/types";
+import type { Project, ProjectStage, Template, PresetStage, Member, Company, StageDependency } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -25,10 +26,11 @@ import {
   Plus, Trash2, ArrowLeft, Play, CheckCircle2, ChevronRight,
   Pencil, Search, X, ArrowUpDown, Archive, ArchiveRestore,
   Clock, Loader2, GripVertical, UserPlus, Mail, Users, Building2, Save,
-  AlertTriangle, TrendingUp, Link, FolderOpen, MoreHorizontal,
+  AlertTriangle, TrendingUp, Link, FolderOpen, MoreHorizontal, BarChart3, Network,
 } from "lucide-react";
 import { toast } from "sonner";
 import { DatePicker } from "@/components/ui/date-picker";
+import { DateRangePicker } from "@/components/ui/date-range-picker";
 import { ProjectNotes } from "@/components/project-notes";
 import { ChatBubble, type ChatBubbleHandle } from "@/components/chat-bubble";
 import dynamic from "next/dynamic";
@@ -36,6 +38,11 @@ import dynamic from "next/dynamic";
 const WorkflowCanvas = dynamic(
   () => import("@/components/workflow-canvas").then((m) => m.WorkflowCanvas),
   { ssr: false, loading: () => <div className="h-[400px] flex items-center justify-center border rounded-lg"><Loader2 className="h-6 w-6 animate-spin" /></div> },
+);
+
+const GanttChart = dynamic(
+  () => import("@/components/gantt-chart").then((m) => m.GanttChart),
+  { ssr: false, loading: () => <div className="h-[300px] flex items-center justify-center border rounded-lg"><Loader2 className="h-6 w-6 animate-spin" /></div> },
 );
 
 function ProjectsList() {
@@ -113,6 +120,9 @@ function ProjectsList() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const chatBubbleRef = useRef<ChatBubbleHandle>(null);
   const workflowLocked = selectedProject?.workflow_locked ?? false;
+  const [viewMode, setViewMode] = useState<"canvas" | "gantt">("canvas");
+  const [dependencies, setDependencies] = useState<StageDependency[]>([]);
+  const [stageModalPlannedStart, setStageModalPlannedStart] = useState<Date | undefined>(undefined);
 
   // Compute schedule days from a list of stages (negative = behind, positive = ahead, null = no estimates)
   const computeScheduleDays = useCallback((stageList: ProjectStage[]): number | null => {
@@ -226,12 +236,13 @@ function ProjectsList() {
 
   useEffect(() => { load(); }, [load]);
 
-  // Load stages, files, and clients when viewing a project
+  // Load stages, files, clients, and dependencies when viewing a project
   useEffect(() => {
-    if (!selectedProject) { setStages([]); setStagesLoaded(false); setProjectClientIds([]); setDetailShowNewClient(false); setDetailNewClientName(""); setDetailNewClientEmail(""); setDetailNewClientPhone(""); return; }
+    if (!selectedProject) { setStages([]); setStagesLoaded(false); setProjectClientIds([]); setDependencies([]); setDetailShowNewClient(false); setDetailNewClientName(""); setDetailNewClientEmail(""); setDetailNewClientPhone(""); return; }
     setStagesLoaded(false);
     getProjectStages(selectedProject.id).then((s) => { setStages(s); setStagesLoaded(true); }).catch(() => { setStagesLoaded(true); });
     getProjectClients(selectedProject.id).then(setProjectClientIds).catch(() => {});
+    getStageDependencies(selectedProject.id).then(setDependencies).catch(() => {});
     window.scrollTo(0, 0);
   }, [selectedProject?.id]);
 
@@ -436,14 +447,14 @@ function ProjectsList() {
           for (const s of tmpl.stages) {
             await createProjectStage({
               project_id: id, name: s.name, status: "pending", position: s.position,
-              started_at: null, completed_at: null, started_by: null, assigned_to: null, estimated_completion: null,
+              started_at: null, completed_at: null, started_by: null, assigned_to: null, estimated_completion: null, planned_start: null,
             });
           }
         }
       } else {
         await createProjectStage({
           project_id: id, name: "Order Processing", status: "pending", position: 0,
-          started_at: null, completed_at: null, started_by: null, assigned_to: null, estimated_completion: null,
+          started_at: null, completed_at: null, started_by: null, assigned_to: null, estimated_completion: null, planned_start: null,
         });
       }
       const createdProject: Project = {
@@ -465,11 +476,49 @@ function ProjectsList() {
     }
   };
 
+  const handleAddDependency = async (sourceId: string, targetId: string) => {
+    if (!selectedProject) return;
+    try {
+      const dep = await createStageDependency({
+        project_id: selectedProject.id,
+        source_stage_id: sourceId,
+        target_stage_id: targetId,
+        dependency_type: "finish_to_start",
+      });
+      setDependencies((prev) => {
+        const existing = prev.find((d) => d.source_stage_id === sourceId && d.target_stage_id === targetId);
+        if (existing) return prev;
+        return [...prev, dep];
+      });
+    } catch (err: any) {
+      toast.error(err.message || "Failed to create dependency");
+    }
+  };
+
+  const handleRemoveDependency = async (depId: string) => {
+    try {
+      await deleteStageDependency(depId);
+      setDependencies((prev) => prev.filter((d) => d.id !== depId));
+    } catch (err: any) {
+      toast.error(err.message || "Failed to remove dependency");
+    }
+  };
+
+  const handleGanttUpdateStage = async (stageId: string, updates: Partial<ProjectStage>) => {
+    try {
+      await updateProjectStage(stageId, updates);
+      setStages((prev) => prev.map((s) => s.id === stageId ? { ...s, ...updates } : s));
+    } catch (err: any) {
+      toast.error(err.message || "Failed to update stage");
+    }
+  };
+
   const handleOpenAddStage = () => {
     setEditingStageId(null);
     setStageModalName("");
     setStageModalWorker(null);
     setStageModalEstDate(undefined);
+    setStageModalPlannedStart(undefined);
     setShowStageModal(true);
   };
 
@@ -480,6 +529,7 @@ function ProjectsList() {
     setStageModalName(stage.name);
     setStageModalWorker(stage.assigned_to);
     setStageModalEstDate(stage.estimated_completion ? new Date(stage.estimated_completion + "T00:00:00") : undefined);
+    setStageModalPlannedStart(stage.planned_start ? new Date(stage.planned_start + "T00:00:00") : undefined);
     setStageModalStatus(stage.status);
     setShowStageModal(true);
   };
@@ -488,6 +538,7 @@ function ProjectsList() {
     if (!selectedProject || !stageModalName.trim()) return;
     try {
       const estDate = stageModalEstDate ? stageModalEstDate.toISOString().split("T")[0] : null;
+      const plannedStart = stageModalPlannedStart ? stageModalPlannedStart.toISOString().split("T")[0] : null;
       if (editingStageId) {
         const currentStage = stages.find((s) => s.id === editingStageId);
         const now = new Date().toISOString();
@@ -495,6 +546,7 @@ function ProjectsList() {
           name: stageModalName.trim(),
           assigned_to: stageModalWorker,
           estimated_completion: estDate,
+          planned_start: plannedStart,
           status: stageModalStatus,
         };
         // Handle timestamp changes when status changes
@@ -527,6 +579,7 @@ function ProjectsList() {
           started_by: null,
           assigned_to: stageModalWorker,
           estimated_completion: estDate,
+          planned_start: plannedStart,
         });
         setStages((prev) => [...prev, stage]);
         toast.success("Stage added");
@@ -560,8 +613,10 @@ function ProjectsList() {
 
   const removeStage = async (stageId: string) => {
     try {
+      await deleteStageDependenciesForStage(stageId);
       await deleteProjectStage(stageId);
       setStages(stages.filter((s) => s.id !== stageId));
+      setDependencies((prev) => prev.filter((d) => d.source_stage_id !== stageId && d.target_stage_id !== stageId));
     } catch (err: any) {
       toast.error(err.message || "Failed to remove stage");
     }
@@ -761,25 +816,62 @@ function ProjectsList() {
           </div>
         )}
 
-        {/* Workflow Canvas with progress bar inside */}
+        {/* View toggle */}
+        <div className="flex items-center gap-1 mb-3">
+          <Button
+            size="sm"
+            variant={viewMode === "canvas" ? "default" : "outline"}
+            onClick={() => setViewMode("canvas")}
+          >
+            <Network className="h-4 w-4 mr-1" /> Canvas
+          </Button>
+          <Button
+            size="sm"
+            variant={viewMode === "gantt" ? "default" : "outline"}
+            onClick={() => setViewMode("gantt")}
+          >
+            <BarChart3 className="h-4 w-4 mr-1" /> Timeline
+          </Button>
+        </div>
+
+        {/* Workflow Canvas / Gantt Chart */}
         {stagesLoaded ? (
-          <WorkflowCanvas
-            stages={stages}
-            readOnly={isClient}
-            isAdmin={isAdmin}
-            isWorker={isWorker}
-            onUpdateStatus={(stageId, status) => updateStageStatus(stageId, status)}
-            onRemoveStage={(stageId) => removeStage(stageId)}
-            onAssignWorker={(stageId) => setAssignStageId(stageId)}
-            onAddStage={handleOpenAddStage}
-            onEditStage={handleOpenEditStage}
-            workerNames={workerNames}
-            progress={progress}
-            locked={workflowLocked}
-            onLockedChange={handleLockedChange}
-            savedPositions={selectedProject.workflow_positions}
-            onPositionsChange={handlePositionsChange}
-          />
+          viewMode === "canvas" ? (
+            <WorkflowCanvas
+              stages={stages}
+              readOnly={isClient}
+              isAdmin={isAdmin}
+              isWorker={isWorker}
+              onUpdateStatus={(stageId, status) => updateStageStatus(stageId, status)}
+              onRemoveStage={(stageId) => removeStage(stageId)}
+              onAssignWorker={(stageId) => setAssignStageId(stageId)}
+              onAddStage={handleOpenAddStage}
+              onEditStage={handleOpenEditStage}
+              workerNames={workerNames}
+              progress={progress}
+              locked={workflowLocked}
+              onLockedChange={handleLockedChange}
+              savedPositions={selectedProject.workflow_positions}
+              onPositionsChange={handlePositionsChange}
+              dependencies={dependencies}
+              onAddDependency={handleAddDependency}
+              onRemoveDependency={handleRemoveDependency}
+            />
+          ) : (
+            <GanttChart
+              stages={stages}
+              dependencies={dependencies}
+              readOnly={isClient}
+              isAdmin={isAdmin}
+              isWorker={isWorker}
+              workerNames={workerNames}
+              progress={progress}
+              onUpdateStage={isAdmin ? handleGanttUpdateStage : undefined}
+              onAddStage={isAdmin ? handleOpenAddStage : undefined}
+              onEditStage={isAdmin ? handleOpenEditStage : undefined}
+              onAddDependency={isAdmin ? handleAddDependency : undefined}
+            />
+          )
         ) : (
           <div className="h-[400px] flex items-center justify-center border rounded-lg">
             <Loader2 className="h-6 w-6 animate-spin" />
@@ -796,7 +888,7 @@ function ProjectsList() {
                   try {
                     const stage = await createProjectStage({
                       project_id: selectedProject.id, name: ps.name, status: "pending",
-                      position: stages.length, started_at: null, completed_at: null, started_by: null, assigned_to: null, estimated_completion: null,
+                      position: stages.length, started_at: null, completed_at: null, started_by: null, assigned_to: null, estimated_completion: null, planned_start: null,
                     });
                     setStages([...stages, stage]);
                   } catch (err: any) { toast.error(err.message || "Failed to add stage"); }
@@ -1078,11 +1170,13 @@ function ProjectsList() {
                 )}
               </div>
               <div>
-                <Label>Estimated Completion (optional)</Label>
-                <DatePicker
-                  value={stageModalEstDate}
-                  onChange={setStageModalEstDate}
-                  placeholder="Select a date"
+                <Label>Date Range (optional)</Label>
+                <DateRangePicker
+                  startDate={stageModalPlannedStart}
+                  endDate={stageModalEstDate}
+                  onChangeStart={setStageModalPlannedStart}
+                  onChangeEnd={setStageModalEstDate}
+                  placeholder="Click a start date, drag to end"
                 />
               </div>
               <Button onClick={handleSaveStage} className="w-full" disabled={!stageModalName.trim()}>

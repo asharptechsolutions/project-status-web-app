@@ -47,6 +47,7 @@ export interface ProjectStage {
   started_by: string | null;
   assigned_to: string | null;
   estimated_completion: string | null;
+  planned_start: string | null;
 }
 
 export interface ProjectAssignment {
@@ -139,6 +140,17 @@ export interface AdminOrganization {
   created_at: string;
   memberCount: number;
   projectCount: number;
+}
+
+// ============ STAGE DEPENDENCIES ============
+
+export interface StageDependency {
+  id: string;
+  project_id: string;
+  source_stage_id: string;
+  target_stage_id: string;
+  dependency_type: "finish_to_start";
+  created_at: string;
 }
 
 // ============ CLIENT VISIBILITY SETTINGS ============

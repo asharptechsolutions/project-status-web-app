@@ -1,147 +1,383 @@
 # Architectural Patterns
 
-Patterns observed across multiple files in the Workflowz codebase. Follow these when making changes.
+Detailed patterns and code examples for the Workflowz codebase. The CLAUDE.md file contains concise rules — this file has the full reference.
 
 ## 1. Page Structure
 
-Every page uses a two-component pattern: an outer component wrapping with `AuthGate`, and an inner component containing the actual logic.
+Every page uses a two-component pattern:
 
-```
-function PageInner() {           // Has useAuth(), useState, data fetching
+```tsx
+"use client";
+import { AuthGate } from "@/components/auth-gate";
+
+function PageInner() {
   const { orgId, isAdmin } = useAuth();
-  ...
+  const [data, setData] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    if (!orgId) return;
+    try {
+      const result = await getData(orgId);
+      setData(result);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to load");
+    } finally {
+      setLoading(false);
+    }
+  }, [orgId]);
+
+  useEffect(() => { load(); }, [load]);
+
+  if (loading) return <div className="flex justify-center p-8"><Loader2 className="animate-spin" /></div>;
+
+  return (
+    <div className="min-h-[100dvh] flex flex-col">
+      <Navbar />
+      {/* Page content */}
+    </div>
+  );
 }
-export default function Page() { // Just wraps with auth guard
+
+export default function Page() {
   return <AuthGate><PageInner /></AuthGate>;
 }
 ```
 
-**Seen in**: All 7 page files under `src/app/`. Reference: `src/app/page.tsx:15-49` (Dashboard pattern).
+**Seen in**: All page files under `src/app/`.
 
-The inner component always:
-- Calls `useAuth()` for orgId, userId, and role flags
-- Guards data loading with `if (!orgId) return`
-- Uses `<Navbar />` as the first child of the layout
-- Wraps content in `<div className="min-h-[100dvh] flex flex-col">`
+## 2. Data Access Layer (`data.ts`)
 
-## 2. Data Access Layer
+All database operations live in `src/lib/data.ts`. Functions are grouped by domain with comment headers.
 
-All database operations live in `src/lib/data.ts` as plain async functions. No ORM, no API routes — direct Supabase client queries.
+### CRUD Pattern
 
-Pattern: query Supabase → check error → throw or return data.
+```tsx
+// READ (list)
+export async function getProjects(orgId: string): Promise<Project[]> {
+  const { data, error } = await supabase
+    .from("projects")
+    .select("*")
+    .eq("team_id", orgId)
+    .order("created_at", { ascending: false });
+  if (error) throw new Error(error.message);
+  return (data || []) as Project[];
+}
 
-**Conventions**:
-- Functions are grouped by domain with comment headers (e.g., `// ============ CLIENTS ============`)
-- Errors are thrown immediately (`throw new Error(error.message)`), never returned
-- Team isolation: most queries include `.eq("team_id", teamId)`
-- Create functions accept `Omit<Entity, "id" | "created_at">` types
-- Update functions accept `Partial<Entity>`
+// CREATE
+export async function createProject(
+  project: Omit<Project, "id" | "created_at" | "updated_at">
+): Promise<string> {
+  const { data, error } = await supabase
+    .from("projects")
+    .insert(project)
+    .select("id")
+    .single();
+  if (error) throw new Error(error.message);
+  return data.id;
+}
 
-**Reference**: `src/lib/data.ts:1-3` (client setup), entire file for CRUD patterns.
+// UPDATE
+export async function updateProject(id: string, updates: Partial<Project>): Promise<void> {
+  const { error } = await supabase
+    .from("projects")
+    .update({ ...updates, updated_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) throw new Error(error.message);
+}
 
-## 3. Error Handling
-
-The data layer throws; UI components catch and show toast notifications. This pattern is universal.
-
-```
-try {
-  await dataLayerFunction(args);
-  toast.success("Done");
-} catch (err: any) {
-  toast.error(err.message || "Fallback message");
+// DELETE
+export async function deleteProject(id: string): Promise<void> {
+  const { error } = await supabase.from("projects").delete().eq("id", id);
+  if (error) throw new Error(error.message);
 }
 ```
 
-**Seen in**: Every handler in `src/app/projects/page.tsx`, `src/app/members/page.tsx`, `src/app/templates/page.tsx`, `src/components/file-upload.tsx`, `src/components/project-chat.tsx`.
+### Join + Transform Pattern
 
-## 4. Form/CRUD Pattern
-
-All create and edit flows follow the same structure:
-
-1. `useState` for each form field + a `showNew`/`showEdit` boolean for the dialog
-2. A `handleCreate`/`handleEdit` async handler that calls data.ts, shows toast, clears form, and calls `load()` to refresh
-3. Loading state to prevent double-submit
-4. Dialog component (from `src/components/ui/dialog.tsx`) for the form modal
-
-**Reference**: `src/app/projects/page.tsx:176-240` (project creation), `src/app/templates/page.tsx` (template CRUD), `src/app/members/page.tsx` (member invite).
-
-## 5. Role-Based Rendering
-
-UI elements are conditionally rendered based on role flags from `useAuth()`:
-
+```tsx
+export async function getMembers(orgId: string): Promise<Member[]> {
+  const { data, error } = await supabase
+    .from("team_members")
+    .select("*, profiles(display_name, email, phone), companies(name)")
+    .eq("team_id", orgId);
+  if (error) throw new Error(error.message);
+  return (data || []).map((d: any) => ({
+    id: d.user_id,
+    user_id: d.user_id,
+    team_id: d.team_id,
+    role: d.role,
+    name: d.profiles?.display_name || d.profiles?.email || "",
+    email: d.profiles?.email || "",
+    // ... transform fields
+  })) as Member[];
+}
 ```
+
+### Junction Table Pattern
+
+```tsx
+export async function setProjectClients(projectId: string, clientIds: string[]): Promise<void> {
+  // Delete existing
+  const { error: delError } = await supabase
+    .from("project_clients").delete().eq("project_id", projectId);
+  if (delError) throw new Error(delError.message);
+  // Insert new
+  if (clientIds.length > 0) {
+    const rows = clientIds.map((cid) => ({ project_id: projectId, client_id: cid }));
+    const { error: insError } = await supabase.from("project_clients").insert(rows);
+    if (insError) throw new Error(insError.message);
+  }
+}
+```
+
+### Batch Query Pattern
+
+```tsx
+export async function getStagesForProjects(projectIds: string[]): Promise<ProjectStage[]> {
+  if (projectIds.length === 0) return [];
+  const { data, error } = await supabase
+    .from("project_stages").select("*").in("project_id", projectIds);
+  if (error) throw new Error(error.message);
+  return (data || []) as ProjectStage[];
+}
+```
+
+## 3. Dialog / CRUD Modal Pattern
+
+```tsx
+const [showDialog, setShowDialog] = useState(false);
+const [loading, setLoading] = useState(false);
+const [editingId, setEditingId] = useState<string | null>(null);
+const [value, setValue] = useState("");
+
+const handleSubmit = async () => {
+  setLoading(true);
+  try {
+    if (editingId) {
+      await updateItem(editingId, value);
+    } else {
+      await createItem({ team_id: orgId, name: value });
+    }
+    setShowDialog(false);
+    setValue("");
+    toast.success(editingId ? "Updated" : "Created");
+    load();
+  } catch (err: any) {
+    toast.error(err.message);
+  } finally {
+    setLoading(false);
+  }
+};
+
+// Open for create — reset state
+<Button onClick={() => { setEditingId(null); setValue(""); setShowDialog(true); }}>New</Button>
+
+// Open for edit — populate state
+<Button onClick={() => { setEditingId(item.id); setValue(item.name); setShowDialog(true); }}>Edit</Button>
+
+<Dialog open={showDialog} onOpenChange={setShowDialog}>
+  <DialogContent>
+    <DialogHeader><DialogTitle>{editingId ? "Edit" : "New"} Item</DialogTitle></DialogHeader>
+    <Input value={value} onChange={(e) => setValue(e.target.value)} />
+    <Button onClick={handleSubmit} disabled={loading}>
+      {loading ? <Loader2 className="animate-spin" /> : "Save"}
+    </Button>
+  </DialogContent>
+</Dialog>
+```
+
+## 4. Role-Based Rendering
+
+```tsx
+const { isAdmin, isWorker, isClient } = useAuth();
+
+// Guard entire page
+if (!isAdmin) {
+  return <Card><CardContent>Only admins can access this.</CardContent></Card>;
+}
+
+// Conditional elements
 {isAdmin && <Button>Admin Action</Button>}
-{(isAdmin || isWorker) && <Button>Start Stage</Button>}
+{(isAdmin || isWorker) && <Button>Progress Stage</Button>}
 {isClient && <ReadOnlyView />}
 ```
 
-Role flags: `isAdmin` (admin or owner), `isWorker`, `isClient`, `isPlatformAdmin`.
+## 5. Supabase Client Usage
 
-**Reference**: `src/lib/auth-context.tsx:19-33` (AuthCtx interface), `src/components/workflow-canvas.tsx:83-106` (stage action buttons).
-
-## 6. UI Component Library
-
-All `src/components/ui/*.tsx` files follow the same pattern:
-- Thin wrapper around a Radix UI primitive
-- `class-variance-authority` (CVA) for variant definitions
-- `React.forwardRef` for DOM ref forwarding
-- `cn()` utility (`src/lib/utils.ts`) to merge Tailwind classes safely
-
-**Reference**: `src/components/ui/button.tsx` (canonical CVA + forwardRef example).
-
-Do NOT create new UI primitives from scratch. Wrap Radix components and follow the existing pattern.
-
-## 7. Auth Context
-
-`useAuth()` hook from `src/lib/auth-context.tsx` provides all auth state. Every page and most components consume it.
-
-Key values: `user`, `userId`, `orgId`, `orgName`, `role`, `member`, `isAdmin`, `isWorker`, `isClient`, `loading`, `signOut`, `refreshMember`.
-
-**Convention**: Always check `orgId` before making data calls. The `AuthGate` component (`src/components/auth-gate.tsx:7-24`) handles the loading → unauthenticated → no-org → ready flow.
-
-## 8. Dynamic Import for Heavy Components
-
-Components that depend on browser-only libraries (e.g., React Flow) use Next.js `dynamic()` with `ssr: false`:
-
-```
-const WorkflowCanvas = dynamic(
-  () => import("@/components/workflow-canvas").then((m) => m.WorkflowCanvas),
-  { ssr: false, loading: () => <Spinner /> }
-);
+### Browser Client (components + data.ts)
+```tsx
+import { createClient } from "@/lib/supabase";
+const supabase = createClient();
 ```
 
-**Reference**: `src/app/projects/page.tsx:34-37`.
+### Server Client (API routes — auth verification)
+```tsx
+import { createServerSupabaseClient } from "@/lib/supabase-server";
+const supabase = await createServerSupabaseClient();
+const { data: { user } } = await supabase.auth.getUser();
+```
 
-## 9. Team-Based Multi-Tenancy
+### Admin Client (API routes — privileged operations)
+```tsx
+import { createAdminClient } from "@/lib/supabase-admin";
+const adminClient = createAdminClient();
+// Can bypass RLS, create users, send invites
+```
 
-All data is scoped by `team_id` (organization). This is enforced at two levels:
+### Realtime Subscription Pattern
+```tsx
+useEffect(() => {
+  const channel = supabase
+    .channel(`messages:${projectId}`)
+    .on("postgres_changes",
+      { event: "*", schema: "public", table: "messages", filter: `project_id=eq.${projectId}` },
+      () => { loadMessages(); }
+    ).subscribe();
 
-1. **Application level**: Every query in `data.ts` filters by `team_id` / `orgId`
-2. **Database level**: RLS policies on every table check `team_id IN (SELECT team_id FROM team_members WHERE user_id = auth.uid())`
+  const pollInterval = setInterval(() => loadMessages(), 5000); // safety net
 
-When adding new tables or queries, always include team_id filtering.
+  return () => {
+    supabase.removeChannel(channel);
+    clearInterval(pollInterval);
+  };
+}, [projectId]);
+```
 
-**Reference**: `supabase/migrations/20260216_fix_everything.sql` (RLS policy patterns), `src/lib/data.ts` (query patterns).
+## 6. API Route Pattern
 
-## 10. Database Conventions
+```tsx
+import { NextRequest, NextResponse } from "next/server";
+import { createAdminClient } from "@/lib/supabase-admin";
+import { createServerSupabaseClient } from "@/lib/supabase-server";
 
-- **Primary keys**: UUID via `gen_random_uuid()`
-- **Foreign keys**: Use `ON DELETE CASCADE` for cleanup
-- **Many-to-many**: Junction tables (e.g., `project_clients`, `project_assignments`) with unique constraints
-- **Ordering**: Use numeric `position` column, not timestamps
-- **Timestamps**: `created_at` (default `now()`), `updated_at`, `started_at`, `completed_at` as needed
-- **RLS**: Enabled on all tables; one policy per operation (SELECT, INSERT, UPDATE, DELETE)
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json();
+    if (!body.email || !body.teamId) {
+      return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+    }
 
-**Reference**: `supabase-schema.sql` (full schema), `src/lib/types.ts` (TypeScript mirrors of all tables).
+    // Verify caller
+    const supabase = await createServerSupabaseClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-## 11. State Management
+    // Check permissions
+    const { data: member } = await supabase
+      .from("team_members").select("role")
+      .eq("user_id", user.id).eq("team_id", body.teamId).single();
+    if (!member || member.role !== "owner") {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
 
-No global state library (no Redux/Zustand). State flows through:
+    // Privileged operation
+    const adminClient = createAdminClient();
+    // ... admin operations ...
 
-1. **AuthContext** — global auth/org/role state via React Context
-2. **Component-local useState** — form fields, loading flags, selected items, dialog visibility
-3. **Props callbacks** — parent passes `onFilesChange`, `onUpdateStatus`, etc. to children
+    return NextResponse.json({ success: true });
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message }, { status: 500 });
+  }
+}
+```
 
-Data is fetched in a `load()` callback (wrapped in `useCallback`) called from `useEffect` on mount and after mutations.
+## 7. UI Patterns
 
-**Reference**: `src/app/projects/page.tsx:79-99` (load + useEffect pattern).
+### Search + Filter
+```tsx
+<div className="flex flex-col sm:flex-row gap-3 mb-4">
+  <div className="relative flex-1">
+    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4" />
+    <Input placeholder="Search..." value={searchQuery}
+      onChange={(e) => setSearchQuery(e.target.value)} className="pl-9 pr-8" />
+    {searchQuery && (
+      <button onClick={() => setSearchQuery("")} className="absolute right-2 top-1/2">
+        <X className="h-4 w-4" />
+      </button>
+    )}
+  </div>
+  <Select value={filter} onValueChange={setFilter}>
+    <SelectTrigger className="w-full sm:w-[150px]"><SelectValue /></SelectTrigger>
+    <SelectContent>
+      <SelectItem value="all">All</SelectItem>
+    </SelectContent>
+  </Select>
+</div>
+```
+
+### Empty State
+```tsx
+{items.length === 0 ? (
+  <Card><CardContent className="text-center text-muted-foreground">No items yet</CardContent></Card>
+) : (
+  <div className="flex flex-col gap-3">
+    {items.map((item) => (
+      <Card key={item.id}>
+        <CardContent className="pt-4 pb-4 flex items-center gap-4">
+          {/* Item content */}
+        </CardContent>
+      </Card>
+    ))}
+  </div>
+)}
+```
+
+### Button with Loading
+```tsx
+<Button onClick={handleSubmit} disabled={loading}>
+  {loading ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Loading...</> : <><Plus className="h-4 w-4 mr-2" />Create</>}
+</Button>
+```
+
+## 8. State Management
+
+No global state library. State flows through:
+1. **AuthContext** — global auth/org/role via React Context
+2. **Component-local `useState`** — form fields, loading, selected items, dialog visibility
+3. **Props callbacks** — parent passes `onFilesChange`, `onUpdateStatus` to children
+
+Data fetched in `load()` callback (wrapped in `useCallback`) called from `useEffect` on mount and after mutations.
+
+### Memoization
+```tsx
+const clientMembers = useMemo(() => members.filter((m) => m.role === "client"), [members]);
+const workerNames = useMemo(() => {
+  const map: Record<string, string> = {};
+  workerMembers.forEach((w) => { map[w.user_id] = w.name || w.email; });
+  return map;
+}, [workerMembers]);
+```
+
+## 9. Project Structure
+
+```
+src/app/           Pages (all "use client" + AuthGate)
+src/app/api/       API routes (server-side, service role key)
+src/components/    Reusable components
+src/components/ui/ Radix UI wrappers (never create from scratch)
+src/lib/data.ts    ALL database operations
+src/lib/types.ts   ALL TypeScript interfaces
+src/lib/auth-context.tsx  Auth provider + useAuth() hook
+src/lib/supabase*.ts      Supabase client variants
+supabase/migrations/      SQL migrations + RLS policies
+```
+
+## 10. Database Tables
+
+| Table | Purpose |
+|-------|---------|
+| `organizations` | Organization records |
+| `teams` | Team records (UUID) |
+| `team_members` | User membership — role, invited_at, joined_at, company_id |
+| `profiles` | User profiles — display_name, email, phone, is_platform_admin |
+| `projects` | Projects — name, status, company_id, workflow_locked/positions |
+| `project_stages` | Workflow stages — name, status, position, assigned_to |
+| `project_clients` | Junction: multiple clients per project |
+| `companies` | Client companies (team-scoped) |
+| `messages` | Project chat messages |
+| `files` | File metadata |
+| `message_read_status` | Per-user per-project last_read_at |
+| `project_notes` | Internal notes (admin add/delete, visible to workers) |
+| `templates` | Reusable workflow templates (stages as JSONB) |
+| `preset_stages` | Predefined stage names (team-scoped) |
