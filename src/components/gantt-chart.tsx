@@ -10,7 +10,7 @@ import {
   parseISO,
 } from "date-fns";
 import type { ProjectStage, StageDependency, ClientVisibilitySettings } from "@/lib/types";
-import { CheckCircle2, Clock, Loader2, User, Calendar, Pencil, Plus } from "lucide-react";
+import { CheckCircle2, Clock, Loader2, User, Calendar, Pencil, Plus, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -409,6 +409,9 @@ export function GanttChart({
     return headers;
   }, [timelineStart, totalDays]);
 
+  // Collapsible stages panel
+  const [labelsCollapsed, setLabelsCollapsed] = useState(false);
+
   // Interactive features available?
   const canEdit = !readOnly && !!onEditStage;
   const canAdd = !readOnly && !!onAddStage;
@@ -486,6 +489,9 @@ export function GanttChart({
     return parts.join(" ");
   }
 
+  // Minimum horizontal gap required for a clean direct arrow between bars
+  const MIN_ARROW_GAP = ARROW_MARGIN * 2 + 8;
+
   const depArrows = dependencies
     .map((dep) => {
       const srcIdx = scheduled.findIndex((s) => s.id === dep.source_stage_id);
@@ -499,17 +505,18 @@ export function GanttChart({
       const tgtY = tgtIdx * ROW_HEIGHT + BAR_Y_OFFSET + BAR_HEIGHT / 2;
       const srcX = srcBounds.x + srcBounds.width;
       const tgtX = tgtBounds.x;
+      const tgtRight = tgtBounds.x + tgtBounds.width;
 
       const goingDown = tgtIdx > srcIdx;
       const minRow = Math.min(srcIdx, tgtIdx);
       const maxRow = Math.max(srcIdx, tgtIdx);
+      const horizontalGap = tgtX - srcX;
 
       // Find a safe X for the vertical segment that doesn't cross intermediate bars
       let safeX = srcX + ARROW_MARGIN;
 
       for (const bar of allBarBounds) {
         if (bar.row > minRow && bar.row < maxRow) {
-          // Would the vertical line at safeX cross this bar?
           if (safeX >= bar.x - 4 && safeX <= bar.right + 4) {
             safeX = Math.max(safeX, bar.right + ARROW_MARGIN);
           }
@@ -517,27 +524,53 @@ export function GanttChart({
       }
 
       // Also ensure safeX doesn't overlap the target bar
-      if (safeX >= tgtBounds.x - 4 && safeX <= tgtBounds.x + tgtBounds.width + 4 && tgtX < srcX) {
-        safeX = Math.max(safeX, tgtBounds.x + tgtBounds.width + ARROW_MARGIN);
+      if (safeX >= tgtBounds.x - 4 && safeX <= tgtRight + 4) {
+        safeX = Math.max(safeX, tgtRight + ARROW_MARGIN);
       }
 
       const pts: { x: number; y: number }[] = [];
 
-      if (tgtX >= srcX + ARROW_MARGIN * 2 && Math.abs(srcIdx - tgtIdx) <= 1) {
-        // Simple case: target is far enough right and adjacent row — direct L-path
+      if (horizontalGap >= MIN_ARROW_GAP && Math.abs(srcIdx - tgtIdx) <= 1) {
+        // Simple case: enough gap and adjacent row — direct L-path
         pts.push({ x: srcX, y: srcY });
         pts.push({ x: safeX, y: srcY });
         pts.push({ x: safeX, y: tgtY });
         pts.push({ x: tgtX, y: tgtY });
-      } else if (tgtX >= srcX) {
-        // Target is to the right but with intermediate rows — route via safe channel
+      } else if (horizontalGap >= MIN_ARROW_GAP) {
+        // Enough gap but with intermediate rows — route via safe channel
         pts.push({ x: srcX, y: srcY });
         pts.push({ x: safeX, y: srcY });
         pts.push({ x: safeX, y: tgtY });
+        pts.push({ x: tgtX, y: tgtY });
+      } else if (tgtX >= srcX && horizontalGap < MIN_ARROW_GAP) {
+        // Back-to-back or tight gap: not enough space between bars.
+        // Route: go right just past source, drop down to gutter between rows,
+        // go left to target's left edge, then enter target.
+        const dropX = srcX + ARROW_MARGIN;
+
+        // Find a safe left-side X that doesn't overlap the target bar
+        let entryX = tgtX - ARROW_MARGIN;
+        for (const bar of allBarBounds) {
+          if (bar.row > minRow && bar.row < maxRow) {
+            if (entryX >= bar.x - 4 && entryX <= bar.right + 4) {
+              entryX = Math.min(entryX, bar.x - ARROW_MARGIN);
+            }
+          }
+        }
+
+        // Gutter Y sits between the two rows
+        const gutterY = goingDown
+          ? srcIdx * ROW_HEIGHT + ROW_HEIGHT - 2
+          : srcIdx * ROW_HEIGHT + 2;
+
+        pts.push({ x: srcX, y: srcY });
+        pts.push({ x: dropX, y: srcY });
+        pts.push({ x: dropX, y: gutterY });
+        pts.push({ x: entryX, y: gutterY });
+        pts.push({ x: entryX, y: tgtY });
         pts.push({ x: tgtX, y: tgtY });
       } else {
         // Backward dependency: target is to the left — S-shape route
-        // Go right from source, drop to gutter below/above, go left, then enter target
         const gutterY = goingDown
           ? (srcIdx + 1) * ROW_HEIGHT - 2
           : srcIdx * ROW_HEIGHT + 2;
@@ -545,7 +578,6 @@ export function GanttChart({
           ? tgtIdx * ROW_HEIGHT + 2
           : (tgtIdx + 1) * ROW_HEIGHT - 2;
 
-        // Find safe X on the left side of target
         let leftSafeX = tgtX - ARROW_MARGIN;
         for (const bar of allBarBounds) {
           if (bar.row > minRow && bar.row < maxRow) {
@@ -581,11 +613,20 @@ export function GanttChart({
       )}
 
       <div className="flex">
-        {/* Left: stage labels */}
-        <div className="shrink-0 border-r" style={{ width: LABEL_WIDTH }}>
-          {/* Header spacer */}
-          <div className="border-b px-3 flex items-center" style={{ height: HEADER_HEIGHT }}>
-            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Stages</span>
+        {/* Left: stage labels (collapsible) */}
+        <div className="shrink-0 border-r transition-[width] duration-200" style={{ width: labelsCollapsed ? 40 : LABEL_WIDTH }}>
+          {/* Header with collapse toggle */}
+          <div className="border-b px-2 flex items-center justify-between" style={{ height: HEADER_HEIGHT }}>
+            {!labelsCollapsed && (
+              <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Stages</span>
+            )}
+            <button
+              onClick={() => setLabelsCollapsed((c) => !c)}
+              className="p-1 rounded hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors"
+              title={labelsCollapsed ? "Show stages" : "Hide stages"}
+            >
+              {labelsCollapsed ? <PanelLeftOpen className="h-3.5 w-3.5" /> : <PanelLeftClose className="h-3.5 w-3.5" />}
+            </button>
           </div>
           {/* Stage rows */}
           {scheduled.map((stage) => {
@@ -601,24 +642,29 @@ export function GanttChart({
             return (
               <div
                 key={stage.id}
-                className={`border-b px-3 flex items-center gap-2 hover:bg-muted/30 transition-colors group ${
+                className={`border-b px-2 flex items-center gap-2 hover:bg-muted/30 transition-colors group ${
                   canEdit ? "cursor-pointer" : ""
-                }`}
+                } ${labelsCollapsed ? "justify-center" : ""}`}
                 style={{ height: ROW_HEIGHT }}
                 onClick={canEdit ? () => onEditStage!(stage.id) : undefined}
+                title={labelsCollapsed ? stage.name : undefined}
               >
                 {statusIcon}
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium truncate">{stage.name}</p>
-                  {!hideWorkerName && stage.assigned_to && workerNames?.[stage.assigned_to] && (
-                    <p className="text-[10px] text-muted-foreground truncate flex items-center gap-0.5">
-                      <User className="h-2.5 w-2.5" />
-                      {workerNames[stage.assigned_to]}
-                    </p>
-                  )}
-                </div>
-                {canEdit && (
-                  <Pencil className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+                {!labelsCollapsed && (
+                  <>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium truncate">{stage.name}</p>
+                      {!hideWorkerName && stage.assigned_to && workerNames?.[stage.assigned_to] && (
+                        <p className="text-[10px] text-muted-foreground truncate flex items-center gap-0.5">
+                          <User className="h-2.5 w-2.5" />
+                          {workerNames[stage.assigned_to]}
+                        </p>
+                      )}
+                    </div>
+                    {canEdit && (
+                      <Pencil className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+                    )}
+                  </>
                 )}
               </div>
             );
@@ -627,11 +673,12 @@ export function GanttChart({
           {canAdd && (
             <button
               onClick={onAddStage}
-              className="w-full border-b px-3 flex items-center gap-2 hover:bg-muted/30 transition-colors text-muted-foreground hover:text-foreground"
+              className={`w-full border-b px-2 flex items-center gap-2 hover:bg-muted/30 transition-colors text-muted-foreground hover:text-foreground ${labelsCollapsed ? "justify-center" : ""}`}
               style={{ height: ROW_HEIGHT }}
+              title={labelsCollapsed ? "Add Stage" : undefined}
             >
               <Plus className="h-3.5 w-3.5 shrink-0" />
-              <span className="text-sm">Add Stage</span>
+              {!labelsCollapsed && <span className="text-sm">Add Stage</span>}
             </button>
           )}
         </div>

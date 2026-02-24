@@ -229,13 +229,13 @@ function TrackInner() {
   return (
     <div className="min-h-[100dvh] bg-background">
       <header className="border-b py-4 px-4">
-        <div className="max-w-4xl mx-auto flex items-center gap-2">
+        <div className="max-w-7xl mx-auto flex items-center gap-2">
           <Workflow className="h-5 w-5 text-primary" />
           <span className="font-bold">ProjectStatus</span>
         </div>
       </header>
 
-      <main className="p-4 max-w-4xl mx-auto">
+      <main className="p-4 max-w-7xl mx-auto">
         <div className="mb-6 flex items-center justify-between">
           <h1 className="text-2xl font-bold">{project.name}</h1>
           <div className="flex items-center gap-2">

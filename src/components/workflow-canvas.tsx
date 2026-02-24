@@ -695,7 +695,7 @@ function WorkflowCanvasInner({
   }, [sorted, rawNodes, rawEdges, direction, runLayout]);
 
   return (
-    <div className="relative w-full" style={{ height: isMobile ? 400 : 500 }}>
+    <div className="relative w-full" style={{ height: isMobile ? 400 : 600 }}>
       <ReactFlow
         nodes={nodes}
         edges={edges}

@@ -144,7 +144,7 @@ function ClientsInner() {
 
   if (!isAdmin) {
     return (
-      <div className="p-4 max-w-4xl mx-auto w-full">
+      <div className="p-4 max-w-7xl mx-auto w-full">
         <h1 className="text-2xl font-bold mb-4">Clients</h1>
         <Card><CardContent className="pt-6 text-center text-muted-foreground">Only admins can manage clients.</CardContent></Card>
       </div>
@@ -170,7 +170,7 @@ function ClientsInner() {
     });
 
   return (
-    <div className="p-4 max-w-4xl mx-auto w-full">
+    <div className="p-4 max-w-7xl mx-auto w-full">
       <Button variant="ghost" className="mb-4" onClick={() => router.push("/crm/")}>
         <ArrowLeft className="h-4 w-4 mr-2" /> Back to CRM
       </Button>

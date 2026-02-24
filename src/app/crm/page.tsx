@@ -110,7 +110,7 @@ function CRMInner() {
 
   if (!isAdmin) {
     return (
-      <div className="p-4 max-w-4xl mx-auto w-full">
+      <div className="p-4 max-w-7xl mx-auto w-full">
         <h1 className="text-2xl font-bold mb-4">CRM</h1>
         <Card><CardContent className="pt-6 text-center text-muted-foreground">Only admins can manage members.</CardContent></Card>
       </div>
@@ -160,7 +160,7 @@ function CRMInner() {
   ];
 
   return (
-    <div className="p-4 max-w-4xl mx-auto w-full">
+    <div className="p-4 max-w-7xl mx-auto w-full">
       <h1 className="text-2xl font-bold mb-6">CRM</h1>
 
       <div className="grid gap-4">

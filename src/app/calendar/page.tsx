@@ -133,7 +133,7 @@ function CalendarPage() {
   return (
     <div className="min-h-[100dvh] flex flex-col">
       <Navbar />
-      <main className="flex-1 p-4 max-w-4xl mx-auto w-full">
+      <main className="flex-1 p-4 max-w-7xl mx-auto w-full">
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-2xl font-bold">Calendar</h1>
           {isAdmin && (

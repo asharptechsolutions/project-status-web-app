@@ -116,7 +116,7 @@ function TemplatesInner() {
 
   if (!isAdmin) {
     return (
-      <div className="p-4 max-w-4xl mx-auto w-full">
+      <div className="p-4 max-w-7xl mx-auto w-full">
         <h1 className="text-2xl font-bold mb-4">Templates</h1>
         <Card><CardContent className="pt-6 text-center text-muted-foreground">Only admins can manage templates.</CardContent></Card>
       </div>
@@ -153,7 +153,7 @@ function TemplatesInner() {
   );
 
   return (
-    <div className="p-4 max-w-4xl mx-auto w-full">
+    <div className="p-4 max-w-7xl mx-auto w-full">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold">Templates</h1>
         <Button onClick={() => { setName(""); setStageNames([]); setShowNew(true); }}><Plus className="h-4 w-4 mr-1" /> New Template</Button>

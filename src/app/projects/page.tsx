@@ -700,7 +700,7 @@ function ProjectsList() {
     const scheduleDays = computeScheduleDays(stages);
 
     return (
-      <div className="p-4 max-w-4xl mx-auto w-full">
+      <div className="p-4 max-w-7xl mx-auto w-full">
         <Button variant="ghost" className="mb-4" onClick={() => selectProject(null)}>
           <ArrowLeft className="h-4 w-4 mr-2" /> Back to Projects
         </Button>
@@ -1338,7 +1338,7 @@ function ProjectsList() {
     });
 
   return (
-    <div className="p-4 max-w-4xl mx-auto w-full">
+    <div className="p-4 max-w-7xl mx-auto w-full">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold">Projects</h1>
         {isAdmin && (
