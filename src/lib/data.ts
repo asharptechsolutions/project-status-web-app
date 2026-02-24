@@ -13,6 +13,7 @@ import type {
   Member,
   Company,
   ClientVisibilitySettings,
+  AutomationSettings,
   OfficeHoursSettings,
   AvailabilitySlot,
   Appointment,
@@ -705,6 +706,32 @@ export async function upsertClientVisibilitySettings(
 ): Promise<void> {
   const { error } = await supabase
     .from("client_visibility_settings")
+    .upsert(
+      { ...settings, updated_at: new Date().toISOString() },
+      { onConflict: "team_id" }
+    );
+  if (error) throw new Error(error.message);
+}
+
+// ============ AUTOMATION SETTINGS ============
+
+export async function getAutomationSettings(
+  orgId: string
+): Promise<AutomationSettings | null> {
+  const { data, error } = await supabase
+    .from("automation_settings")
+    .select("*")
+    .eq("team_id", orgId)
+    .single();
+  if (error) return null;
+  return data as AutomationSettings;
+}
+
+export async function upsertAutomationSettings(
+  settings: Omit<AutomationSettings, "id" | "created_at" | "updated_at">
+): Promise<void> {
+  const { error } = await supabase
+    .from("automation_settings")
     .upsert(
       { ...settings, updated_at: new Date().toISOString() },
       { onConflict: "team_id" }

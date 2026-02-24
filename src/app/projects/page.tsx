@@ -11,8 +11,10 @@ import {
   getAssignedProjects, getClientProjects, getMembers, getCompanies, createCompany, createTemplate,
   setProjectClients, getProjectClients, addProjectClient, removeProjectClient,
   getStageDependencies, createStageDependency, deleteStageDependency, deleteStageDependenciesForStage,
+  getAutomationSettings,
 } from "@/lib/data";
-import type { Project, ProjectStage, Template, PresetStage, Member, Company, StageDependency } from "@/lib/types";
+import type { Project, ProjectStage, Template, PresetStage, Member, Company, StageDependency, AutomationSettings } from "@/lib/types";
+import { runStageAutomations, runAssignmentAutomations, AUTOMATION_DEFAULTS } from "@/lib/automations";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -122,6 +124,7 @@ function ProjectsList() {
   const workflowLocked = selectedProject?.workflow_locked ?? false;
   const [viewMode, setViewMode] = useState<"canvas" | "gantt">("canvas");
   const [dependencies, setDependencies] = useState<StageDependency[]>([]);
+  const [automationSettings, setAutomationSettings] = useState<AutomationSettings | null>(null);
   const [stageModalPlannedStart, setStageModalPlannedStart] = useState<Date | undefined>(undefined);
 
   // Compute schedule days from a list of stages (negative = behind, positive = ahead, null = no estimates)
@@ -238,13 +241,14 @@ function ProjectsList() {
 
   // Load stages, files, clients, and dependencies when viewing a project
   useEffect(() => {
-    if (!selectedProject) { setStages([]); setStagesLoaded(false); setProjectClientIds([]); setDependencies([]); setDetailShowNewClient(false); setDetailNewClientName(""); setDetailNewClientEmail(""); setDetailNewClientPhone(""); return; }
+    if (!selectedProject) { setStages([]); setStagesLoaded(false); setProjectClientIds([]); setDependencies([]); setAutomationSettings(null); setDetailShowNewClient(false); setDetailNewClientName(""); setDetailNewClientEmail(""); setDetailNewClientPhone(""); return; }
     setStagesLoaded(false);
     getProjectStages(selectedProject.id).then((s) => { setStages(s); setStagesLoaded(true); }).catch(() => { setStagesLoaded(true); });
     getProjectClients(selectedProject.id).then(setProjectClientIds).catch(() => {});
     getStageDependencies(selectedProject.id).then(setDependencies).catch(() => {});
+    if (orgId) getAutomationSettings(orgId).then(setAutomationSettings).catch(() => {});
     window.scrollTo(0, 0);
-  }, [selectedProject?.id]);
+  }, [selectedProject?.id, orgId]);
 
   // Keep project progress and schedule in sync when stages change
   useEffect(() => {
@@ -351,6 +355,15 @@ function ProjectsList() {
       setStages((prev) =>
         prev.map((s) => s.id === assignStageId ? { ...s, assigned_to: workerId } : s)
       );
+      // Notify worker if assigned
+      if (workerId && selectedProject) {
+        const stage = stages.find((s) => s.id === assignStageId);
+        runAssignmentAutomations(assignStageId, workerId, automationSettings, {
+          projectId: selectedProject.id,
+          projectName: selectedProject.name,
+          stageName: stage?.name || "",
+        });
+      }
       setAssignStageId(null);
       toast.success(workerId ? "Worker assigned" : "Worker unassigned");
     } catch (err: any) {
@@ -566,7 +579,34 @@ function ProjectsList() {
           }
         }
         await updateProjectStage(editingStageId, updates);
-        setStages((prev) => prev.map((s) => s.id === editingStageId ? { ...s, ...updates } : s));
+        const newStages = stages.map((s) => s.id === editingStageId ? { ...s, ...updates } : s);
+
+        // Run stage automations if status changed to completed
+        if (currentStage && stageModalStatus === "completed" && stageModalStatus !== currentStage.status && userId) {
+          const { updatedStages, projectCompleted } = await runStageAutomations(editingStageId, "completed", {
+            settings: automationSettings,
+            project: selectedProject,
+            stages: newStages,
+            dependencies,
+            userId,
+          });
+          setStages(updatedStages);
+          if (projectCompleted) {
+            setSelectedProjectRaw({ ...selectedProject, status: "completed" });
+            load();
+          }
+        } else {
+          setStages(newStages);
+        }
+
+        // Notify worker if assignment changed
+        if (stageModalWorker && stageModalWorker !== currentStage?.assigned_to) {
+          runAssignmentAutomations(editingStageId, stageModalWorker, automationSettings, {
+            projectId: selectedProject.id,
+            projectName: selectedProject.name,
+            stageName: stageModalName.trim(),
+          });
+        }
         toast.success("Stage updated");
       } else {
         const stage = await createProjectStage({
@@ -582,6 +622,14 @@ function ProjectsList() {
           planned_start: plannedStart,
         });
         setStages((prev) => [...prev, stage]);
+        // Notify worker if assigned on creation
+        if (stageModalWorker) {
+          runAssignmentAutomations(stage.id, stageModalWorker, automationSettings, {
+            projectId: selectedProject.id,
+            projectName: selectedProject.name,
+            stageName: stageModalName.trim(),
+          });
+        }
         toast.success("Stage added");
       }
       setShowStageModal(false);
@@ -599,10 +647,17 @@ function ProjectsList() {
     try {
       await updateProjectStage(stageId, updates);
       const newStages = stages.map((s) => s.id === stageId ? { ...s, ...updates } : s);
-      setStages(newStages);
-      const allDone = newStages.every((s) => s.status === "completed");
-      if (allDone && selectedProject.status !== "completed") {
-        await updateProject(selectedProject.id, { status: "completed" });
+
+      // Run automations
+      const { updatedStages, projectCompleted } = await runStageAutomations(stageId, status, {
+        settings: automationSettings,
+        project: selectedProject,
+        stages: newStages,
+        dependencies,
+        userId,
+      });
+      setStages(updatedStages);
+      if (projectCompleted) {
         setSelectedProjectRaw({ ...selectedProject, status: "completed" });
         load();
       }

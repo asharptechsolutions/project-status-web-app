@@ -169,6 +169,20 @@ export interface ClientVisibilitySettings {
   updated_at: string;
 }
 
+// ============ AUTOMATION SETTINGS ============
+
+export interface AutomationSettings {
+  id: string;
+  team_id: string;
+  auto_start_next_stage: boolean;
+  auto_complete_project: boolean;
+  notify_client_stage_complete: boolean;
+  notify_worker_on_assign: boolean;
+  auto_advance_blocked_stages: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 // ============ APPOINTMENT SCHEDULING ============
 
 export interface OfficeHoursSettings {
