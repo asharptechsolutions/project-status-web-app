@@ -5,13 +5,15 @@ import { createClient } from "@/lib/supabase";
 import type { Project, ProjectStage, ClientVisibilitySettings, StageDependency } from "@/lib/types";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Workflow, Loader2, FolderOpen, Shield, CalendarDays, Network, BarChart3 } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Workflow, Loader2, FolderOpen, Shield, CalendarDays, Network, BarChart3, Bell } from "lucide-react";
 import dynamic from "next/dynamic";
 import { ChatBubble, type ChatBubbleHandle } from "@/components/chat-bubble";
 import { BookingDialog } from "@/components/booking-dialog";
 import { useAuth } from "@/lib/auth-context";
 import { AuthForm } from "@/components/auth-form";
-import { getClientProjects, getClientVisibilitySettings, getStageDependencies } from "@/lib/data";
+import { toast } from "sonner";
+import { getClientProjects, getClientVisibilitySettings, getStageDependencies, getClientNotificationPreferences, upsertClientNotificationPreferences } from "@/lib/data";
 
 const WorkflowCanvas = dynamic(
   () => import("@/components/workflow-canvas").then((m) => m.WorkflowCanvas),
@@ -60,6 +62,7 @@ function TrackInner() {
   const [visibilitySettings, setVisibilitySettings] = useState<ClientVisibilitySettings | null>(null);
   const [dependencies, setDependencies] = useState<StageDependency[]>([]);
   const [viewMode, setViewMode] = useState<"canvas" | "gantt">("canvas");
+  const [notifyEnabled, setNotifyEnabled] = useState(true);
 
   const projectId = searchParams.get("id");
 
@@ -100,6 +103,14 @@ function TrackInner() {
         setDependencies(deps);
       } catch {
         // empty deps is fine
+      }
+
+      // Load client notification preferences
+      try {
+        const prefs = await getClientNotificationPreferences(userId, projectId);
+        setNotifyEnabled(prefs?.notify_stage_complete !== false); // null = default ON
+      } catch {
+        // default to on
       }
 
       // Load client's projects for booking dialog
@@ -226,6 +237,23 @@ function TrackInner() {
   const showChat = visibilitySettings?.allow_chat !== false;
   const showChatBubble = showChat || showFiles; // need ChatBubble for openFiles() if files enabled
 
+  const handleNotifyToggle = async (checked: boolean) => {
+    if (!userId || !projectId || !orgId) return;
+    setNotifyEnabled(checked);
+    try {
+      await upsertClientNotificationPreferences({
+        team_id: orgId,
+        client_id: userId,
+        project_id: projectId,
+        notify_stage_complete: checked,
+      });
+      toast.success(checked ? "Email notifications enabled" : "Email notifications disabled");
+    } catch (err: any) {
+      setNotifyEnabled(!checked); // revert on error
+      toast.error(err.message || "Failed to update notification preferences");
+    }
+  };
+
   return (
     <div className="min-h-[100dvh] bg-background">
       <header className="border-b py-4 px-4">
@@ -239,6 +267,11 @@ function TrackInner() {
         <div className="mb-6 flex items-center justify-between">
           <h1 className="text-2xl font-bold">{project.name}</h1>
           <div className="flex items-center gap-2">
+            <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer">
+              <Bell className="h-4 w-4" />
+              <span className="hidden sm:inline">Email notifications</span>
+              <Switch checked={notifyEnabled} onCheckedChange={handleNotifyToggle} />
+            </label>
             {orgId && showBooking && (
               <Button variant="outline" size="sm" onClick={() => setBookingOpen(true)}>
                 <CalendarDays className="h-4 w-4 mr-1" /> Book a Call

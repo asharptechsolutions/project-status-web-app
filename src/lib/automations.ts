@@ -107,8 +107,8 @@ export async function runStageAutomations(
     }
   }
 
-  // 4. Notify clients on stage completion (fire-and-forget)
-  if (s.notify_client_stage_complete) {
+  // 4. Notify clients on stage completion (fire-and-forget, clients control opt-out)
+  {
     const completedStage = updatedStages.find((st) => st.id === changedStageId);
     if (completedStage) {
       fetch("/api/notify", {

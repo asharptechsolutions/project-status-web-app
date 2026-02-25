@@ -35,7 +35,25 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ success: true, skipped: true, reason: "No clients on project" });
       }
 
-      const clientIds = clientRows.map((r: any) => r.client_id);
+      let clientIds = clientRows.map((r: any) => r.client_id);
+
+      // Filter out clients who have opted out of stage completion notifications
+      const { data: optOutRows } = await adminClient
+        .from("client_notification_preferences")
+        .select("client_id")
+        .eq("project_id", projectId)
+        .eq("notify_stage_complete", false)
+        .in("client_id", clientIds);
+
+      if (optOutRows && optOutRows.length > 0) {
+        const optedOutIds = new Set(optOutRows.map((r: any) => r.client_id));
+        clientIds = clientIds.filter((id: string) => !optedOutIds.has(id));
+      }
+
+      if (clientIds.length === 0) {
+        return NextResponse.json({ success: true, skipped: true, reason: "All clients opted out" });
+      }
+
       const { data: profiles } = await adminClient
         .from("profiles")
         .select("email, display_name")

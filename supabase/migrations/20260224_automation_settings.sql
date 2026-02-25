@@ -3,7 +3,7 @@ CREATE TABLE IF NOT EXISTS automation_settings (
   team_id UUID NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
   auto_start_next_stage BOOLEAN NOT NULL DEFAULT false,
   auto_complete_project BOOLEAN NOT NULL DEFAULT true,
-  notify_client_stage_complete BOOLEAN NOT NULL DEFAULT false,
+  notify_client_stage_complete BOOLEAN NOT NULL DEFAULT true,
   notify_worker_on_assign BOOLEAN NOT NULL DEFAULT false,
   auto_advance_blocked_stages BOOLEAN NOT NULL DEFAULT false,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),

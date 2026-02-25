@@ -71,7 +71,6 @@ const automationToggles: AutoToggleRow[] = [
   { key: "auto_complete_project", label: "Auto-Complete Project", description: "Mark project as completed when all stages are done" },
   { key: "auto_start_next_stage", label: "Auto-Start Next Stage", description: "When a stage completes, automatically start the next stage by position" },
   { key: "auto_advance_blocked_stages", label: "Auto-Advance Dependencies", description: "When a dependency source completes and all deps are met, start the target stage" },
-  { key: "notify_client_stage_complete", label: "Notify Clients on Completion", description: "Email assigned clients when a stage is completed" },
   { key: "notify_worker_on_assign", label: "Notify Worker on Assignment", description: "Email a worker when they are assigned to a stage" },
 ];
 

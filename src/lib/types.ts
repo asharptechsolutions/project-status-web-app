@@ -183,6 +183,18 @@ export interface AutomationSettings {
   updated_at: string;
 }
 
+// ============ CLIENT NOTIFICATION PREFERENCES ============
+
+export interface ClientNotificationPreferences {
+  id: string;
+  team_id: string;
+  client_id: string;
+  project_id: string;
+  notify_stage_complete: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 // ============ APPOINTMENT SCHEDULING ============
 
 export interface OfficeHoursSettings {

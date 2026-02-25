@@ -18,6 +18,7 @@ import type {
   AvailabilitySlot,
   Appointment,
   StageDependency,
+  ClientNotificationPreferences,
 } from "./types";
 
 // ============ PROJECT CLIENTS (junction) ============
@@ -978,4 +979,32 @@ export async function cancelAppointment(
     .update({ is_booked: false })
     .eq("id", slotId);
   if (slotError) throw new Error(slotError.message);
+}
+
+// ============ CLIENT NOTIFICATION PREFERENCES ============
+
+export async function getClientNotificationPreferences(
+  clientId: string,
+  projectId: string
+): Promise<ClientNotificationPreferences | null> {
+  const { data, error } = await supabase
+    .from("client_notification_preferences")
+    .select("*")
+    .eq("client_id", clientId)
+    .eq("project_id", projectId)
+    .single();
+  if (error) return null;
+  return data as ClientNotificationPreferences;
+}
+
+export async function upsertClientNotificationPreferences(
+  prefs: Omit<ClientNotificationPreferences, "id" | "created_at" | "updated_at">
+): Promise<void> {
+  const { error } = await supabase
+    .from("client_notification_preferences")
+    .upsert(
+      { ...prefs, updated_at: new Date().toISOString() },
+      { onConflict: "client_id,project_id" }
+    );
+  if (error) throw new Error(error.message);
 }
