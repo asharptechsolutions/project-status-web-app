@@ -63,7 +63,7 @@ const sections = [
     icon: Shield,
     title: "Enterprise Infrastructure",
     description:
-      "ProjectStatus uses Supabase (AWS infrastructure) and Clerk for authentication, benefiting from enterprise-grade security practices, certifications, and global reliability.",
+      "ProjectStatus runs on Supabase (AWS infrastructure) with built-in authentication, benefiting from enterprise-grade security practices, certifications, and global reliability.",
   },
 ];
 
