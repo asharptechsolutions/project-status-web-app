@@ -36,7 +36,7 @@ export async function POST() {
       if (existing) {
         results.push(`User ${email} already exists (${existing.id})`);
         // Ensure password is set
-        await admin.auth.admin.updateUser(existing.id, { password: sharedPassword });
+        await admin.auth.admin.updateUserById(existing.id, { password: sharedPassword });
         return existing.id;
       }
 
