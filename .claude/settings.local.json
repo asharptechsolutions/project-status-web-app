@@ -12,7 +12,15 @@
       "Bash(git commit:*)",
       "Bash(git push:*)",
       "Bash(gh auth status:*)",
-      "Bash(tail:*)"
+      "Bash(tail:*)",
+      "Bash(cd:*)",
+      "Bash(find \"C:/Users/aaron/Documents/Software Development/Claude/project-status-web-app/supabase/migrations\" -name \"*.sql\" | xargs grep -l \"project_clients\" 2>/dev/null)",
+      "Bash(find:*)",
+      "Bash(head:*)",
+      "Bash(cd \"C:\\\\Users\\\\aaron\\\\Documents\\\\Software Development\\\\Claude\\\\project-status-web-app\" && npx supabase db push --linked 2>&1)",
+      "Bash(cd \"C:\\\\Users\\\\aaron\\\\Documents\\\\Software Development\\\\Claude\\\\project-status-web-app\" && npx supabase link --project-ref gzykxphmixqjxmwvsuiy 2>&1)",
+      "Bash(cd \"C:\\\\Users\\\\aaron\\\\Documents\\\\Software Development\\\\Claude\\\\project-status-web-app\" && node -e \"\nconst { createClient } = require\\('@supabase/supabase-js'\\);\nconst c = createClient\\(\n  'https://gzykxphmixqjxmwvsuiy.supabase.co',\n  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imd6eWt4cGhtaXhxanhtd3ZzdWl5Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTAxNjUyNCwiZXhwIjoyMDg2NTkyNTI0fQ.XGH_wOo9T-hnbQ1zRJGJOaotkF8biY7JfgPU-d4wg6s'\n\\);\nc.rpc\\('exec_sql', { sql: 'SELECT 1' }\\).then\\(r => console.log\\(JSON.stringify\\(r\\)\\)\\).catch\\(e => console.error\\(e\\)\\);\n\" 2>&1)",
+      "Bash(cd \"C:\\\\Users\\\\aaron\\\\Documents\\\\Software Development\\\\Claude\\\\project-status-web-app\" && node -e \"\nconst fs = require\\('fs'\\);\nconst { createClient } = require\\('@supabase/supabase-js'\\);\nconst sql = fs.readFileSync\\('supabase/migrations/20260224_client_notification_preferences.sql', 'utf8'\\);\n\n// Split into individual statements\nconst statements = sql.split\\(';'\\).map\\(s => s.trim\\(\\)\\).filter\\(s => s.length > 0\\);\n\nconst c = createClient\\(\n  'https://gzykxphmixqjxmwvsuiy.supabase.co',\n  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imd6eWt4cGhtaXhxanhtd3ZzdWl5Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTAxNjUyNCwiZXhwIjoyMDg2NTkyNTI0fQ.XGH_wOo9T-hnbQ1zRJGJOaotkF8biY7JfgPU-d4wg6s',\n  { db: { schema: 'public' } }\n\\);\n\n// Try using the Supabase management API query endpoint\nasync function run\\(\\) {\n  // Use fetch directly against the pg-meta endpoint\n  const resp = await fetch\\('https://gzykxphmixqjxmwvsuiy.supabase.co/pg-meta/default/query', {\n    method: 'POST',\n    headers: {\n      'Content-Type': 'application/json',\n      'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imd6eWt4cGhtaXhxanhtd3ZzdWl5Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTAxNjUyNCwiZXhwIjoyMDg2NTkyNTI0fQ.XGH_wOo9T-hnbQ1zRJGJOaotkF8biY7JfgPU-d4wg6s',\n      'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imd6eWt4cGhtaXhxanhtd3ZzdWl5Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTAxNjUyNCwiZXhwIjoyMDg2NTkyNTI0fQ.XGH_wOo9T-hnbQ1zRJGJOaotkF8biY7JfgPU-d4wg6s'\n    },\n    body: JSON.stringify\\({ query: sql }\\)\n  }\\);\n  const text = await resp.text\\(\\);\n  console.log\\('Status:', resp.status\\);\n  console.log\\('Response:', text.substring\\(0, 500\\)\\);\n}\nrun\\(\\);\n\" 2>&1)"
     ]
   }
 }

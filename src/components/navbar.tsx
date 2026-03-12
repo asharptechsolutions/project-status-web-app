@@ -36,23 +36,25 @@ export function Navbar() {
   };
 
   return (
-    <header className="sticky top-0 z-40 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+    <header className="sticky top-0 z-40 w-full border-b bg-background/80 backdrop-blur-xl supports-[backdrop-filter]:bg-background/60">
       <div className="flex h-14 items-center px-4">
-        <Link href="/" className="flex items-center gap-2 font-bold mr-6">
-          <Workflow className="h-5 w-5" />
-          <span className="hidden sm:inline">ProjectStatus</span>
+        <Link href="/" className="flex items-center gap-2.5 font-semibold mr-8">
+          <div className="h-7 w-7 rounded-lg bg-primary/10 flex items-center justify-center">
+            <Workflow className="h-4 w-4 text-primary" />
+          </div>
+          <span className="hidden sm:inline tracking-tight">ProjectStatus</span>
         </Link>
 
-        <nav className="hidden md:flex items-center gap-1 flex-1 justify-center">
+        <nav className="hidden md:flex items-center gap-0.5 flex-1 justify-center">
           {links.map((l) => (
             <Link
               key={l.href}
               href={l.href}
               className={cn(
-                "px-3 py-2 text-sm rounded-md transition-colors",
+                "px-3.5 py-1.5 text-sm rounded-full transition-all duration-200",
                 isActive(l.href)
-                  ? "bg-accent text-accent-foreground font-medium"
-                  : "text-muted-foreground hover:text-foreground hover:bg-accent/50"
+                  ? "bg-primary/10 text-primary font-medium"
+                  : "text-muted-foreground hover:text-foreground hover:bg-muted"
               )}
             >
               {l.label}
@@ -60,17 +62,22 @@ export function Navbar() {
           ))}
         </nav>
 
-        <div className="flex items-center gap-2 ml-auto">
-          <Button variant="ghost" size="icon" onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>
+        <div className="flex items-center gap-1 ml-auto">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="rounded-full"
+            onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+          >
             <Sun className="h-4 w-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
             <Moon className="absolute h-4 w-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
           </Button>
           {user && (
-            <Button variant="ghost" size="icon" onClick={signOut} title="Sign out">
+            <Button variant="ghost" size="icon" className="rounded-full" onClick={signOut} title="Sign out">
               <LogOut className="h-4 w-4" />
             </Button>
           )}
-          <Button variant="ghost" size="icon" className="md:hidden" onClick={() => setOpen(true)}>
+          <Button variant="ghost" size="icon" className="md:hidden rounded-full" onClick={() => setOpen(true)}>
             <Menu className="h-5 w-5" />
           </Button>
         </div>
@@ -79,18 +86,23 @@ export function Navbar() {
       <Sheet open={open} onOpenChange={setOpen}>
         <SheetContent side="left">
           <SheetHeader>
-            <SheetTitle>ProjectStatus</SheetTitle>
+            <SheetTitle className="flex items-center gap-2.5">
+              <div className="h-7 w-7 rounded-lg bg-primary/10 flex items-center justify-center">
+                <Workflow className="h-4 w-4 text-primary" />
+              </div>
+              ProjectStatus
+            </SheetTitle>
             <SheetDescription>Navigate the app</SheetDescription>
           </SheetHeader>
-          <nav className="flex flex-col gap-2 mt-6">
+          <nav className="flex flex-col gap-1 mt-6">
             {links.map((l) => (
               <Link
                 key={l.href}
                 href={l.href}
                 onClick={() => setOpen(false)}
                 className={cn(
-                  "px-3 py-2 rounded-md text-sm",
-                  isActive(l.href) ? "bg-accent font-medium" : "text-muted-foreground hover:bg-accent/50"
+                  "px-3.5 py-2.5 rounded-lg text-sm transition-colors",
+                  isActive(l.href) ? "bg-primary/10 text-primary font-medium" : "text-muted-foreground hover:bg-muted"
                 )}
               >
                 {l.label}

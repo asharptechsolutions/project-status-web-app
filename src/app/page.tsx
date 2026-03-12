@@ -9,7 +9,7 @@ import type { Project, ProjectStage, Appointment } from "@/lib/types";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { FolderOpen, Clock, CheckCircle2, CalendarDays, AlertTriangle, TrendingUp, ChevronRight, Building2 } from "lucide-react";
+import { FolderOpen, Clock, CheckCircle2, CalendarDays, AlertTriangle, TrendingUp, ChevronRight, Building2, Plus } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
 
@@ -91,7 +91,6 @@ function Dashboard() {
         companies.forEach((c) => { cMap[c.id] = c.name; });
         setCompanyMap(cMap);
 
-        // Compute progress and schedule per project
         if (p.length > 0) {
           const allStages = await getStagesForProjects(p.map((proj) => proj.id));
           const progMap: Record<string, number> = {};
@@ -115,7 +114,6 @@ function Dashboard() {
     };
     load();
 
-    // Realtime for appointments (admin only)
     if (!isAdmin) return;
     const supabase = createClient();
     const channel = supabase
@@ -133,61 +131,61 @@ function Dashboard() {
   const active = projects.filter((p) => p.status === "active");
   const completed = projects.filter((p) => p.status === "completed");
 
+  const stats = [
+    { icon: FolderOpen, value: projects.length, label: "Total Projects", color: "text-blue-500", bg: "bg-blue-500/10" },
+    { icon: Clock, value: active.length, label: "Active", color: "text-amber-500", bg: "bg-amber-500/10" },
+    { icon: CheckCircle2, value: completed.length, label: "Completed", color: "text-emerald-500", bg: "bg-emerald-500/10" },
+  ];
+
   return (
     <div className="min-h-[100dvh] flex flex-col">
       <Navbar />
       <main className="flex-1 p-4 max-w-7xl mx-auto w-full">
-        <div className="flex items-center justify-between mb-6">
-          <h1 className="text-2xl font-bold">Dashboard</h1>
+        <div className="flex items-center justify-between mb-8">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
+            <p className="text-sm text-muted-foreground mt-0.5">Your project overview at a glance</p>
+          </div>
           {isAdmin && (
             <Link href="/projects/?new=1">
-              <Button>New Project</Button>
+              <Button className="rounded-full gap-2">
+                <Plus className="h-4 w-4" />
+                New Project
+              </Button>
             </Link>
           )}
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
-          <Card>
-            <CardContent className="pt-6 flex items-center gap-3">
-              <FolderOpen className="h-8 w-8 text-blue-500" />
-              <div>
-                <p className="text-2xl font-bold">{projects.length}</p>
-                <p className="text-sm text-muted-foreground">Total Projects</p>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="pt-6 flex items-center gap-3">
-              <Clock className="h-8 w-8 text-orange-500" />
-              <div>
-                <p className="text-2xl font-bold">{active.length}</p>
-                <p className="text-sm text-muted-foreground">Active</p>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="pt-6 flex items-center gap-3">
-              <CheckCircle2 className="h-8 w-8 text-green-500" />
-              <div>
-                <p className="text-2xl font-bold">{completed.length}</p>
-                <p className="text-sm text-muted-foreground">Completed</p>
-              </div>
-            </CardContent>
-          </Card>
+          {stats.map((s, i) => (
+            <Card key={s.label} className={`opacity-0 animate-scale-in stagger-${i + 1} overflow-hidden relative group hover:shadow-md transition-shadow`}>
+              <CardContent className="pt-6 flex items-center gap-4">
+                <div className={`h-12 w-12 rounded-xl ${s.bg} flex items-center justify-center shrink-0`}>
+                  <s.icon className={`h-6 w-6 ${s.color}`} />
+                </div>
+                <div>
+                  <p className="text-3xl font-bold tracking-tight">{s.value}</p>
+                  <p className="text-sm text-muted-foreground">{s.label}</p>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
         </div>
 
         {isAdmin && (
-          <div className="mb-8">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <CalendarDays className="h-5 w-5 text-primary" />
-                <h2 className="text-lg font-semibold">Upcoming Appointments</h2>
+          <div className="mb-8 opacity-0 animate-fade-up stagger-3">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2.5">
+                <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center">
+                  <CalendarDays className="h-4 w-4 text-primary" />
+                </div>
+                <h2 className="text-lg font-semibold tracking-tight">Upcoming Appointments</h2>
                 {upcomingAppts.length > 0 && (
-                  <Badge variant="secondary">{upcomingAppts.length}</Badge>
+                  <Badge variant="secondary" className="rounded-full">{upcomingAppts.length}</Badge>
                 )}
               </div>
               <Link href="/calendar/">
-                <Button variant="ghost" size="sm">View Calendar</Button>
+                <Button variant="ghost" size="sm" className="rounded-full text-muted-foreground">View Calendar</Button>
               </Link>
             </div>
             {upcomingAppts.length === 0 ? (
@@ -200,17 +198,17 @@ function Dashboard() {
               <div className="space-y-4">
                 {groupAppointmentsByDay(upcomingAppts).map(({ label, appointments: dayAppts }) => (
                   <div key={label}>
-                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">{label}</p>
-                    <div className="space-y-3">
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-2">{label}</p>
+                    <div className="space-y-2">
                       {dayAppts.map((appt) => (
-                        <Card key={appt.id} className="hover:shadow-md transition-shadow">
+                        <Card key={appt.id} className="hover:shadow-md hover:border-primary/10 transition-all duration-200">
                           <CardContent className="pt-4 pb-4">
                             <div className="flex items-center justify-between mb-1">
                               <span className="font-medium text-sm">{appt.client_name}</span>
                               {appt.slot && (
-                                <span className="text-xs text-muted-foreground">
+                                <span className="text-xs text-muted-foreground font-mono">
                                   {new Date(appt.slot.start_time).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
-                                  {" - "}
+                                  {" – "}
                                   {new Date(appt.slot.end_time).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
                                 </span>
                               )}
@@ -232,60 +230,65 @@ function Dashboard() {
           </div>
         )}
 
-        <h2 className="text-lg font-semibold mb-3">Active Projects</h2>
-        {active.length === 0 ? (
-          <Card>
-            <CardContent className="pt-6 text-center text-muted-foreground">
-              {isAdmin ? "No active projects. Create one to get started!" : "No active projects assigned to you."}
-            </CardContent>
-          </Card>
-        ) : (
-          <div className="space-y-3">
-            {active.map((p) => (
-              <Link key={p.id} href={`/projects/?id=${p.id}`}>
-                <Card className="cursor-pointer hover:shadow-md transition-shadow">
-                  <CardContent className="pt-4 pb-4">
-                    <div className="flex items-center gap-4">
-                      <div className="min-w-0 flex-1">
-                        <p className="font-medium truncate">{p.name}</p>
-                        {p.company_id && companyMap[p.company_id] && (
-                          <p className="text-xs text-muted-foreground flex items-center gap-1">
-                            <Building2 className="h-3 w-3" /> {companyMap[p.company_id]}
-                          </p>
-                        )}
-                        <p className="text-xs text-muted-foreground mt-1">Created {new Date(p.created_at).toLocaleDateString()}</p>
-                      </div>
-                      <div className="flex flex-col items-end gap-1 shrink-0">
-                        <div className="flex items-center gap-2 w-32">
-                          <div className="flex-1 bg-secondary rounded-full h-2">
-                            <div className="bg-primary rounded-full h-2 transition-all" style={{ width: `${projectProgress[p.id] ?? 0}%` }} />
-                          </div>
-                          <span className="text-xs text-muted-foreground font-medium">{projectProgress[p.id] ?? 0}%</span>
+        <div className="opacity-0 animate-fade-up stagger-4">
+          <h2 className="text-lg font-semibold tracking-tight mb-3">Active Projects</h2>
+          {active.length === 0 ? (
+            <Card>
+              <CardContent className="pt-6 text-center text-muted-foreground">
+                {isAdmin ? "No active projects. Create one to get started!" : "No active projects assigned to you."}
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="space-y-2">
+              {active.map((p) => (
+                <Link key={p.id} href={`/projects/?id=${p.id}`}>
+                  <Card className="cursor-pointer hover:shadow-md hover:border-primary/10 transition-all duration-200 group">
+                    <CardContent className="pt-4 pb-4">
+                      <div className="flex items-center gap-4">
+                        <div className="min-w-0 flex-1">
+                          <p className="font-medium truncate group-hover:text-primary transition-colors">{p.name}</p>
+                          {p.company_id && companyMap[p.company_id] && (
+                            <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                              <Building2 className="h-3 w-3" /> {companyMap[p.company_id]}
+                            </p>
+                          )}
+                          <p className="text-xs text-muted-foreground mt-0.5">Created {new Date(p.created_at).toLocaleDateString()}</p>
                         </div>
-                        {projectSchedule[p.id] != null && (
-                          <span className={`text-xs font-medium flex items-center gap-1 ${
-                            projectSchedule[p.id]! < 0
-                              ? "text-red-600 dark:text-red-400"
-                              : "text-green-600 dark:text-green-400"
-                          }`}>
-                            {projectSchedule[p.id]! < 0 ? (
-                              <><AlertTriangle className="h-3 w-3" />{Math.abs(projectSchedule[p.id]!)}d behind</>
-                            ) : projectSchedule[p.id]! === 0 ? (
-                              <>On schedule</>
-                            ) : (
-                              <><TrendingUp className="h-3 w-3" />{projectSchedule[p.id]!}d ahead</>
-                            )}
-                          </span>
-                        )}
+                        <div className="flex flex-col items-end gap-1.5 shrink-0">
+                          <div className="flex items-center gap-2 w-32">
+                            <div className="flex-1 bg-secondary rounded-full h-1.5 overflow-hidden">
+                              <div
+                                className="bg-primary rounded-full h-1.5 transition-all duration-500"
+                                style={{ width: `${projectProgress[p.id] ?? 0}%` }}
+                              />
+                            </div>
+                            <span className="text-xs text-muted-foreground font-medium tabular-nums">{projectProgress[p.id] ?? 0}%</span>
+                          </div>
+                          {projectSchedule[p.id] != null && (
+                            <span className={`text-xs font-medium flex items-center gap-1 ${
+                              projectSchedule[p.id]! < 0
+                                ? "text-red-600 dark:text-red-400"
+                                : "text-emerald-600 dark:text-emerald-400"
+                            }`}>
+                              {projectSchedule[p.id]! < 0 ? (
+                                <><AlertTriangle className="h-3 w-3" />{Math.abs(projectSchedule[p.id]!)}d behind</>
+                              ) : projectSchedule[p.id]! === 0 ? (
+                                <>On schedule</>
+                              ) : (
+                                <><TrendingUp className="h-3 w-3" />{projectSchedule[p.id]!}d ahead</>
+                              )}
+                            </span>
+                          )}
+                        </div>
+                        <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0 group-hover:text-primary group-hover:translate-x-0.5 transition-all" />
                       </div>
-                      <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
-                    </div>
-                  </CardContent>
-                </Card>
-              </Link>
-            ))}
-          </div>
-        )}
+                    </CardContent>
+                  </Card>
+                </Link>
+              ))}
+            </div>
+          )}
+        </div>
       </main>
     </div>
   );

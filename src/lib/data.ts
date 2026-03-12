@@ -19,6 +19,7 @@ import type {
   Appointment,
   StageDependency,
   ClientNotificationPreferences,
+  TimeEntry,
 } from "./types";
 
 // ============ PROJECT CLIENTS (junction) ============
@@ -1006,5 +1007,135 @@ export async function upsertClientNotificationPreferences(
       { ...prefs, updated_at: new Date().toISOString() },
       { onConflict: "client_id,project_id" }
     );
+  if (error) throw new Error(error.message);
+}
+
+// ============ TIME TRACKING ============
+
+export async function getTimeEntriesForStage(stageId: string): Promise<TimeEntry[]> {
+  const { data, error } = await supabase
+    .from("time_entries")
+    .select("*")
+    .eq("stage_id", stageId)
+    .order("created_at", { ascending: false });
+  if (error) throw new Error(error.message);
+  return (data || []) as TimeEntry[];
+}
+
+export async function getTimeEntriesForProject(projectId: string): Promise<TimeEntry[]> {
+  const { data, error } = await supabase
+    .from("time_entries")
+    .select("*")
+    .eq("project_id", projectId);
+  if (error) throw new Error(error.message);
+  return (data || []) as TimeEntry[];
+}
+
+export async function getTimeSummaryByStage(projectId: string): Promise<Record<string, number>> {
+  const entries = await getTimeEntriesForProject(projectId);
+  const map: Record<string, number> = {};
+  for (const e of entries) {
+    if (e.duration_minutes) {
+      map[e.stage_id] = (map[e.stage_id] || 0) + e.duration_minutes;
+    }
+  }
+  return map;
+}
+
+export async function getActiveTimer(userId: string, teamId: string): Promise<TimeEntry | null> {
+  const { data, error } = await supabase
+    .from("time_entries")
+    .select("*")
+    .eq("user_id", userId)
+    .eq("team_id", teamId)
+    .is("end_time", null)
+    .not("start_time", "is", null)
+    .single();
+  if (error) return null;
+  return data as TimeEntry;
+}
+
+export async function startTimer(entry: {
+  team_id: string;
+  project_id: string;
+  stage_id: string;
+  user_id: string;
+  billable?: boolean;
+}): Promise<TimeEntry> {
+  const { billable = true, ...rest } = entry;
+  const { data, error } = await supabase
+    .from("time_entries")
+    .insert({
+      ...rest,
+      start_time: new Date().toISOString(),
+      end_time: null,
+      duration_minutes: null,
+      billable,
+    })
+    .select("*")
+    .single();
+  if (error) throw new Error(error.message);
+  return data as TimeEntry;
+}
+
+export async function stopTimer(entryId: string): Promise<TimeEntry> {
+  // Fetch the entry to calculate duration
+  const { data: entry, error: fetchError } = await supabase
+    .from("time_entries")
+    .select("*")
+    .eq("id", entryId)
+    .single();
+  if (fetchError || !entry) throw new Error(fetchError?.message || "Timer not found");
+
+  const startTime = new Date(entry.start_time).getTime();
+  const now = Date.now();
+  const durationMinutes = Math.max(1, Math.round((now - startTime) / 60000));
+
+  const { data, error } = await supabase
+    .from("time_entries")
+    .update({
+      end_time: new Date().toISOString(),
+      duration_minutes: durationMinutes,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", entryId)
+    .select("*")
+    .single();
+  if (error) throw new Error(error.message);
+  return data as TimeEntry;
+}
+
+export async function createManualTimeEntry(
+  entry: Omit<TimeEntry, "id" | "created_at" | "updated_at" | "start_time" | "end_time">
+): Promise<TimeEntry> {
+  const { data, error } = await supabase
+    .from("time_entries")
+    .insert({
+      ...entry,
+      start_time: null,
+      end_time: null,
+    })
+    .select("*")
+    .single();
+  if (error) throw new Error(error.message);
+  return data as TimeEntry;
+}
+
+export async function updateTimeEntry(
+  id: string,
+  updates: Partial<Pick<TimeEntry, "notes" | "billable" | "duration_minutes">>
+): Promise<void> {
+  const { error } = await supabase
+    .from("time_entries")
+    .update({ ...updates, updated_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) throw new Error(error.message);
+}
+
+export async function deleteTimeEntry(id: string): Promise<void> {
+  const { error } = await supabase
+    .from("time_entries")
+    .delete()
+    .eq("id", id);
   if (error) throw new Error(error.message);
 }

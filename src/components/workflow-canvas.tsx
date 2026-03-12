@@ -58,6 +58,7 @@ interface WorkflowCanvasProps {
   dependencies?: StageDependency[];
   onAddDependency?: (sourceId: string, targetId: string) => void;
   onRemoveDependency?: (dependencyId: string) => void;
+  timeByStage?: Record<string, number>;
 }
 
 type StageNodeData = {
@@ -76,6 +77,7 @@ type StageNodeData = {
   hideWorkerName?: boolean;
   hideEstimatedCompletion?: boolean;
   hideStatusText?: boolean;
+  totalMinutes: number;
 };
 
 /* ------------------------------------------------------------------ */
@@ -297,6 +299,13 @@ function NodeContent({ data, showTarget }: { data: StageNodeData; showTarget: bo
           <span>{new Date(data.estimatedCompletion + "T00:00:00").toLocaleDateString()}</span>
         </div>
       )}
+      {/* Time tracking badge */}
+      {data.totalMinutes > 0 && (
+        <div className="flex items-center gap-1 text-xs text-muted-foreground mb-2">
+          <Clock className="h-3 w-3 shrink-0" />
+          <span>{data.totalMinutes < 60 ? `${data.totalMinutes}m` : `${Math.floor(data.totalMinutes / 60)}h ${data.totalMinutes % 60 > 0 ? `${data.totalMinutes % 60}m` : ""}`}</span>
+        </div>
+      )}
       {!data.readOnly && (
         <div className="flex items-center gap-1 flex-wrap">
           {(data.isAdmin || data.isWorker) && data.status === "pending" && (
@@ -407,6 +416,7 @@ function WorkflowCanvasInner({
   dependencies,
   onAddDependency,
   onRemoveDependency,
+  timeByStage,
 }: WorkflowCanvasProps) {
   const { fitView } = useReactFlow();
   const [isMobile, setIsMobile] = useState(false);
@@ -449,7 +459,8 @@ function WorkflowCanvasInner({
     hideWorkerName: visibilitySettings?.show_worker_names === false,
     hideEstimatedCompletion: visibilitySettings?.show_estimated_completion === false,
     hideStatusText: visibilitySettings?.show_stage_status === false,
-  }), [readOnly, isAdmin, isWorker, workerNames, onUpdateStatus, onRemoveStage, onAssignWorker, onEditStage, visibilitySettings]);
+    totalMinutes: timeByStage?.[s.id] || 0,
+  }), [readOnly, isAdmin, isWorker, workerNames, onUpdateStatus, onRemoveStage, onAssignWorker, onEditStage, visibilitySettings, timeByStage]);
 
   const rawNodes: Node[] = sorted.map((s, i) => ({
     id: s.id,

@@ -32,6 +32,10 @@ export interface Project {
   company_id?: string | null;
   workflow_locked?: boolean;
   workflow_positions?: Record<string, { x: number; y: number }> | null;
+  time_tracking_enabled?: boolean;
+  time_tracking_auto_start?: boolean;
+  time_tracking_default_billable?: boolean;
+  time_tracking_require_notes?: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -153,6 +157,23 @@ export interface StageDependency {
   created_at: string;
 }
 
+// ============ TIME TRACKING ============
+
+export interface TimeEntry {
+  id: string;
+  team_id: string;
+  project_id: string;
+  stage_id: string;
+  user_id: string;
+  start_time: string | null;
+  end_time: string | null;
+  duration_minutes: number | null;
+  notes: string | null;
+  billable: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 // ============ CLIENT VISIBILITY SETTINGS ============
 
 export interface ClientVisibilitySettings {
@@ -165,6 +186,7 @@ export interface ClientVisibilitySettings {
   allow_file_access: boolean;
   allow_chat: boolean;
   allow_booking: boolean;
+  show_time_tracking: boolean;
   created_at: string;
   updated_at: string;
 }

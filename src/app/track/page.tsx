@@ -13,7 +13,7 @@ import { BookingDialog } from "@/components/booking-dialog";
 import { useAuth } from "@/lib/auth-context";
 import { AuthForm } from "@/components/auth-form";
 import { toast } from "sonner";
-import { getClientProjects, getClientVisibilitySettings, getStageDependencies, getClientNotificationPreferences, upsertClientNotificationPreferences } from "@/lib/data";
+import { getClientProjects, getClientVisibilitySettings, getStageDependencies, getClientNotificationPreferences, upsertClientNotificationPreferences, getTimeSummaryByStage } from "@/lib/data";
 
 const WorkflowCanvas = dynamic(
   () => import("@/components/workflow-canvas").then((m) => m.WorkflowCanvas),
@@ -63,6 +63,7 @@ function TrackInner() {
   const [dependencies, setDependencies] = useState<StageDependency[]>([]);
   const [viewMode, setViewMode] = useState<"canvas" | "gantt">("canvas");
   const [notifyEnabled, setNotifyEnabled] = useState(true);
+  const [timeByStage, setTimeByStage] = useState<Record<string, number>>({});
 
   const projectId = searchParams.get("id");
 
@@ -94,6 +95,15 @@ function TrackInner() {
       try {
         const vs = await getClientVisibilitySettings(proj.team_id);
         setVisibilitySettings(vs);
+        // Load time summary if enabled
+        if (vs?.show_time_tracking) {
+          try {
+            const ts = await getTimeSummaryByStage(projectId);
+            setTimeByStage(ts);
+          } catch {
+            // empty time is fine
+          }
+        }
       } catch {
         // null = show everything (defaults)
       }
@@ -316,6 +326,7 @@ function TrackInner() {
             savedPositions={project.workflow_positions}
             visibilitySettings={visibilitySettings}
             dependencies={dependencies}
+            timeByStage={visibilitySettings?.show_time_tracking ? timeByStage : undefined}
           />
         ) : (
           <GanttChart

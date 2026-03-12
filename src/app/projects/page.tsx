@@ -12,8 +12,10 @@ import {
   setProjectClients, getProjectClients, addProjectClient, removeProjectClient,
   getStageDependencies, createStageDependency, deleteStageDependency, deleteStageDependenciesForStage,
   getAutomationSettings,
+  getTimeEntriesForStage, getTimeEntriesForProject, getActiveTimer,
+  startTimer, stopTimer, createManualTimeEntry, deleteTimeEntry,
 } from "@/lib/data";
-import type { Project, ProjectStage, Template, PresetStage, Member, Company, StageDependency, AutomationSettings } from "@/lib/types";
+import type { Project, ProjectStage, Template, PresetStage, Member, Company, StageDependency, AutomationSettings, TimeEntry } from "@/lib/types";
 import { runStageAutomations, runAssignmentAutomations, AUTOMATION_DEFAULTS } from "@/lib/automations";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,11 +26,13 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import {
-  Plus, Trash2, ArrowLeft, Play, CheckCircle2, ChevronRight,
+  Plus, Trash2, ArrowLeft, Play, CheckCircle2, ChevronRight, ChevronDown, ChevronUp,
   Pencil, Search, X, ArrowUpDown, Archive, ArchiveRestore,
   Clock, Loader2, GripVertical, UserPlus, Mail, Users, Building2, Save,
   AlertTriangle, TrendingUp, Link, FolderOpen, MoreHorizontal, BarChart3, Network,
+  Timer, DollarSign, Square,
 } from "lucide-react";
 import { toast } from "sonner";
 import { DatePicker } from "@/components/ui/date-picker";
@@ -127,6 +131,23 @@ function ProjectsList() {
   const [automationSettings, setAutomationSettings] = useState<AutomationSettings | null>(null);
   const [stageModalPlannedStart, setStageModalPlannedStart] = useState<Date | undefined>(undefined);
 
+  // Time tracking state
+  const [stageTimeEntries, setStageTimeEntries] = useState<TimeEntry[]>([]);
+  const [loadingTimeEntries, setLoadingTimeEntries] = useState(false);
+  const [activeTimer, setActiveTimer] = useState<TimeEntry | null>(null);
+  const [showManualEntry, setShowManualEntry] = useState(false);
+  const [manualDuration, setManualDuration] = useState("");
+  const [manualNotes, setManualNotes] = useState("");
+  const [manualBillable, setManualBillable] = useState(true);
+  const [projectTimeEntries, setProjectTimeEntries] = useState<TimeEntry[]>([]);
+  const [showTimeSummary, setShowTimeSummary] = useState(false);
+
+  // Time tracking settings state (edit dialog)
+  const [editTimeEnabled, setEditTimeEnabled] = useState(false);
+  const [editTimeAutoStart, setEditTimeAutoStart] = useState(true);
+  const [editTimeDefaultBillable, setEditTimeDefaultBillable] = useState(true);
+  const [editTimeRequireNotes, setEditTimeRequireNotes] = useState(false);
+
   // Compute schedule days from a list of stages (negative = behind, positive = ahead, null = no estimates)
   const computeScheduleDays = useCallback((stageList: ProjectStage[]): number | null => {
     const today = new Date();
@@ -201,6 +222,39 @@ function ProjectsList() {
     return map;
   }, [companies]);
 
+  const timeByStage = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const e of projectTimeEntries) {
+      map[e.stage_id] = (map[e.stage_id] || 0) + (e.duration_minutes || 0);
+    }
+    return map;
+  }, [projectTimeEntries]);
+
+  const formatMinutes = useCallback((mins: number) => {
+    if (mins < 60) return `${mins}m`;
+    const h = Math.floor(mins / 60);
+    const m = mins % 60;
+    return m > 0 ? `${h}h ${m}m` : `${h}h`;
+  }, []);
+
+  const timeSummary = useMemo(() => {
+    const completed = projectTimeEntries.filter((e) => e.duration_minutes != null);
+    const totalMinutes = completed.reduce((sum, e) => sum + (e.duration_minutes || 0), 0);
+    const billableMinutes = completed.filter((e) => e.billable).reduce((sum, e) => sum + (e.duration_minutes || 0), 0);
+    const byStage: Record<string, { name: string; totalMins: number; billableMins: number; count: number }> = {};
+    for (const entry of completed) {
+      if (!byStage[entry.stage_id]) {
+        const stage = stages.find((s) => s.id === entry.stage_id);
+        byStage[entry.stage_id] = { name: stage?.name || "Unknown Stage", totalMins: 0, billableMins: 0, count: 0 };
+      }
+      byStage[entry.stage_id].totalMins += entry.duration_minutes || 0;
+      if (entry.billable) byStage[entry.stage_id].billableMins += entry.duration_minutes || 0;
+      byStage[entry.stage_id].count++;
+    }
+    const sortedEntries = [...completed].sort((a, b) => b.created_at.localeCompare(a.created_at));
+    return { totalMinutes, billableMinutes, byStage, sortedEntries };
+  }, [projectTimeEntries, stages]);
+
   const load = useCallback(async () => {
     if (!orgId) return;
     try {
@@ -241,14 +295,23 @@ function ProjectsList() {
 
   // Load stages, files, clients, and dependencies when viewing a project
   useEffect(() => {
-    if (!selectedProject) { setStages([]); setStagesLoaded(false); setProjectClientIds([]); setDependencies([]); setAutomationSettings(null); setDetailShowNewClient(false); setDetailNewClientName(""); setDetailNewClientEmail(""); setDetailNewClientPhone(""); return; }
+    if (!selectedProject) { setStages([]); setStagesLoaded(false); setProjectClientIds([]); setDependencies([]); setAutomationSettings(null); setDetailShowNewClient(false); setDetailNewClientName(""); setDetailNewClientEmail(""); setDetailNewClientPhone(""); setProjectTimeEntries([]); return; }
     setStagesLoaded(false);
     getProjectStages(selectedProject.id).then((s) => { setStages(s); setStagesLoaded(true); }).catch(() => { setStagesLoaded(true); });
     getProjectClients(selectedProject.id).then(setProjectClientIds).catch(() => {});
     getStageDependencies(selectedProject.id).then(setDependencies).catch(() => {});
     if (orgId) getAutomationSettings(orgId).then(setAutomationSettings).catch(() => {});
+    // Load time entries for project (only if time tracking is enabled)
+    if (selectedProject.time_tracking_enabled) {
+      getTimeEntriesForProject(selectedProject.id).then(setProjectTimeEntries).catch(() => {});
+      // Load active timer
+      if (userId && orgId) getActiveTimer(userId, orgId).then(setActiveTimer).catch(() => {});
+    } else {
+      setProjectTimeEntries([]);
+      setActiveTimer(null);
+    }
     window.scrollTo(0, 0);
-  }, [selectedProject?.id, orgId]);
+  }, [selectedProject?.id, orgId, userId]);
 
   // Keep project progress and schedule in sync when stages change
   useEffect(() => {
@@ -544,7 +607,88 @@ function ProjectsList() {
     setStageModalEstDate(stage.estimated_completion ? new Date(stage.estimated_completion + "T00:00:00") : undefined);
     setStageModalPlannedStart(stage.planned_start ? new Date(stage.planned_start + "T00:00:00") : undefined);
     setStageModalStatus(stage.status);
+    setShowManualEntry(false);
+    setManualDuration("");
+    setManualNotes("");
+    setManualBillable(selectedProject?.time_tracking_default_billable ?? true);
     setShowStageModal(true);
+    // Load time entries for this stage (only if time tracking enabled)
+    if (selectedProject?.time_tracking_enabled) {
+      setLoadingTimeEntries(true);
+      getTimeEntriesForStage(stageId).then(setStageTimeEntries).catch(() => setStageTimeEntries([])).finally(() => setLoadingTimeEntries(false));
+    }
+  };
+
+  const handleStartTimer = async (stageId: string) => {
+    if (!selectedProject || !userId || !orgId) return;
+    try {
+      // Auto-stop any existing timer
+      if (activeTimer) {
+        const stopped = await stopTimer(activeTimer.id);
+        setProjectTimeEntries((prev) => prev.map((e) => e.id === stopped.id ? stopped : e).concat(prev.some((e) => e.id === stopped.id) ? [] : [stopped]));
+        if (editingStageId === activeTimer.stage_id) {
+          setStageTimeEntries((prev) => [stopped, ...prev.filter((e) => e.id !== stopped.id)]);
+        }
+        toast.info(`Timer stopped: ${formatMinutes(stopped.duration_minutes || 0)} logged`);
+      }
+      const entry = await startTimer({ team_id: orgId, project_id: selectedProject.id, stage_id: stageId, user_id: userId });
+      setActiveTimer(entry);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to start timer");
+    }
+  };
+
+  const handleStopTimer = async () => {
+    if (!activeTimer) return;
+    try {
+      const stopped = await stopTimer(activeTimer.id);
+      setProjectTimeEntries((prev) => prev.map((e) => e.id === stopped.id ? stopped : e).concat(prev.some((e) => e.id === stopped.id) ? [] : [stopped]));
+      if (editingStageId === stopped.stage_id) {
+        setStageTimeEntries((prev) => [stopped, ...prev.filter((e) => e.id !== stopped.id)]);
+      }
+      toast.success(`Timer stopped: ${formatMinutes(stopped.duration_minutes || 0)} logged`);
+      setActiveTimer(null);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to stop timer");
+    }
+  };
+
+  const handleManualEntry = async () => {
+    if (!selectedProject || !userId || !orgId || !editingStageId) return;
+    const mins = parseInt(manualDuration, 10);
+    if (!mins || mins <= 0) { toast.error("Duration must be greater than 0"); return; }
+    if (selectedProject.time_tracking_require_notes && !manualNotes.trim()) { toast.error("Notes are required for manual time entries"); return; }
+    try {
+      const entry = await createManualTimeEntry({
+        team_id: orgId,
+        project_id: selectedProject.id,
+        stage_id: editingStageId,
+        user_id: userId,
+        duration_minutes: mins,
+        notes: manualNotes.trim() || null,
+        billable: manualBillable,
+      });
+      setStageTimeEntries((prev) => [entry, ...prev]);
+      setProjectTimeEntries((prev) => [...prev, entry]);
+      setManualDuration("");
+      setManualNotes("");
+      setManualBillable(true);
+      setShowManualEntry(false);
+      toast.success(`${formatMinutes(mins)} logged`);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to log time");
+    }
+  };
+
+  const handleDeleteTimeEntry = async (entryId: string) => {
+    try {
+      await deleteTimeEntry(entryId);
+      setStageTimeEntries((prev) => prev.filter((e) => e.id !== entryId));
+      setProjectTimeEntries((prev) => prev.filter((e) => e.id !== entryId));
+      toast.success("Time entry deleted");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to delete time entry");
+    }
   };
 
   const handleSaveStage = async () => {
@@ -578,6 +722,15 @@ function ProjectsList() {
             updates.completed_at = now;
           }
         }
+        // Auto-stop timer if completing this stage
+        if (stageModalStatus === "completed" && currentStage?.status !== "completed" && activeTimer && activeTimer.stage_id === editingStageId) {
+          const stopped = await stopTimer(activeTimer.id);
+          setProjectTimeEntries((prev) => prev.map((e) => e.id === stopped.id ? stopped : e).concat(prev.some((e) => e.id === stopped.id) ? [] : [stopped]));
+          setStageTimeEntries((prev) => [stopped, ...prev.filter((e) => e.id !== stopped.id)]);
+          setActiveTimer(null);
+          toast.info(`Timer auto-stopped: ${formatMinutes(stopped.duration_minutes || 0)} logged`);
+        }
+
         await updateProjectStage(editingStageId, updates);
         const newStages = stages.map((s) => s.id === editingStageId ? { ...s, ...updates } : s);
 
@@ -645,6 +798,26 @@ function ProjectsList() {
     if (status === "in_progress") { updates.started_at = now; updates.started_by = userId; }
     if (status === "completed") { updates.completed_at = now; }
     try {
+      // Auto-stop timer if completing a stage with active timer
+      if (status === "completed" && activeTimer && activeTimer.stage_id === stageId) {
+        const stopped = await stopTimer(activeTimer.id);
+        setProjectTimeEntries((prev) => prev.map((e) => e.id === stopped.id ? stopped : e).concat(prev.some((e) => e.id === stopped.id) ? [] : [stopped]));
+        setActiveTimer(null);
+        toast.info(`Timer auto-stopped: ${formatMinutes(stopped.duration_minutes || 0)} logged`);
+      }
+      // Auto-start timer when starting a stage — attribute to assigned worker if present, otherwise logged-in user
+      if (status === "in_progress" && orgId && selectedProject.time_tracking_enabled && selectedProject.time_tracking_auto_start !== false) {
+        const stage = stages.find((s) => s.id === stageId);
+        const timerUserId = stage?.assigned_to || userId;
+        if (activeTimer) {
+          const stopped = await stopTimer(activeTimer.id);
+          setProjectTimeEntries((prev) => prev.map((e) => e.id === stopped.id ? stopped : e).concat(prev.some((e) => e.id === stopped.id) ? [] : [stopped]));
+          toast.info(`Previous timer stopped: ${formatMinutes(stopped.duration_minutes || 0)} logged`);
+        }
+        const entry = await startTimer({ team_id: orgId, project_id: selectedProject.id, stage_id: stageId, user_id: timerUserId, billable: selectedProject.time_tracking_default_billable ?? true });
+        setActiveTimer(entry);
+        toast.info("Timer started");
+      }
       await updateProjectStage(stageId, updates);
       const newStages = stages.map((s) => s.id === stageId ? { ...s, ...updates } : s);
 
@@ -668,10 +841,15 @@ function ProjectsList() {
 
   const removeStage = async (stageId: string) => {
     try {
+      // Clear active timer if it's on this stage (cascade will delete the entry)
+      if (activeTimer && activeTimer.stage_id === stageId) {
+        setActiveTimer(null);
+      }
       await deleteStageDependenciesForStage(stageId);
       await deleteProjectStage(stageId);
       setStages(stages.filter((s) => s.id !== stageId));
       setDependencies((prev) => prev.filter((d) => d.source_stage_id !== stageId && d.target_stage_id !== stageId));
+      setProjectTimeEntries((prev) => prev.filter((e) => e.stage_id !== stageId));
     } catch (err: any) {
       toast.error(err.message || "Failed to remove stage");
     }
@@ -705,16 +883,35 @@ function ProjectsList() {
     setShowNewClient(false);
     setNewClientName(""); setNewClientEmail(""); setNewClientPhone("");
     setShowNewCompany(false);
+    setEditTimeEnabled(selectedProject.time_tracking_enabled ?? false);
+    setEditTimeAutoStart(selectedProject.time_tracking_auto_start ?? true);
+    setEditTimeDefaultBillable(selectedProject.time_tracking_default_billable ?? true);
+    setEditTimeRequireNotes(selectedProject.time_tracking_require_notes ?? false);
     setShowEdit(true);
   };
 
   const handleEdit = async () => {
     if (!selectedProject || !editName.trim()) return;
     try {
-      await updateProject(selectedProject.id, { name: editName.trim(), company_id: editCompanyId });
+      await updateProject(selectedProject.id, {
+        name: editName.trim(),
+        company_id: editCompanyId,
+        time_tracking_enabled: editTimeEnabled,
+        time_tracking_auto_start: editTimeAutoStart,
+        time_tracking_default_billable: editTimeDefaultBillable,
+        time_tracking_require_notes: editTimeRequireNotes,
+      });
       await setProjectClients(selectedProject.id, editClientIds);
       setProjectClientIds(editClientIds);
-      setSelectedProjectRaw({ ...selectedProject, name: editName.trim(), company_id: editCompanyId });
+      setSelectedProjectRaw({
+        ...selectedProject,
+        name: editName.trim(),
+        company_id: editCompanyId,
+        time_tracking_enabled: editTimeEnabled,
+        time_tracking_auto_start: editTimeAutoStart,
+        time_tracking_default_billable: editTimeDefaultBillable,
+        time_tracking_require_notes: editTimeRequireNotes,
+      });
       setShowEdit(false);
       toast.success("Project updated"); load();
     } catch (err: any) { toast.error(err.message || "Failed to update project"); }
@@ -889,6 +1086,24 @@ function ProjectsList() {
           </Button>
         </div>
 
+        {/* Active timer banner */}
+        {selectedProject.time_tracking_enabled && activeTimer && activeTimer.project_id === selectedProject.id && (
+          <div className="mb-3 flex items-center gap-2 rounded-lg border border-blue-300 bg-blue-50 dark:bg-blue-950/30 dark:border-blue-700 px-4 py-2">
+            <Timer className="h-4 w-4 text-blue-600 dark:text-blue-400 animate-pulse" />
+            <span className="text-sm font-medium text-blue-700 dark:text-blue-300">
+              Timer running on &quot;{stages.find((s) => s.id === activeTimer.stage_id)?.name || "stage"}&quot;
+              {activeTimer.start_time && (
+                <span className="ml-1 text-blue-500">
+                  (since {new Date(activeTimer.start_time).toLocaleTimeString()})
+                </span>
+              )}
+            </span>
+            <Button size="sm" variant="outline" className="ml-auto h-7 text-xs" onClick={handleStopTimer}>
+              <Square className="h-3 w-3 mr-1" /> Stop
+            </Button>
+          </div>
+        )}
+
         {/* Workflow Canvas / Gantt Chart */}
         {stagesLoaded ? (
           viewMode === "canvas" ? (
@@ -911,6 +1126,7 @@ function ProjectsList() {
               dependencies={dependencies}
               onAddDependency={handleAddDependency}
               onRemoveDependency={handleRemoveDependency}
+              timeByStage={selectedProject.time_tracking_enabled ? timeByStage : {}}
             />
           ) : (
             <GanttChart
@@ -953,6 +1169,97 @@ function ProjectsList() {
               ))}
             </div>
           </div>
+        )}
+
+        {/* Time Tracking Summary */}
+        {selectedProject.time_tracking_enabled && (isAdmin || isWorker) && projectTimeEntries.length > 0 && (
+          <Card className="mb-8">
+            <CardHeader className="cursor-pointer select-none py-3" onClick={() => setShowTimeSummary(!showTimeSummary)}>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <Clock className="h-5 w-5 text-muted-foreground" />
+                  <CardTitle className="text-base">Time Tracking</CardTitle>
+                  <Badge variant="secondary">{formatMinutes(timeSummary.totalMinutes)}</Badge>
+                  {timeSummary.billableMinutes > 0 && (
+                    <Badge variant="outline" className="text-green-600 border-green-300">
+                      <DollarSign className="h-3 w-3 mr-0.5" />{formatMinutes(timeSummary.billableMinutes)}
+                    </Badge>
+                  )}
+                </div>
+                {showTimeSummary ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+              </div>
+            </CardHeader>
+            {showTimeSummary && (
+              <CardContent className="pt-0">
+                {/* Summary row */}
+                <div className="flex gap-6 text-sm mb-4 pb-4 border-b">
+                  <div><span className="text-muted-foreground">Total:</span> <span className="font-medium">{formatMinutes(timeSummary.totalMinutes)}</span></div>
+                  <div><span className="text-muted-foreground">Billable:</span> <span className="font-medium text-green-600">{formatMinutes(timeSummary.billableMinutes)}</span></div>
+                  <div><span className="text-muted-foreground">Non-billable:</span> <span className="font-medium">{formatMinutes(timeSummary.totalMinutes - timeSummary.billableMinutes)}</span></div>
+                </div>
+
+                {/* Per-stage breakdown */}
+                <div className="mb-4">
+                  <p className="text-sm font-medium mb-2">By Stage</p>
+                  <div className="space-y-1">
+                    {Object.entries(timeSummary.byStage).map(([stageId, info]) => (
+                      <div key={stageId} className="flex items-center justify-between text-sm py-1">
+                        <span>{info.name}</span>
+                        <div className="flex items-center gap-3 text-muted-foreground">
+                          <span>{info.count} {info.count === 1 ? "entry" : "entries"}</span>
+                          <span>{formatMinutes(info.totalMins)}</span>
+                          {info.billableMins > 0 && (
+                            <span className="text-green-600"><DollarSign className="h-3 w-3 inline" />{formatMinutes(info.billableMins)}</span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Entries table */}
+                <div>
+                  <p className="text-sm font-medium mb-2">All Entries</p>
+                  <div className="border rounded-md overflow-hidden">
+                    <table className="w-full text-sm">
+                      <thead className="bg-muted/50">
+                        <tr>
+                          <th className="text-left px-3 py-2 font-medium">Stage</th>
+                          <th className="text-left px-3 py-2 font-medium">Worker</th>
+                          <th className="text-right px-3 py-2 font-medium">Duration</th>
+                          <th className="text-center px-3 py-2 font-medium">Billable</th>
+                          <th className="text-left px-3 py-2 font-medium">Notes</th>
+                          <th className="text-left px-3 py-2 font-medium">Date</th>
+                          {isAdmin && <th className="px-3 py-2"></th>}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y">
+                        {timeSummary.sortedEntries.map((entry) => (
+                          <tr key={entry.id} className="hover:bg-muted/30">
+                            <td className="px-3 py-2">{timeSummary.byStage[entry.stage_id]?.name || "Unknown"}</td>
+                            <td className="px-3 py-2">{workerNames[entry.user_id] || "Unknown"}</td>
+                            <td className="px-3 py-2 text-right font-medium">{formatMinutes(entry.duration_minutes || 0)}</td>
+                            <td className="px-3 py-2 text-center">
+                              {entry.billable && <DollarSign className="h-4 w-4 text-green-600 inline" />}
+                            </td>
+                            <td className="px-3 py-2 text-muted-foreground max-w-[200px] truncate">{entry.notes || "—"}</td>
+                            <td className="px-3 py-2 text-muted-foreground">{new Date(entry.created_at).toLocaleDateString()}</td>
+                            {isAdmin && (
+                              <td className="px-3 py-2 text-right">
+                                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleDeleteTimeEntry(entry.id)}>
+                                  <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                                </Button>
+                              </td>
+                            )}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </CardContent>
+            )}
+          </Card>
         )}
 
         {/* Notes (internal, hidden from clients) */}
@@ -1071,6 +1378,32 @@ function ProjectsList() {
                         <Button type="button" variant="ghost" size="sm" onClick={() => { setShowNewClient(false); setNewClientName(""); setNewClientEmail(""); setNewClientPhone(""); }}>
                           <X className="h-4 w-4 mr-1" /> Cancel
                         </Button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+              {/* Time Tracking Settings */}
+              <div className="border-t pt-3 mt-1">
+                <p className="text-sm font-medium mb-3">Time Tracking</p>
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="tt-enabled" className="text-sm cursor-pointer">Enable Time Tracking</Label>
+                    <Switch id="tt-enabled" checked={editTimeEnabled} onCheckedChange={setEditTimeEnabled} />
+                  </div>
+                  {editTimeEnabled && (
+                    <div className="ml-4 space-y-3 border-l-2 pl-3">
+                      <div className="flex items-center justify-between">
+                        <Label htmlFor="tt-autostart" className="text-sm cursor-pointer">Auto-start timer on stage start</Label>
+                        <Switch id="tt-autostart" checked={editTimeAutoStart} onCheckedChange={setEditTimeAutoStart} />
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <Label htmlFor="tt-billable" className="text-sm cursor-pointer">Default entries to billable</Label>
+                        <Switch id="tt-billable" checked={editTimeDefaultBillable} onCheckedChange={setEditTimeDefaultBillable} />
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <Label htmlFor="tt-notes" className="text-sm cursor-pointer">Require notes on manual entries</Label>
+                        <Switch id="tt-notes" checked={editTimeRequireNotes} onCheckedChange={setEditTimeRequireNotes} />
                       </div>
                     </div>
                   )}
@@ -1234,6 +1567,119 @@ function ProjectsList() {
                   placeholder="Click a start date, drag to end"
                 />
               </div>
+
+              {/* Time Tracking Section — only shown when editing an existing stage with time tracking enabled */}
+              {selectedProject.time_tracking_enabled && editingStageId && (isAdmin || isWorker) && (
+                <div className="border rounded-lg p-3 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Timer className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-sm font-medium">Time Tracking</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      {activeTimer && activeTimer.stage_id === editingStageId ? (
+                        <Button size="sm" variant="destructive" className="h-7 text-xs" onClick={handleStopTimer}>
+                          <Square className="h-3 w-3 mr-1" /> Stop Timer
+                        </Button>
+                      ) : (
+                        <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => handleStartTimer(editingStageId)}>
+                          <Play className="h-3 w-3 mr-1" /> Start Timer
+                        </Button>
+                      )}
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 text-xs"
+                        onClick={() => setShowManualEntry(!showManualEntry)}
+                      >
+                        <Clock className="h-3 w-3 mr-1" /> Log Time
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* Active timer indicator */}
+                  {activeTimer && activeTimer.stage_id === editingStageId && activeTimer.start_time && (
+                    <div className="flex items-center gap-2 text-xs text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/30 rounded px-2 py-1">
+                      <Timer className="h-3 w-3 animate-pulse" />
+                      Timer running since {new Date(activeTimer.start_time).toLocaleTimeString()}
+                    </div>
+                  )}
+
+                  {/* Manual entry form */}
+                  {showManualEntry && (
+                    <div className="space-y-2 border rounded p-2">
+                      <div className="flex gap-2">
+                        <div className="flex-1">
+                          <Label className="text-xs">Duration (minutes)</Label>
+                          <Input
+                            type="number"
+                            min="1"
+                            value={manualDuration}
+                            onChange={(e) => setManualDuration(e.target.value)}
+                            placeholder="e.g. 30"
+                            className="h-8"
+                          />
+                        </div>
+                        <div className="flex items-end gap-2 pb-0.5">
+                          <label className="flex items-center gap-1 text-xs cursor-pointer">
+                            <Switch checked={manualBillable} onCheckedChange={setManualBillable} />
+                            <DollarSign className="h-3 w-3" />
+                          </label>
+                        </div>
+                      </div>
+                      <div>
+                        <Label className="text-xs">Notes {selectedProject.time_tracking_require_notes ? "(required)" : "(optional)"}</Label>
+                        <Input
+                          value={manualNotes}
+                          onChange={(e) => setManualNotes(e.target.value)}
+                          placeholder="What did you work on?"
+                          className="h-8"
+                        />
+                      </div>
+                      <Button size="sm" className="w-full h-7 text-xs" onClick={handleManualEntry}>
+                        Log Entry
+                      </Button>
+                    </div>
+                  )}
+
+                  {/* Time entries list */}
+                  {loadingTimeEntries ? (
+                    <div className="flex justify-center py-2">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    </div>
+                  ) : stageTimeEntries.length > 0 ? (
+                    <div className="space-y-1">
+                      <div className="text-xs font-medium text-muted-foreground">
+                        Total: {formatMinutes(stageTimeEntries.reduce((sum, e) => sum + (e.duration_minutes || 0), 0))}
+                      </div>
+                      <div className="max-h-32 overflow-y-auto space-y-1">
+                        {stageTimeEntries.filter((e) => e.duration_minutes).map((entry) => (
+                          <div key={entry.id} className="flex items-center gap-2 text-xs bg-muted/50 rounded px-2 py-1">
+                            <span className="font-medium">{formatMinutes(entry.duration_minutes || 0)}</span>
+                            {entry.billable && <DollarSign className="h-3 w-3 text-green-600" />}
+                            {entry.notes && <span className="truncate text-muted-foreground flex-1">{entry.notes}</span>}
+                            <span className="text-muted-foreground ml-auto shrink-0">
+                              {new Date(entry.created_at).toLocaleDateString()}
+                            </span>
+                            {isAdmin && (
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteTimeEntry(entry.id)}
+                                className="text-muted-foreground hover:text-destructive"
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground text-center py-1">No time entries yet</p>
+                  )}
+                </div>
+              )}
+
               <Button onClick={handleSaveStage} className="w-full" disabled={!stageModalName.trim()}>
                 {editingStageId ? "Save Changes" : "Add Stage"}
               </Button>

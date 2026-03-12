@@ -4,96 +4,122 @@
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    --background: 40 33% 98%;
+    --foreground: 220 25% 10%;
     --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    --card-foreground: 220 25% 10%;
     --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
-    --radius: 0.5rem;
+    --popover-foreground: 220 25% 10%;
+    --primary: 168 76% 32%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 40 20% 94%;
+    --secondary-foreground: 220 25% 10%;
+    --muted: 40 15% 93%;
+    --muted-foreground: 220 10% 46%;
+    --accent: 40 20% 94%;
+    --accent-foreground: 220 25% 10%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 40 15% 89%;
+    --input: 40 15% 89%;
+    --ring: 168 76% 32%;
+    --radius: 0.625rem;
   }
+
   .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
+    --background: 225 25% 7%;
+    --foreground: 40 20% 95%;
+    --card: 225 20% 10%;
+    --card-foreground: 40 20% 95%;
+    --popover: 225 20% 10%;
+    --popover-foreground: 40 20% 95%;
+    --primary: 168 76% 42%;
+    --primary-foreground: 225 25% 7%;
+    --secondary: 225 15% 15%;
+    --secondary-foreground: 40 20% 95%;
+    --muted: 225 15% 15%;
+    --muted-foreground: 220 10% 55%;
+    --accent: 225 15% 15%;
+    --accent-foreground: 40 20% 95%;
+    --destructive: 0 62% 40%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 225 15% 16%;
+    --input: 225 15% 16%;
+    --ring: 168 76% 42%;
   }
 }
 
 @layer base {
   * { @apply border-border; }
-  body { @apply bg-background text-foreground; }
+  body { @apply bg-background text-foreground antialiased; }
 }
+
+/* Subtle grain texture overlay */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  pointer-events: none;
+  opacity: 0.025;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+  background-size: 256px 256px;
+}
+
+.dark body::before {
+  opacity: 0.04;
+}
+
+/* Staggered animation delays */
+.stagger-1 { animation-delay: 0.1s; }
+.stagger-2 { animation-delay: 0.2s; }
+.stagger-3 { animation-delay: 0.3s; }
+.stagger-4 { animation-delay: 0.4s; }
+.stagger-5 { animation-delay: 0.5s; }
+.stagger-6 { animation-delay: 0.6s; }
 
 /* React Flow dark mode overrides for Controls and MiniMap */
 .dark .react-flow__controls {
-  background: hsl(222.2 84% 4.9%);
-  border-color: hsl(217.2 32.6% 17.5%);
+  background: hsl(225 25% 7%);
+  border-color: hsl(225 15% 16%);
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
 }
 
 .dark .react-flow__controls-button {
-  background: hsl(222.2 84% 4.9%);
-  border-color: hsl(217.2 32.6% 17.5%);
-  fill: hsl(210 40% 98%);
-  color: hsl(210 40% 98%);
+  background: hsl(225 25% 7%);
+  border-color: hsl(225 15% 16%);
+  fill: hsl(40 20% 95%);
+  color: hsl(40 20% 95%);
 }
 
 .dark .react-flow__controls-button:hover {
-  background: hsl(217.2 32.6% 17.5%);
+  background: hsl(225 15% 15%);
 }
 
 .dark .react-flow__controls-button svg {
-  fill: hsl(210 40% 98%);
+  fill: hsl(40 20% 95%);
 }
 
 .dark .react-flow__minimap {
-  background: hsl(222.2 84% 4.9%);
-  border: 1px solid hsl(217.2 32.6% 17.5%);
+  background: hsl(225 25% 7%);
+  border: 1px solid hsl(225 15% 16%);
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
 }
 
 .dark .react-flow__minimap-mask {
-  fill: hsl(222.2 84% 8%);
+  fill: hsl(225 25% 10%);
   opacity: 0.7;
 }
 
 .dark .react-flow__background {
-  background: hsl(222.2 84% 4.9%);
+  background: hsl(225 25% 7%);
 }
 
 .dark .react-flow__edge-path {
-  stroke: hsl(215 20.2% 65.1%);
+  stroke: hsl(220 10% 55%);
 }
 
 .dark .react-flow__node {
-  color: hsl(210 40% 98%);
+  color: hsl(40 20% 95%);
 }

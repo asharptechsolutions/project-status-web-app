@@ -21,6 +21,7 @@ type VisibilityKey = keyof Pick<
   | "allow_file_access"
   | "allow_chat"
   | "allow_booking"
+  | "show_time_tracking"
 >;
 
 interface ToggleRow {
@@ -40,6 +41,7 @@ const featureToggles: ToggleRow[] = [
   { key: "allow_file_access", label: "File Access", description: "Allow clients to view and download project files" },
   { key: "allow_chat", label: "Chat", description: "Allow clients to send and receive chat messages" },
   { key: "allow_booking", label: "Booking", description: "Allow clients to book calls from the tracking view" },
+  { key: "show_time_tracking", label: "Time Tracking", description: "Show logged time per stage in the client tracking view" },
 ];
 
 const defaults: Record<VisibilityKey, boolean> = {
@@ -50,6 +52,7 @@ const defaults: Record<VisibilityKey, boolean> = {
   allow_file_access: true,
   allow_chat: true,
   allow_booking: true,
+  show_time_tracking: false,
 };
 
 type AutomationKey = keyof Pick<
@@ -109,6 +112,7 @@ function SettingsContent() {
             allow_file_access: visData.allow_file_access,
             allow_chat: visData.allow_chat,
             allow_booking: visData.allow_booking,
+            show_time_tracking: visData.show_time_tracking,
           };
           setSettings(loaded);
           savedSettings.current = loaded;
