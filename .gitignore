@@ -4,3 +4,4 @@ out
 .env.*
 ./docs
 .claude/settings.local.json
+tmp-screenshots/

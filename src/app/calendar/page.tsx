@@ -130,6 +130,17 @@ function CalendarPage() {
       )
     : [];
 
+  if (!isAdmin) {
+    return (
+      <div className="min-h-[100dvh] flex flex-col">
+        <Navbar />
+        <main className="flex-1 p-4 max-w-7xl mx-auto w-full">
+          <p className="text-muted-foreground text-center mt-10">Only admins can access the calendar.</p>
+        </main>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-[100dvh] flex flex-col">
       <Navbar />
