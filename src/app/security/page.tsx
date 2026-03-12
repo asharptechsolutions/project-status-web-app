@@ -148,8 +148,19 @@ export default function SecurityPage() {
             <Workflow className="h-4 w-4" />
             <span>ProjectStatus</span>
           </div>
+          <div className="flex items-center gap-4">
+            <Link href="/security/" className="hover:text-foreground transition-colors">
+              Security
+            </Link>
+            <Link href="/privacy/" className="hover:text-foreground transition-colors">
+              Privacy
+            </Link>
+            <Link href="/terms/" className="hover:text-foreground transition-colors">
+              Terms
+            </Link>
+          </div>
           <p>
-            &copy; {new Date().getFullYear()} SharpTech.ai. All rights
+            &copy; {new Date().getFullYear()} Sharp Tech Solutions. All rights
             reserved.
           </p>
         </div>

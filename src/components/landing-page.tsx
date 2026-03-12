@@ -59,6 +59,9 @@ export function LandingPage() {
           </div>
           <div className="flex items-center gap-2">
             <Button variant="ghost" size="sm" asChild>
+              <Link href="/pricing/">Pricing</Link>
+            </Button>
+            <Button variant="ghost" size="sm" asChild>
               <Link href="/security/">Security</Link>
             </Button>
             <Button variant="ghost" size="sm" onClick={() => setShowAuth("signin")}>
@@ -200,10 +203,21 @@ export function LandingPage() {
             </div>
             <span className="font-medium text-foreground/70">ProjectStatus</span>
           </div>
-          <Link href="/security/" className="hover:text-foreground transition-colors">
-            Security
-          </Link>
-          <p>&copy; {new Date().getFullYear()} SharpTech.ai. All rights reserved.</p>
+          <div className="flex items-center gap-4">
+            <Link href="/pricing/" className="hover:text-foreground transition-colors">
+              Pricing
+            </Link>
+            <Link href="/security/" className="hover:text-foreground transition-colors">
+              Security
+            </Link>
+            <Link href="/privacy/" className="hover:text-foreground transition-colors">
+              Privacy
+            </Link>
+            <Link href="/terms/" className="hover:text-foreground transition-colors">
+              Terms
+            </Link>
+          </div>
+          <p>&copy; {new Date().getFullYear()} Sharp Tech Solutions. All rights reserved.</p>
         </div>
       </footer>
     </div>
