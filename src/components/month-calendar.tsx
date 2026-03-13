@@ -13,6 +13,7 @@ interface MonthCalendarProps {
   onDayClick: (date: Date) => void;
   onPrevMonth: () => void;
   onNextMonth: () => void;
+  onToday?: () => void;
   onSlotContextMenu?: (slot: AvailabilitySlot, event: React.MouseEvent) => void;
 }
 
@@ -23,7 +24,7 @@ const MONTH_NAMES = [
 ];
 
 export function MonthCalendar({
-  year, month, slots, appointments, onDayClick, onPrevMonth, onNextMonth, onSlotContextMenu,
+  year, month, slots, appointments, onDayClick, onPrevMonth, onNextMonth, onToday, onSlotContextMenu,
 }: MonthCalendarProps) {
   const { weeks, slotsByDay, appointmentsByDay } = useMemo(() => {
     const firstDay = new Date(year, month, 1);
@@ -77,39 +78,67 @@ export function MonthCalendar({
   const todayDate = today.getDate();
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-4">
-        <Button variant="ghost" size="icon" onClick={onPrevMonth}>
-          <ChevronLeft className="h-5 w-5" />
-        </Button>
-        <h2 className="text-lg font-semibold">
-          {MONTH_NAMES[month]} {year}
-        </h2>
-        <Button variant="ghost" size="icon" onClick={onNextMonth}>
-          <ChevronRight className="h-5 w-5" />
-        </Button>
+    <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
+      {/* Calendar header */}
+      <div className="flex items-center justify-between px-4 sm:px-5 py-4 border-b bg-muted/30">
+        <div className="flex items-center gap-2">
+          <h2 className="text-lg font-semibold tracking-tight">
+            {MONTH_NAMES[month]} {year}
+          </h2>
+          {onToday && !isCurrentMonth && (
+            <Button variant="ghost" size="sm" className="text-xs h-7 px-2.5 text-muted-foreground" onClick={onToday}>
+              Today
+            </Button>
+          )}
+        </div>
+        <div className="flex items-center gap-1">
+          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onPrevMonth}>
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onNextMonth}>
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+        </div>
       </div>
 
-      <div className="grid grid-cols-7 gap-px bg-border rounded-lg overflow-hidden">
-        {DAY_NAMES.map((d) => (
-          <div key={d} className="bg-muted px-2 py-2 text-center text-xs font-medium text-muted-foreground">
+      {/* Day name headers */}
+      <div className="grid grid-cols-7 border-b">
+        {DAY_NAMES.map((d, i) => (
+          <div
+            key={d}
+            className={cn(
+              "px-2 py-2.5 text-center text-xs font-medium text-muted-foreground",
+              (i === 0 || i === 6) && "text-muted-foreground/60",
+            )}
+          >
             {d}
           </div>
         ))}
+      </div>
 
+      {/* Day grid */}
+      <div className="grid grid-cols-7">
         {weeks.flat().map((day, i) => {
           const daySlots = day ? slotsByDay[day] || [] : [];
           const dayAppts = day ? appointmentsByDay[day] || [] : [];
           const availableCount = daySlots.filter((s) => !s.is_booked).length;
           const bookedCount = dayAppts.filter((a) => a.status === "confirmed").length;
           const isToday = isCurrentMonth && day === todayDate;
+          const isWeekend = i % 7 === 0 || i % 7 === 6;
+          const isLastRow = i >= weeks.flat().length - 7;
+          const isLastCol = i % 7 === 6;
 
           return (
             <div
               key={i}
               className={cn(
-                "bg-background min-h-[80px] p-1.5 cursor-pointer hover:bg-accent/30 transition-colors",
-                !day && "bg-muted/30 cursor-default",
+                "min-h-[90px] sm:min-h-[100px] p-2 cursor-pointer transition-colors relative",
+                !isLastRow && "border-b",
+                !isLastCol && "border-r",
+                day ? "hover:bg-accent/40" : "cursor-default",
+                !day && "bg-muted/20",
+                isWeekend && day && "bg-muted/10",
+                isToday && "bg-primary/5",
               )}
               onClick={() => {
                 if (day) onDayClick(new Date(year, month, day));
@@ -125,23 +154,28 @@ export function MonthCalendar({
             >
               {day && (
                 <>
-                  <div className={cn(
-                    "text-sm font-medium w-7 h-7 flex items-center justify-center rounded-full",
-                    isToday && "bg-primary text-primary-foreground",
-                  )}>
-                    {day}
+                  <div className="flex items-start justify-between">
+                    <div
+                      className={cn(
+                        "text-sm font-medium w-7 h-7 flex items-center justify-center rounded-full transition-colors",
+                        isToday && "bg-primary text-primary-foreground font-semibold",
+                        !isToday && isWeekend && "text-muted-foreground/70",
+                      )}
+                    >
+                      {day}
+                    </div>
                   </div>
-                  <div className="flex flex-wrap gap-1 mt-1">
+                  <div className="flex flex-col gap-1 mt-1.5">
                     {availableCount > 0 && (
-                      <span className="inline-flex items-center gap-0.5 text-[10px] text-blue-600 dark:text-blue-400">
+                      <span className="inline-flex items-center gap-1 text-[11px] font-medium text-blue-600 dark:text-blue-400 bg-blue-500/10 rounded-full px-1.5 py-0.5 w-fit">
                         <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
-                        {availableCount}
+                        {availableCount} open
                       </span>
                     )}
                     {bookedCount > 0 && (
-                      <span className="inline-flex items-center gap-0.5 text-[10px] text-green-600 dark:text-green-400">
+                      <span className="inline-flex items-center gap-1 text-[11px] font-medium text-green-600 dark:text-green-400 bg-green-500/10 rounded-full px-1.5 py-0.5 w-fit">
                         <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
-                        {bookedCount}
+                        {bookedCount} booked
                       </span>
                     )}
                   </div>
@@ -150,6 +184,21 @@ export function MonthCalendar({
             </div>
           );
         })}
+      </div>
+
+      {/* Legend */}
+      <div className="flex items-center gap-5 px-4 sm:px-5 py-3 border-t bg-muted/20 text-xs text-muted-foreground">
+        <div className="flex items-center gap-1.5">
+          <span className="w-2 h-2 rounded-full bg-blue-500" />
+          Available slots
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span className="w-2 h-2 rounded-full bg-green-500" />
+          Booked appointments
+        </div>
+        <div className="hidden sm:flex items-center gap-1.5 ml-auto">
+          Click a day to manage slots
+        </div>
       </div>
     </div>
   );

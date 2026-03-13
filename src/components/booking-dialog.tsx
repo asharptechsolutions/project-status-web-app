@@ -167,7 +167,7 @@ export function BookingDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-md sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>
             {booked ? "Appointment Confirmed" : "Book a Call"}
@@ -230,8 +230,7 @@ export function BookingDialog({
             {step === "date" && (
               <div className="flex flex-col items-center gap-2">
                 <style>{`
-                  .rdp-day.has-slots { position: relative; }
-                  .rdp-day.has-slots::after {
+                  .has-slots::after {
                     content: '';
                     position: absolute;
                     bottom: 2px;
@@ -252,6 +251,11 @@ export function BookingDialog({
                   disabled={(date) => date < new Date(new Date().setHours(0, 0, 0, 0))}
                   modifiers={{ hasSlots: availableDates }}
                   modifiersClassNames={{ hasSlots: "has-slots" }}
+                  classNames={{
+                    day: "h-11 w-11 text-center text-sm p-0 relative",
+                    day_button: "inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-normal ring-offset-background transition-colors hover:bg-accent hover:text-accent-foreground h-11 w-11 p-0 aria-selected:opacity-100",
+                    weekday: "text-muted-foreground rounded-md w-11 font-normal text-[0.8rem]",
+                  }}
                 />
                 <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                   <span className="w-2 h-2 rounded-full bg-blue-500 inline-block" />

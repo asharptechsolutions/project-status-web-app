@@ -832,6 +832,32 @@ export async function deleteRecurringSlots(
   if (error) throw new Error(error.message);
 }
 
+export async function clearFutureUnbookedSlots(orgId: string): Promise<void> {
+  const now = new Date().toISOString();
+  const { error } = await supabase
+    .from("availability_slots")
+    .delete()
+    .eq("team_id", orgId)
+    .eq("is_booked", false)
+    .gte("start_time", now);
+  if (error) throw new Error(error.message);
+}
+
+export async function clearDayUnbookedSlots(
+  orgId: string,
+  dayStart: string,
+  dayEnd: string
+): Promise<void> {
+  const { error } = await supabase
+    .from("availability_slots")
+    .delete()
+    .eq("team_id", orgId)
+    .eq("is_booked", false)
+    .gte("start_time", dayStart)
+    .lte("start_time", dayEnd);
+  if (error) throw new Error(error.message);
+}
+
 // ============ APPOINTMENTS ============
 
 export async function getAppointments(

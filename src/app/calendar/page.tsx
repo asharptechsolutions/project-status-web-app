@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState, useRef, useCallback } from "react";
+import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { Navbar } from "@/components/navbar";
 import { AuthGate } from "@/components/auth-gate";
 import { useAuth } from "@/lib/auth-context";
@@ -11,10 +11,10 @@ import {
 import { createClient } from "@/lib/supabase";
 import type { AvailabilitySlot, Appointment, OfficeHoursSettings } from "@/lib/types";
 import { MonthCalendar } from "@/components/month-calendar";
-import { DayDetailDialog } from "@/components/day-detail-dialog";
-import { OfficeHoursDialog } from "@/components/office-hours-dialog";
-import { Button } from "@/components/ui/button";
-import { Settings, Loader2 } from "lucide-react";
+import { WeeklyScheduleEditor } from "@/components/weekly-schedule";
+import { DayDetailSheet } from "@/components/day-detail-sheet";
+import { Card, CardContent } from "@/components/ui/card";
+import { Loader2, CalendarDays, CalendarCheck, CalendarClock } from "lucide-react";
 import { toast } from "sonner";
 
 function CalendarPage() {
@@ -28,13 +28,11 @@ function CalendarPage() {
   const [loading, setLoading] = useState(true);
 
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
-  const [dayDialogOpen, setDayDialogOpen] = useState(false);
-  const [officeHoursOpen, setOfficeHoursOpen] = useState(false);
+  const [sheetOpen, setSheetOpen] = useState(false);
 
   const loadData = useCallback(async () => {
     if (!orgId) return;
     try {
-      // Fetch slots for the visible month (with a bit of padding)
       const start = new Date(year, month, 1);
       const end = new Date(year, month + 1, 0, 23, 59, 59);
       const [slotsData, settingsData] = await Promise.all([
@@ -44,11 +42,9 @@ function CalendarPage() {
       setSlots(slotsData);
       setSettings(settingsData);
 
-      // Fetch appointments for these slots
       const slotIds = slotsData.map((s) => s.id);
       if (slotIds.length > 0) {
         const appts = await getAppointmentsBySlots(slotIds);
-        // Attach slot data to appointments for month calendar
         const apptWithSlots = appts.map((a) => ({
           ...a,
           slot: slotsData.find((s) => s.id === a.slot_id),
@@ -67,7 +63,6 @@ function CalendarPage() {
   const loadDataRef = useRef(loadData);
   loadDataRef.current = loadData;
 
-  // Initial load + realtime
   useEffect(() => {
     setLoading(true);
     loadDataRef.current();
@@ -115,9 +110,15 @@ function CalendarPage() {
     }
   };
 
+  const handleToday = () => {
+    const t = new Date();
+    setYear(t.getFullYear());
+    setMonth(t.getMonth());
+  };
+
   const handleDayClick = (date: Date) => {
     setSelectedDate(date);
-    setDayDialogOpen(true);
+    setSheetOpen(true);
   };
 
   // Filter slots and appointments for the selected day
@@ -129,6 +130,18 @@ function CalendarPage() {
         (a) => a.slot && new Date(a.slot.start_time).toDateString() === selectedDate!.toDateString()
       )
     : [];
+
+  // Summary stats
+  const stats = useMemo(() => {
+    const today = new Date();
+    const todayStr = today.toDateString();
+    const todayAppts = appointments.filter(
+      (a) => a.status === "confirmed" && a.slot && new Date(a.slot.start_time).toDateString() === todayStr
+    ).length;
+    const availableSlots = slots.filter((s) => !s.is_booked).length;
+    const bookedSlots = appointments.filter((a) => a.status === "confirmed").length;
+    return { todayAppts, availableSlots, bookedSlots };
+  }, [slots, appointments]);
 
   if (!isAdmin) {
     return (
@@ -144,36 +157,87 @@ function CalendarPage() {
   return (
     <div className="min-h-[100dvh] flex flex-col">
       <Navbar />
-      <main className="flex-1 p-4 max-w-7xl mx-auto w-full">
-        <div className="flex items-center justify-between mb-6">
-          <h1 className="text-2xl font-bold">Calendar</h1>
-          {isAdmin && (
-            <Button variant="outline" size="sm" onClick={() => setOfficeHoursOpen(true)}>
-              <Settings className="h-4 w-4 mr-2" /> Office Hours
-            </Button>
+      <main className="flex-1 p-4 sm:p-6 max-w-7xl mx-auto w-full">
+        {/* Page header */}
+        <div className="mb-6">
+          <h1 className="text-2xl font-bold tracking-tight">Calendar</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Set your weekly availability and manage appointments.
+          </p>
+        </div>
+
+        {/* Stats cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
+          <Card className="border-transparent bg-card shadow-sm">
+            <CardContent className="flex items-center gap-3 py-4">
+              <div className="h-9 w-9 rounded-lg bg-blue-500/10 flex items-center justify-center">
+                <CalendarClock className="h-4.5 w-4.5 text-blue-500" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold leading-none">{loading ? "–" : stats.todayAppts}</p>
+                <p className="text-xs text-muted-foreground mt-1">Today&apos;s appointments</p>
+              </div>
+            </CardContent>
+          </Card>
+          <Card className="border-transparent bg-card shadow-sm">
+            <CardContent className="flex items-center gap-3 py-4">
+              <div className="h-9 w-9 rounded-lg bg-primary/10 flex items-center justify-center">
+                <CalendarDays className="h-4.5 w-4.5 text-primary" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold leading-none">{loading ? "–" : stats.availableSlots}</p>
+                <p className="text-xs text-muted-foreground mt-1">Available slots</p>
+              </div>
+            </CardContent>
+          </Card>
+          <Card className="border-transparent bg-card shadow-sm">
+            <CardContent className="flex items-center gap-3 py-4">
+              <div className="h-9 w-9 rounded-lg bg-green-500/10 flex items-center justify-center">
+                <CalendarCheck className="h-4.5 w-4.5 text-green-500" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold leading-none">{loading ? "–" : stats.bookedSlots}</p>
+                <p className="text-xs text-muted-foreground mt-1">Booked this month</p>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Main content: weekly schedule + month calendar */}
+        <div className="grid grid-cols-1 lg:grid-cols-[360px_1fr] gap-6">
+          {/* Weekly schedule */}
+          {orgId && userId && (
+            <WeeklyScheduleEditor
+              orgId={orgId}
+              userId={userId}
+              onScheduleApplied={() => loadDataRef.current()}
+            />
+          )}
+
+          {/* Month calendar */}
+          {loading ? (
+            <div className="flex items-center justify-center py-20">
+              <Loader2 className="h-6 w-6 animate-spin" />
+            </div>
+          ) : (
+            <MonthCalendar
+              year={year}
+              month={month}
+              slots={slots}
+              appointments={appointments}
+              onDayClick={handleDayClick}
+              onPrevMonth={handlePrevMonth}
+              onNextMonth={handleNextMonth}
+              onToday={handleToday}
+            />
           )}
         </div>
 
-        {loading ? (
-          <div className="flex items-center justify-center py-20">
-            <Loader2 className="h-6 w-6 animate-spin" />
-          </div>
-        ) : (
-          <MonthCalendar
-            year={year}
-            month={month}
-            slots={slots}
-            appointments={appointments}
-            onDayClick={handleDayClick}
-            onPrevMonth={handlePrevMonth}
-            onNextMonth={handleNextMonth}
-          />
-        )}
-
+        {/* Day detail sheet */}
         {orgId && userId && (
-          <DayDetailDialog
-            open={dayDialogOpen}
-            onOpenChange={setDayDialogOpen}
+          <DayDetailSheet
+            open={sheetOpen}
+            onOpenChange={setSheetOpen}
             date={selectedDate}
             slots={daySlots}
             appointments={dayAppointments}
@@ -181,14 +245,6 @@ function CalendarPage() {
             orgId={orgId}
             userId={userId}
             onSlotsChanged={() => loadDataRef.current()}
-          />
-        )}
-
-        {orgId && (
-          <OfficeHoursDialog
-            open={officeHoursOpen}
-            onOpenChange={setOfficeHoursOpen}
-            orgId={orgId}
           />
         )}
       </main>

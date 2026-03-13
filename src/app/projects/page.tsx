@@ -793,6 +793,14 @@ function ProjectsList() {
 
   const updateStageStatus = async (stageId: string, status: ProjectStage["status"]) => {
     if (!selectedProject || !userId) return;
+    // Workers can only update unassigned stages or stages assigned to them
+    if (isWorker && !isAdmin) {
+      const stage = stages.find((s) => s.id === stageId);
+      if (stage?.assigned_to && stage.assigned_to !== userId) {
+        toast.error("You can only update stages assigned to you");
+        return;
+      }
+    }
     const now = new Date().toISOString();
     const updates: Partial<ProjectStage> = { status };
     if (status === "in_progress") { updates.started_at = now; updates.started_by = userId; }
@@ -1112,6 +1120,7 @@ function ProjectsList() {
               readOnly={isClient}
               isAdmin={isAdmin}
               isWorker={isWorker}
+              userId={userId || undefined}
               onUpdateStatus={(stageId, status) => updateStageStatus(stageId, status)}
               onRemoveStage={(stageId) => removeStage(stageId)}
               onAssignWorker={(stageId) => setAssignStageId(stageId)}

@@ -219,6 +219,14 @@ export interface ClientNotificationPreferences {
 
 // ============ APPOINTMENT SCHEDULING ============
 
+export interface WeeklyScheduleDay {
+  start: string; // "HH:MM" e.g. "09:00"
+  end: string;   // "HH:MM" e.g. "17:00"
+}
+
+// Index 0 = Sunday, 6 = Saturday. null = day is disabled.
+export type WeeklySchedule = (WeeklyScheduleDay | null)[];
+
 export interface OfficeHoursSettings {
   id: string;
   team_id: string;
@@ -226,6 +234,7 @@ export interface OfficeHoursSettings {
   day_end: string;
   timezone: string;
   slot_duration_minutes: number;
+  weekly_schedule?: WeeklySchedule | null;
   created_at: string;
   updated_at: string;
 }
