@@ -74,7 +74,7 @@ export async function POST(request: NextRequest) {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          from: "Workflowz <noreply@projectstatus.app>",
+          from: "ProjectStatus <noreply@projectstatus.app>",
           to: emails,
           subject: `Stage completed: ${stageName} — ${projectName}`,
           html: `<h2>Stage Completed</h2>
@@ -112,7 +112,7 @@ export async function POST(request: NextRequest) {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          from: "Workflowz <noreply@projectstatus.app>",
+          from: "ProjectStatus <noreply@projectstatus.app>",
           to: profile.email,
           subject: `You've been assigned to: ${stageName} — ${projectName}`,
           html: `<h2>New Stage Assignment</h2>

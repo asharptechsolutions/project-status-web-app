@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { createAvailabilitySlots, deleteAvailabilitySlot, deleteRecurringSlots, cancelAppointment } from "@/lib/data";
 import type { AvailabilitySlot, Appointment, OfficeHoursSettings } from "@/lib/types";
 import { toast } from "sonner";
-import { Trash2, Repeat, X } from "lucide-react";
+import { Trash2, Repeat, X, User, Clock } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface DayDetailDialogProps {
@@ -20,7 +20,7 @@ interface DayDetailDialogProps {
   onSlotsChanged: () => void;
 }
 
-const ROW_HEIGHT = 40;
+const ROW_HEIGHT = 44;
 
 function formatHour(h: number, m: number) {
   const period = h >= 12 ? "PM" : "AM";
@@ -219,6 +219,10 @@ export function DayDetailDialog({
 
   const dateStr = date.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
 
+  // Summary counts for the day
+  const availableCount = slots.filter((s) => !s.is_booked).length;
+  const bookedCount = appointments.filter((a) => a.status === "confirmed").length;
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md max-h-[85vh] flex flex-col">
@@ -229,9 +233,27 @@ export function DayDetailDialog({
           </DialogDescription>
         </DialogHeader>
 
+        {/* Day summary */}
+        {(availableCount > 0 || bookedCount > 0) && (
+          <div className="flex items-center gap-3 text-xs">
+            {availableCount > 0 && (
+              <span className="inline-flex items-center gap-1.5 text-blue-600 dark:text-blue-400 bg-blue-500/10 rounded-full px-2.5 py-1 font-medium">
+                <Clock className="h-3 w-3" />
+                {availableCount} open
+              </span>
+            )}
+            {bookedCount > 0 && (
+              <span className="inline-flex items-center gap-1.5 text-green-600 dark:text-green-400 bg-green-500/10 rounded-full px-2.5 py-1 font-medium">
+                <User className="h-3 w-3" />
+                {bookedCount} booked
+              </span>
+            )}
+          </div>
+        )}
+
         <div
           ref={gridRef}
-          className="flex-1 overflow-y-auto border rounded-md select-none"
+          className="flex-1 overflow-y-auto border rounded-lg select-none"
           style={{ minHeight: 200 }}
         >
           {timeRows.map((row, idx) => {
@@ -239,19 +261,21 @@ export function DayDetailDialog({
             const inDrag = isDragging && idx >= dragMin && idx <= dragMax && !entry;
             const isBooked = entry?.slot.is_booked;
             const appt = entry?.appointment;
+            const isFirst = idx === 0;
 
             return (
               <div
                 key={idx}
                 className={cn(
-                  "flex items-center border-b px-3 gap-3 transition-colors",
+                  "flex items-center px-3 gap-3 transition-colors",
+                  !isFirst && "border-t",
                   entry && isBooked
-                    ? "bg-green-100 dark:bg-green-900/30"
+                    ? "bg-green-500/10"
                     : entry
-                    ? "bg-blue-100 dark:bg-blue-900/30"
+                    ? "bg-blue-500/10"
                     : inDrag
-                    ? "bg-blue-200 dark:bg-blue-800/50"
-                    : "hover:bg-accent/30",
+                    ? "bg-blue-500/15 dark:bg-blue-500/20"
+                    : "hover:bg-accent/40",
                   creating && "pointer-events-none opacity-60",
                 )}
                 style={{ height: ROW_HEIGHT }}
@@ -261,19 +285,19 @@ export function DayDetailDialog({
                   if (entry) handleContextMenu(e, entry.slot);
                 }}
               >
-                <span className="text-xs text-muted-foreground w-20 shrink-0">{row.label}</span>
+                <span className="text-xs text-muted-foreground w-20 shrink-0 font-medium">{row.label}</span>
                 {entry && (
                   <div className="flex-1 flex items-center justify-between min-w-0">
                     {appt ? (
                       <div className="flex items-center gap-2 min-w-0">
-                        <span className="text-xs font-medium truncate">{appt.client_name}</span>
+                        <span className="text-xs font-medium truncate text-green-700 dark:text-green-300">{appt.client_name}</span>
                         {appt.project_name && (
                           <span className="text-[10px] text-muted-foreground truncate">({appt.project_name})</span>
                         )}
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="h-6 w-6 shrink-0"
+                          className="h-6 w-6 shrink-0 hover:bg-destructive/10 hover:text-destructive"
                           onClick={(e) => { e.stopPropagation(); handleCancelAppointment(appt); }}
                           title="Cancel appointment"
                         >
@@ -281,13 +305,13 @@ export function DayDetailDialog({
                         </Button>
                       </div>
                     ) : (
-                      <span className="text-xs text-blue-600 dark:text-blue-400">Available</span>
+                      <span className="text-xs font-medium text-blue-600 dark:text-blue-400">Available</span>
                     )}
                     {!isBooked && (
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="h-6 w-6 shrink-0"
+                        className="h-6 w-6 shrink-0 hover:bg-destructive/10 hover:text-destructive"
                         onClick={(e) => { e.stopPropagation(); handleDeleteSlot(entry.slot); }}
                         title="Delete slot"
                       >
@@ -304,28 +328,28 @@ export function DayDetailDialog({
         {/* Context menu */}
         {contextMenu && (
           <div
-            className="fixed z-[100] bg-popover border rounded-md shadow-lg py-1 min-w-[180px]"
+            className="fixed z-[100] bg-popover border rounded-lg shadow-lg py-1.5 min-w-[200px]"
             style={{ left: contextMenu.x, top: contextMenu.y }}
           >
             {!contextMenu.slot.is_booked && !contextMenu.slot.recurrence_group_id && (
               <button
-                className="w-full px-3 py-1.5 text-sm text-left hover:bg-accent flex items-center gap-2"
+                className="w-full px-3 py-2 text-sm text-left hover:bg-accent rounded-sm flex items-center gap-2.5 transition-colors"
                 onClick={() => handleMakeRecurring(contextMenu.slot)}
               >
-                <Repeat className="h-3.5 w-3.5" /> Make Recurring (Weekly)
+                <Repeat className="h-3.5 w-3.5 text-muted-foreground" /> Make Recurring (Weekly)
               </button>
             )}
             {!contextMenu.slot.is_booked && (
               <button
-                className="w-full px-3 py-1.5 text-sm text-left hover:bg-accent flex items-center gap-2"
+                className="w-full px-3 py-2 text-sm text-left hover:bg-accent rounded-sm flex items-center gap-2.5 transition-colors"
                 onClick={() => handleDeleteSlot(contextMenu.slot)}
               >
-                <Trash2 className="h-3.5 w-3.5" /> Delete Slot
+                <Trash2 className="h-3.5 w-3.5 text-muted-foreground" /> Delete Slot
               </button>
             )}
             {contextMenu.slot.recurrence_group_id && !contextMenu.slot.is_booked && (
               <button
-                className="w-full px-3 py-1.5 text-sm text-left hover:bg-accent flex items-center gap-2 text-destructive"
+                className="w-full px-3 py-2 text-sm text-left hover:bg-destructive/10 rounded-sm flex items-center gap-2.5 text-destructive transition-colors"
                 onClick={() => handleDeleteRecurring(contextMenu.slot)}
               >
                 <Trash2 className="h-3.5 w-3.5" /> Delete All Recurring

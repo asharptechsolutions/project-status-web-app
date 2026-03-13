@@ -43,6 +43,7 @@ interface WorkflowCanvasProps {
   readOnly?: boolean;
   isAdmin?: boolean;
   isWorker?: boolean;
+  userId?: string;
   onUpdateStatus?: (stageId: string, status: ProjectStage["status"]) => void;
   onRemoveStage?: (stageId: string) => void;
   onAssignWorker?: (stageId: string) => void;
@@ -67,6 +68,7 @@ type StageNodeData = {
   readOnly: boolean;
   isAdmin: boolean;
   isWorker: boolean;
+  canAct: boolean; // true if admin, or worker assigned to this stage
   assignedWorkerName: string | null;
   estimatedCompletion: string | null;
   onStart: () => void;
@@ -308,12 +310,12 @@ function NodeContent({ data, showTarget }: { data: StageNodeData; showTarget: bo
       )}
       {!data.readOnly && (
         <div className="flex items-center gap-1 flex-wrap">
-          {(data.isAdmin || data.isWorker) && data.status === "pending" && (
+          {data.canAct && data.status === "pending" && (
             <Button size="sm" variant="outline" className="h-6 text-xs px-2" onClick={data.onStart}>
               <Play className="h-3 w-3 mr-1" /> Start
             </Button>
           )}
-          {(data.isAdmin || data.isWorker) && data.status === "in_progress" && (
+          {data.canAct && data.status === "in_progress" && (
             <Button
               size="sm"
               className="h-6 text-xs px-2 bg-blue-600 hover:bg-blue-700 text-white"
@@ -401,6 +403,7 @@ function WorkflowCanvasInner({
   readOnly = false,
   isAdmin = false,
   isWorker = false,
+  userId,
   onUpdateStatus,
   onRemoveStage,
   onAssignWorker,
@@ -443,12 +446,16 @@ function WorkflowCanvasInner({
   const savedPositionsRef = useRef(savedPositions);
   savedPositionsRef.current = savedPositions;
 
-  const buildNodeData = useCallback((s: ProjectStage): StageNodeData => ({
+  const buildNodeData = useCallback((s: ProjectStage): StageNodeData => {
+    // Workers can act if: no one is assigned (open stage) OR they are the assigned worker
+    const canAct = isAdmin || (isWorker && (!s.assigned_to || s.assigned_to === userId));
+    return {
     label: s.name,
     status: s.status,
     readOnly,
     isAdmin,
     isWorker,
+    canAct,
     assignedWorkerName: s.assigned_to ? (workerNames?.[s.assigned_to] || "Unknown") : null,
     estimatedCompletion: s.estimated_completion,
     onStart: () => onUpdateStatus?.(s.id, "in_progress"),
@@ -460,7 +467,7 @@ function WorkflowCanvasInner({
     hideEstimatedCompletion: visibilitySettings?.show_estimated_completion === false,
     hideStatusText: visibilitySettings?.show_stage_status === false,
     totalMinutes: timeByStage?.[s.id] || 0,
-  }), [readOnly, isAdmin, isWorker, workerNames, onUpdateStatus, onRemoveStage, onAssignWorker, onEditStage, visibilitySettings, timeByStage]);
+  };}, [readOnly, isAdmin, isWorker, userId, workerNames, onUpdateStatus, onRemoveStage, onAssignWorker, onEditStage, visibilitySettings, timeByStage]);
 
   const rawNodes: Node[] = sorted.map((s, i) => ({
     id: s.id,

@@ -66,21 +66,29 @@ export async function POST(request: NextRequest) {
       userId = newUser.user.id;
     }
 
-    // Generate a magic link via admin API (no PKCE — avoids code verifier mismatch)
-    // Redirect through callback → set-password page so new users can create a password
-    const callbackUrl = `${origin}/auth/callback/?next=${encodeURIComponent("/auth/set-password/")}`;
+    // Generate a magic link via admin API
+    // We use generateLink to get a token_hash, then build our own /auth/confirm URL
+    // to bypass PKCE (server-generated links have no code_verifier on the client)
     const { data: linkData, error: linkError } = await adminClient.auth.admin.generateLink({
       type: "magiclink",
       email,
-      options: { redirectTo: callbackUrl },
     });
 
     if (linkError) {
       console.warn("[invite] Failed to generate magic link:", linkError.message);
     } else {
-      // Send the magic link email via Resend
       const actionLink = linkData?.properties?.action_link;
       if (actionLink) {
+        // Parse the Supabase action_link to extract token_hash and type
+        // action_link format: https://<project>.supabase.co/auth/v1/verify?token=<hash>&type=magiclink&redirect_to=...
+        const actionUrl = new URL(actionLink);
+        const tokenHash = actionUrl.searchParams.get("token");
+        const linkType = actionUrl.searchParams.get("type") || "magiclink";
+
+        // Build app-domain URL that goes through our /auth/confirm route handler
+        // which uses verifyOtp server-side (no PKCE needed)
+        const confirmUrl = `${origin}/auth/confirm?token_hash=${tokenHash}&type=${linkType}&next=${encodeURIComponent("/auth/set-password/")}`;
+
         try {
           const resendRes = await fetch("https://api.resend.com/emails", {
             method: "POST",
@@ -94,8 +102,8 @@ export async function POST(request: NextRequest) {
               subject: `You've been invited to ProjectStatus`,
               html: `<h2>You've been invited!</h2>
 <p>${name ? `Hi ${name}, you` : "You"} have been invited to collaborate on ProjectStatus.</p>
-<p><a href="${actionLink}" style="display:inline-block;padding:12px 24px;background:#2563eb;color:#fff;text-decoration:none;border-radius:6px;">Sign In to ProjectStatus</a></p>
-<p style="color:#666;font-size:14px;">Or copy this link: ${actionLink}</p>`,
+<p><a href="${confirmUrl}" style="display:inline-block;padding:12px 24px;background:#2563eb;color:#fff;text-decoration:none;border-radius:6px;">Sign In to ProjectStatus</a></p>
+<p style="color:#666;font-size:14px;">Or copy this link: ${confirmUrl}</p>`,
             }),
           });
           if (!resendRes.ok) {
