@@ -13,8 +13,9 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Pencil, Plus, Trash2, UserCircle, Loader2, Mail, CheckCircle2, Clock, RefreshCw, ArrowLeft, Search, X, ArrowUpDown, Building2 } from "lucide-react";
+import { Pencil, Plus, Trash2, UserCircle, Loader2, Mail, CheckCircle2, Clock, RefreshCw, ArrowLeft, Search, X, ArrowUpDown, Building2, Eye } from "lucide-react";
 import { toast } from "sonner";
+import { EmptyState } from "@/components/empty-state";
 
 function ClientsInner() {
   const { orgId, userId, isAdmin } = useAuth();
@@ -228,9 +229,19 @@ function ClientsInner() {
       )}
 
       {filteredClients.length === 0 ? (
-        <Card><CardContent className="pt-6 text-center text-muted-foreground">
-          {clientMembers.length === 0 ? "No clients yet. Add your first one!" : "No clients match your filters."}
-        </CardContent></Card>
+        clientMembers.length === 0 ? (
+          <EmptyState
+            icon={Eye}
+            title="No clients yet"
+            description="Clients get a read-only view of their project progress. Add clients and assign them to projects."
+            actionLabel="Add Client"
+            onAction={() => setShowInvite(true)}
+          />
+        ) : (
+          <Card><CardContent className="pt-6 text-center text-muted-foreground">
+            No clients match your filters.
+          </CardContent></Card>
+        )
       ) : (
         <div className="flex flex-col gap-3">
           {filteredClients.map((m) => (

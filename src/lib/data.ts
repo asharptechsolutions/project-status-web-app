@@ -20,6 +20,8 @@ import type {
   StageDependency,
   ClientNotificationPreferences,
   TimeEntry,
+  OrgBranding,
+  EmailTemplate,
 } from "./types";
 
 // ============ PROJECT CLIENTS (junction) ============
@@ -1164,4 +1166,129 @@ export async function deleteTimeEntry(id: string): Promise<void> {
     .delete()
     .eq("id", id);
   if (error) throw new Error(error.message);
+}
+
+// ============ ORG BRANDING ============
+
+export async function getOrgBranding(orgId: string): Promise<OrgBranding | null> {
+  const { data, error } = await supabase
+    .from("org_branding")
+    .select("*")
+    .eq("team_id", orgId)
+    .single();
+  if (error) return null;
+  return data as OrgBranding;
+}
+
+export async function upsertOrgBranding(
+  branding: Omit<OrgBranding, "id" | "created_at" | "updated_at">
+): Promise<void> {
+  const { error } = await supabase
+    .from("org_branding")
+    .upsert(
+      { ...branding, updated_at: new Date().toISOString() },
+      { onConflict: "team_id" }
+    );
+  if (error) throw new Error(error.message);
+}
+
+export async function uploadOrgLogo(orgId: string, file: File): Promise<string> {
+  const fileName = `${orgId}/${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+  const { error } = await supabase.storage
+    .from("org-logos")
+    .upload(fileName, file, { contentType: file.type, upsert: true });
+  if (error) throw new Error(error.message);
+
+  const { data } = supabase.storage.from("org-logos").getPublicUrl(fileName);
+  return data.publicUrl;
+}
+
+// ============ EMAIL TEMPLATES ============
+
+export async function getEmailTemplates(orgId: string): Promise<EmailTemplate[]> {
+  const { data, error } = await supabase
+    .from("email_templates")
+    .select("*")
+    .eq("team_id", orgId)
+    .order("template_type", { ascending: true });
+  if (error) throw new Error(error.message);
+  return (data || []) as EmailTemplate[];
+}
+
+export async function getEmailTemplate(
+  orgId: string,
+  templateType: string
+): Promise<EmailTemplate | null> {
+  const { data, error } = await supabase
+    .from("email_templates")
+    .select("*")
+    .eq("team_id", orgId)
+    .eq("template_type", templateType)
+    .single();
+  if (error) return null;
+  return data as EmailTemplate;
+}
+
+export async function upsertEmailTemplate(
+  template: Omit<EmailTemplate, "id" | "created_at" | "updated_at">
+): Promise<void> {
+  const { error } = await supabase
+    .from("email_templates")
+    .upsert(
+      { ...template, updated_at: new Date().toISOString() },
+      { onConflict: "team_id,template_type" }
+    );
+  if (error) throw new Error(error.message);
+}
+
+export async function deleteEmailTemplate(id: string): Promise<void> {
+  const { error } = await supabase
+    .from("email_templates")
+    .delete()
+    .eq("id", id);
+  if (error) throw new Error(error.message);
+}
+
+// ============ SAMPLE DATA ============
+
+export async function createSampleProject(orgId: string, userId: string): Promise<string> {
+  const now = new Date();
+  const daysAgo = (d: number) => new Date(now.getTime() - d * 24 * 60 * 60 * 1000).toISOString();
+
+  const projectId = await createProject({
+    team_id: orgId,
+    name: "Kitchen Renovation — 123 Main St",
+    description: "Full kitchen remodel including cabinets, countertops, plumbing, and electrical.",
+    status: "active",
+    client_name: "Sample Client",
+    client_email: "",
+    client_phone: "",
+    created_by: userId,
+  });
+
+  const stages = [
+    { name: "Site Assessment", status: "completed" as const, started_at: daysAgo(14), completed_at: daysAgo(12) },
+    { name: "Design & Planning", status: "completed" as const, started_at: daysAgo(12), completed_at: daysAgo(7) },
+    { name: "Demolition", status: "in_progress" as const, started_at: daysAgo(3), completed_at: null },
+    { name: "Plumbing & Electrical", status: "pending" as const, started_at: null, completed_at: null },
+    { name: "Installation & Finishing", status: "pending" as const, started_at: null, completed_at: null },
+    { name: "Final Inspection", status: "pending" as const, started_at: null, completed_at: null },
+  ];
+
+  for (let i = 0; i < stages.length; i++) {
+    await createProjectStage({
+      project_id: projectId,
+      name: stages[i].name,
+      status: stages[i].status,
+      position: i,
+      started_at: stages[i].started_at,
+      completed_at: stages[i].completed_at,
+      started_by: stages[i].started_at ? userId : null,
+      assigned_to: null,
+      estimated_completion: null,
+      planned_start: null,
+    });
+  }
+
+  return projectId;
 }

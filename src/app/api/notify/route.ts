@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase-admin";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
+import { renderEmail, getDefaultTemplate } from "@/lib/email-renderer";
+import type { BrandingConfig, EmailLayout } from "@/lib/email-renderer";
 
 export async function POST(request: NextRequest) {
   try {
-    const { type, projectId, projectName, stageName, workerId } = await request.json();
+    const { type, projectId, projectName, stageName, workerId, teamId } = await request.json();
 
     if (!type || !projectId) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
@@ -23,6 +25,41 @@ export async function POST(request: NextRequest) {
     }
 
     const adminClient = createAdminClient();
+
+    // Load org branding and custom email template
+    const resolvedTeamId = teamId || null;
+    let branding: BrandingConfig = { primary_color: "#2563eb", org_name: "ProjectStatus" };
+    let customSubject: string | null = null;
+    let customBody: string | null = null;
+    let layout: EmailLayout = "classic";
+
+    if (resolvedTeamId) {
+      const [brandingRow, templateRow, teamRow] = await Promise.all([
+        adminClient.from("org_branding").select("*").eq("team_id", resolvedTeamId).single(),
+        adminClient.from("email_templates").select("*").eq("team_id", resolvedTeamId).eq("template_type", type).eq("is_active", true).single(),
+        adminClient.from("teams").select("name").eq("id", resolvedTeamId).single(),
+      ]);
+
+      const orgName = teamRow.data?.name || "ProjectStatus";
+      const emailColor = brandingRow.data?.email_accent_color || brandingRow.data?.primary_color || "#2563eb";
+      branding = {
+        logo_url: brandingRow.data?.logo_url || null,
+        primary_color: emailColor,
+        secondary_color: brandingRow.data?.secondary_color || null,
+        org_name: orgName,
+      };
+
+      if (templateRow.data) {
+        customSubject = templateRow.data.subject;
+        customBody = templateRow.data.body;
+        layout = (templateRow.data.layout || "classic") as EmailLayout;
+      }
+    }
+
+    // Use custom template or fall back to defaults
+    const defaults = getDefaultTemplate(type);
+    const emailSubject = customSubject || defaults?.subject || "Notification";
+    const emailBody = customBody || defaults?.body || "";
 
     if (type === "stage_complete") {
       // Get project clients' emails
@@ -59,36 +96,39 @@ export async function POST(request: NextRequest) {
         .select("email, display_name")
         .in("id", clientIds);
 
-      const emails = (profiles || [])
-        .map((p: any) => p.email)
-        .filter(Boolean);
+      const recipients = (profiles || []).filter((p: any) => p.email);
 
-      if (emails.length === 0) {
+      if (recipients.length === 0) {
         return NextResponse.json({ success: true, skipped: true, reason: "No client emails found" });
       }
 
-      const res = await fetch("https://api.resend.com/emails", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          from: "ProjectStatus <noreply@projectstatus.app>",
-          to: emails,
-          subject: `Stage completed: ${stageName} — ${projectName}`,
-          html: `<h2>Stage Completed</h2>
-<p>The stage <strong>${stageName}</strong> in project <strong>${projectName}</strong> has been marked as completed.</p>
-<p>Log in to your dashboard to see the latest progress.</p>`,
-        }),
-      });
+      // Send to each client with personalized name
+      for (const recipient of recipients) {
+        const variables: Record<string, string> = {
+          recipient_name: (recipient as any).display_name || "",
+          org_name: branding.org_name,
+          project_name: projectName || "",
+          stage_name: stageName || "",
+        };
 
-      if (!res.ok) {
-        const err = await res.json();
-        console.warn("[notify] Resend error:", err);
+        const { subject, html } = renderEmail(emailSubject, emailBody, variables, branding, layout);
+
+        await fetch("https://api.resend.com/emails", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            from: `${branding.org_name} <noreply@projectstatus.app>`,
+            to: (recipient as any).email,
+            subject,
+            html,
+          }),
+        });
       }
 
-      return NextResponse.json({ success: true, emailed: emails.length });
+      return NextResponse.json({ success: true, emailed: recipients.length });
 
     } else if (type === "worker_assigned") {
       if (!workerId) {
@@ -105,6 +145,15 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ success: true, skipped: true, reason: "No worker email found" });
       }
 
+      const variables: Record<string, string> = {
+        recipient_name: profile.display_name || "",
+        org_name: branding.org_name,
+        project_name: projectName || "",
+        stage_name: stageName || "",
+      };
+
+      const { subject, html } = renderEmail(emailSubject, emailBody, variables, branding, layout);
+
       const res = await fetch("https://api.resend.com/emails", {
         method: "POST",
         headers: {
@@ -112,13 +161,10 @@ export async function POST(request: NextRequest) {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          from: "ProjectStatus <noreply@projectstatus.app>",
+          from: `${branding.org_name} <noreply@projectstatus.app>`,
           to: profile.email,
-          subject: `You've been assigned to: ${stageName} — ${projectName}`,
-          html: `<h2>New Stage Assignment</h2>
-<p>Hi${profile.display_name ? ` ${profile.display_name}` : ""},</p>
-<p>You've been assigned to the stage <strong>${stageName}</strong> in project <strong>${projectName}</strong>.</p>
-<p>Log in to your dashboard to get started.</p>`,
+          subject,
+          html,
         }),
       });
 

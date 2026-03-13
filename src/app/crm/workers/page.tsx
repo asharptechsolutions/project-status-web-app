@@ -14,8 +14,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
-import { Pencil, Plus, Trash2, UserCircle, Loader2, Mail, CheckCircle2, Clock, RefreshCw, ArrowLeft, Search, X, ArrowUpDown, Shield, Wrench } from "lucide-react";
+import { Pencil, Plus, Trash2, UserCircle, Loader2, Mail, CheckCircle2, Clock, RefreshCw, ArrowLeft, Search, X, ArrowUpDown, Shield, Wrench, Users } from "lucide-react";
 import { toast } from "sonner";
+import { EmptyState } from "@/components/empty-state";
 
 function WorkersInner() {
   const { orgId, userId, isAdmin } = useAuth();
@@ -208,9 +209,19 @@ function WorkersInner() {
       )}
 
       {filteredWorkers.length === 0 ? (
-        <Card><CardContent className="pt-6 text-center text-muted-foreground">
-          {workerMembers.length === 0 ? "No workers yet. Add your first one!" : "No workers match your search."}
-        </CardContent></Card>
+        workerMembers.length === 0 ? (
+          <EmptyState
+            icon={Users}
+            title="No workers yet"
+            description="Workers are team members who progress project stages. Invite them by email to get started."
+            actionLabel="Invite Worker"
+            onAction={() => { setShowInvite(true); setInviteName(""); setInviteEmail(""); setInvitePhone(""); }}
+          />
+        ) : (
+          <Card><CardContent className="pt-6 text-center text-muted-foreground">
+            No workers match your search.
+          </CardContent></Card>
+        )
       ) : (
         <div className="flex flex-col gap-3">
           {filteredWorkers.map((m) => (

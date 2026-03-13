@@ -16,6 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Pencil, Plus, Trash2, Loader2, Building2, Phone, MapPin, MailIcon, ArrowLeft, Search, X, ArrowUpDown } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
+import { EmptyState } from "@/components/empty-state";
 
 function CompaniesInner() {
   const { orgId, isAdmin } = useAuth();
@@ -170,9 +171,19 @@ function CompaniesInner() {
       )}
 
       {filteredCompanies.length === 0 ? (
-        <Card><CardContent className="pt-6 text-center text-muted-foreground">
-          {companies.length === 0 ? "No companies yet. Add your first one!" : "No companies match your search."}
-        </CardContent></Card>
+        companies.length === 0 ? (
+          <EmptyState
+            icon={Building2}
+            title="No companies yet"
+            description="Companies help you organize your clients. Group clients under a company for easier management."
+            actionLabel="Add Company"
+            onAction={openAddCompany}
+          />
+        ) : (
+          <Card><CardContent className="pt-6 text-center text-muted-foreground">
+            No companies match your search.
+          </CardContent></Card>
+        )
       ) : (
         <div className="grid gap-3">
           {filteredCompanies.map((c) => {
