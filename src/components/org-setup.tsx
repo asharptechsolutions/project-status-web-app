@@ -1,12 +1,12 @@
 "use client";
 import { useState } from "react";
-import { Workflow, ArrowRight, ArrowLeft, SkipForward, Users, FolderPlus, Building2, Plus, Trash2, Loader2, Mail, Check } from "lucide-react";
+import { Workflow, ArrowRight, ArrowLeft, SkipForward, Users, FolderPlus, Building2, Plus, Trash2, Loader2, Mail, Check, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { createClient } from "@/lib/supabase";
-import { createProject, createProjectStage } from "@/lib/data";
+import { createProject, createProjectStage, createSampleProject } from "@/lib/data";
 import { useAuth } from "@/lib/auth-context";
 import { toast } from "sonner";
 
@@ -146,6 +146,19 @@ export function OrgSetup() {
     }
   };
 
+  const handleCreateSample = async () => {
+    if (!orgId || !userId) return;
+    setLoading(true);
+    try {
+      await createSampleProject(orgId, userId);
+      toast.success("Sample project created!");
+      await finishWizard();
+    } catch (err: any) {
+      toast.error(err.message || "Failed to create sample project");
+      setLoading(false);
+    }
+  };
+
   const finishWizard = async () => {
     setLoading(true);
     await refreshMember();
@@ -157,7 +170,7 @@ export function OrgSetup() {
       {/* Logo */}
       <div className="flex items-center gap-2 mb-8">
         <Workflow className="h-8 w-8 text-primary" />
-        <span className="text-2xl font-bold">Workflowz</span>
+        <span className="text-2xl font-bold">ProjectStatus</span>
       </div>
 
       {/* Step indicator */}
@@ -194,7 +207,7 @@ export function OrgSetup() {
           <div className="text-center mb-6">
             <h2 className="text-xl font-semibold mb-2">What is your company name?</h2>
             <p className="text-muted-foreground">
-              This will be your organization name in Workflowz.
+              This will be your organization name in ProjectStatus.
             </p>
           </div>
           <Card>
@@ -339,11 +352,11 @@ export function OrgSetup() {
                 <Button
                   variant="outline"
                   className="flex-1"
-                  onClick={finishWizard}
+                  onClick={handleCreateSample}
                   disabled={loading}
                 >
-                  {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <SkipForward className="h-4 w-4 mr-2" />}
-                  Skip
+                  {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Sparkles className="h-4 w-4 mr-2" />}
+                  Try Sample
                 </Button>
                 <Button
                   className="flex-1"
@@ -358,6 +371,15 @@ export function OrgSetup() {
                   {loading ? "Creating..." : "Create"}
                 </Button>
               </div>
+              <Button
+                variant="ghost"
+                className="w-full text-muted-foreground"
+                onClick={finishWizard}
+                disabled={loading}
+              >
+                <SkipForward className="h-4 w-4 mr-2" />
+                Skip for now
+              </Button>
             </CardContent>
           </Card>
         </div>

@@ -217,6 +217,34 @@ export interface ClientNotificationPreferences {
   updated_at: string;
 }
 
+// ============ ORG BRANDING ============
+
+export interface OrgBranding {
+  id: string;
+  team_id: string;
+  logo_url: string | null;
+  primary_color: string;
+  secondary_color: string | null;
+  accent_color: string | null;
+  email_accent_color: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// ============ EMAIL TEMPLATES ============
+
+export interface EmailTemplate {
+  id: string;
+  team_id: string;
+  template_type: string;
+  subject: string;
+  body: string;
+  layout: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 // ============ APPOINTMENT SCHEDULING ============
 
 export interface WeeklyScheduleDay {

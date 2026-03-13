@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase-admin";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
+import { renderEmail, getDefaultTemplate } from "@/lib/email-renderer";
+import type { BrandingConfig, EmailLayout } from "@/lib/email-renderer";
 
 export async function POST(request: NextRequest) {
   try {
@@ -80,14 +82,43 @@ export async function POST(request: NextRequest) {
       const actionLink = linkData?.properties?.action_link;
       if (actionLink) {
         // Parse the Supabase action_link to extract token_hash and type
-        // action_link format: https://<project>.supabase.co/auth/v1/verify?token=<hash>&type=magiclink&redirect_to=...
         const actionUrl = new URL(actionLink);
         const tokenHash = actionUrl.searchParams.get("token");
         const linkType = actionUrl.searchParams.get("type") || "magiclink";
 
         // Build app-domain URL that goes through our /auth/confirm route handler
-        // which uses verifyOtp server-side (no PKCE needed)
         const confirmUrl = `${origin}/auth/confirm?token_hash=${tokenHash}&type=${linkType}&next=${encodeURIComponent("/auth/set-password/")}`;
+
+        // Load branding and custom invite template
+        const [brandingRow, templateRow, teamRow] = await Promise.all([
+          adminClient.from("org_branding").select("*").eq("team_id", teamId).single(),
+          adminClient.from("email_templates").select("*").eq("team_id", teamId).eq("template_type", "invite").eq("is_active", true).single(),
+          adminClient.from("teams").select("name").eq("id", teamId).single(),
+        ]);
+
+        const orgName = teamRow.data?.name || "ProjectStatus";
+        const emailColor = brandingRow.data?.email_accent_color || brandingRow.data?.primary_color || "#2563eb";
+        const branding: BrandingConfig = {
+          logo_url: brandingRow.data?.logo_url || null,
+          primary_color: emailColor,
+          secondary_color: brandingRow.data?.secondary_color || null,
+          org_name: orgName,
+        };
+
+        // Use custom template or defaults
+        const defaults = getDefaultTemplate("invite");
+        const emailSubject = templateRow.data?.subject || defaults?.subject || "You've been invited";
+        const emailBody = templateRow.data?.body || defaults?.body || "";
+        const layout: EmailLayout = (templateRow.data?.layout || "classic") as EmailLayout;
+
+        const variables: Record<string, string> = {
+          recipient_name: name || "",
+          org_name: orgName,
+          role: role,
+          invite_link: confirmUrl,
+        };
+
+        const { subject, html } = renderEmail(emailSubject, emailBody, variables, branding, layout);
 
         try {
           const resendRes = await fetch("https://api.resend.com/emails", {
@@ -97,13 +128,10 @@ export async function POST(request: NextRequest) {
               "Content-Type": "application/json",
             },
             body: JSON.stringify({
-              from: "ProjectStatus <noreply@projectstatus.app>",
+              from: `${orgName} <noreply@projectstatus.app>`,
               to: email,
-              subject: `You've been invited to ProjectStatus`,
-              html: `<h2>You've been invited!</h2>
-<p>${name ? `Hi ${name}, you` : "You"} have been invited to collaborate on ProjectStatus.</p>
-<p><a href="${confirmUrl}" style="display:inline-block;padding:12px 24px;background:#2563eb;color:#fff;text-decoration:none;border-radius:6px;">Sign In to ProjectStatus</a></p>
-<p style="color:#666;font-size:14px;">Or copy this link: ${confirmUrl}</p>`,
+              subject,
+              html,
             }),
           });
           if (!resendRes.ok) {

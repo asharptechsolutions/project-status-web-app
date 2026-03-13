@@ -14,6 +14,7 @@ import {
   getAutomationSettings,
   getTimeEntriesForStage, getTimeEntriesForProject, getActiveTimer,
   startTimer, stopTimer, createManualTimeEntry, deleteTimeEntry,
+  createSampleProject,
 } from "@/lib/data";
 import type { Project, ProjectStage, Template, PresetStage, Member, Company, StageDependency, AutomationSettings, TimeEntry } from "@/lib/types";
 import { runStageAutomations, runAssignmentAutomations, AUTOMATION_DEFAULTS } from "@/lib/automations";
@@ -38,6 +39,7 @@ import { toast } from "sonner";
 import { DatePicker } from "@/components/ui/date-picker";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
 import { ProjectNotes } from "@/components/project-notes";
+import { EmptyState } from "@/components/empty-state";
 import { ChatBubble, type ChatBubbleHandle } from "@/components/chat-bubble";
 import dynamic from "next/dynamic";
 
@@ -1892,9 +1894,30 @@ function ProjectsList() {
       )}
 
       {filteredProjects.length === 0 ? (
-        <Card><CardContent className="pt-6 text-center text-muted-foreground">
-          {projects.length === 0 ? (isAdmin ? "No projects yet. Create your first one!" : "No projects assigned to you.") : "No projects match your search."}
-        </CardContent></Card>
+        projects.length === 0 ? (
+          <EmptyState
+            icon={FolderOpen}
+            title="No projects yet"
+            description={isAdmin ? "Projects let you define workflow stages, assign team members, and track progress from start to finish." : "No projects have been assigned to you yet."}
+            actionLabel={isAdmin ? "Create Project" : undefined}
+            onAction={isAdmin ? () => setShowNew(true) : undefined}
+            secondaryLabel={isAdmin ? "Try with sample data" : undefined}
+            onSecondaryAction={isAdmin ? async () => {
+              if (!orgId || !userId) return;
+              try {
+                await createSampleProject(orgId, userId);
+                toast.success("Sample project created!");
+                load();
+              } catch (err: any) {
+                toast.error(err.message || "Failed to create sample project");
+              }
+            } : undefined}
+          />
+        ) : (
+          <Card><CardContent className="pt-6 text-center text-muted-foreground">
+            No projects match your search.
+          </CardContent></Card>
+        )
       ) : (
         <div className="space-y-3">
           {filteredProjects.map((p) => (

@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { Navbar } from "@/components/navbar";
 import { AuthGate } from "@/components/auth-gate";
 import { useAuth } from "@/lib/auth-context";
@@ -10,6 +10,8 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { FolderOpen, Clock, CheckCircle2, CalendarDays, AlertTriangle, TrendingUp, ChevronRight, Building2, Plus } from "lucide-react";
+import { GettingStartedChecklist } from "@/components/getting-started-checklist";
+import { EmptyState } from "@/components/empty-state";
 import Link from "next/link";
 import { toast } from "sonner";
 
@@ -77,6 +79,18 @@ function Dashboard() {
   const [projectProgress, setProjectProgress] = useState<Record<string, number>>({});
   const [projectSchedule, setProjectSchedule] = useState<Record<string, number | null>>({});
   const [upcomingAppts, setUpcomingAppts] = useState<Appointment[]>([]);
+  const [checklistDismissed, setChecklistDismissed] = useState(true); // default true to avoid flash
+
+  useEffect(() => {
+    if (orgId) {
+      setChecklistDismissed(localStorage.getItem(`ps-onboarding-dismissed-${orgId}`) === "true");
+    }
+  }, [orgId]);
+
+  const dismissChecklist = useCallback(() => {
+    if (orgId) localStorage.setItem(`ps-onboarding-dismissed-${orgId}`, "true");
+    setChecklistDismissed(true);
+  }, [orgId]);
 
   useEffect(() => {
     if (!orgId) return;
@@ -172,6 +186,12 @@ function Dashboard() {
           ))}
         </div>
 
+        {isAdmin && !checklistDismissed && orgId && (
+          <div className="mb-8 opacity-0 animate-fade-up stagger-3">
+            <GettingStartedChecklist orgId={orgId} onDismiss={dismissChecklist} />
+          </div>
+        )}
+
         {isAdmin && (
           <div className="mb-8 opacity-0 animate-fade-up stagger-3">
             <div className="flex items-center justify-between mb-4">
@@ -233,11 +253,13 @@ function Dashboard() {
         <div className="opacity-0 animate-fade-up stagger-4">
           <h2 className="text-lg font-semibold tracking-tight mb-3">Active Projects</h2>
           {active.length === 0 ? (
-            <Card>
-              <CardContent className="pt-6 text-center text-muted-foreground">
-                {isAdmin ? "No active projects. Create one to get started!" : "No active projects assigned to you."}
-              </CardContent>
-            </Card>
+            <EmptyState
+              icon={FolderOpen}
+              title="No active projects"
+              description={isAdmin ? "Create a project to start tracking workflow stages and progress." : "No active projects assigned to you yet."}
+              actionLabel={isAdmin ? "Create Project" : undefined}
+              onAction={isAdmin ? () => { window.location.href = "/projects/?new=1"; } : undefined}
+            />
           ) : (
             <div className="space-y-2">
               {active.map((p) => (
