@@ -18,6 +18,8 @@ import {
   Sparkles,
   LayoutDashboard,
   UserCheck,
+  Menu,
+  X,
 } from "lucide-react";
 
 // ============ HERO CAROUSEL ============
@@ -44,11 +46,19 @@ function HeroCanvas() {
     const container = containerRef.current;
     if (!container) return;
     const cRect = container.getBoundingClientRect();
+    // Detect CSS transform scale (parent may be scaled on mobile)
+    const scaleX = container.offsetWidth > 0 ? cRect.width / container.offsetWidth : 1;
+    const scaleY = container.offsetHeight > 0 ? cRect.height / container.offsetHeight : 1;
     const getRect = (id: string) => {
       const el = nodeRefs.current[id];
       if (!el) return null;
       const r = el.getBoundingClientRect();
-      return { x: r.left - cRect.left + r.width / 2, y: r.top - cRect.top + r.height / 2, right: r.right - cRect.left, left: r.left - cRect.left, top: r.top - cRect.top, bottom: r.bottom - cRect.top };
+      // Convert from visual (scaled) space back to internal (unscaled) SVG coordinate space
+      const left = (r.left - cRect.left) / scaleX;
+      const top = (r.top - cRect.top) / scaleY;
+      const width = r.width / scaleX;
+      const height = r.height / scaleY;
+      return { x: left + width / 2, y: top + height / 2, right: left + width, left, top, bottom: top + height };
     };
     const paths: EdgePath[] = [];
     for (const [srcId, tgtId] of EDGES) {
@@ -383,9 +393,13 @@ const SLIDES = [
   { label: "Client Portal", component: HeroClientPortal },
 ];
 
+const CAROUSEL_MIN_WIDTH = 1024;
+
 function HeroCarousel() {
   const [active, setActive] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const [scale, setScale] = useState(1);
 
   const resetTimer = useCallback(() => {
     if (timerRef.current) clearInterval(timerRef.current);
@@ -397,21 +411,44 @@ function HeroCarousel() {
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, [resetTimer]);
 
+  useEffect(() => {
+    const el = wrapperRef.current;
+    if (!el) return;
+    const update = () => {
+      const w = el.offsetWidth;
+      setScale(w < CAROUSEL_MIN_WIDTH ? w / CAROUSEL_MIN_WIDTH : 1);
+    };
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
   const goTo = (idx: number) => { setActive(idx); resetTimer(); };
 
   return (
-    <div className="relative overflow-hidden">
-      <div className="relative" style={{ height: 400 }}>
-        {SLIDES.map((slide, i) => (
-          <div key={slide.label} className={`absolute inset-0 transition-opacity duration-500 ${active === i ? "opacity-100" : "opacity-0 pointer-events-none"}`}>
-            <slide.component />
-          </div>
-        ))}
+    <div ref={wrapperRef} className="relative overflow-hidden">
+      <div className="relative" style={{ height: 400 * scale, overflow: "hidden" }}>
+        <div
+          className="absolute top-0 left-0"
+          style={{
+            width: scale < 1 ? CAROUSEL_MIN_WIDTH : "100%",
+            height: 400,
+            transform: scale < 1 ? `scale(${scale})` : undefined,
+            transformOrigin: "top left",
+          }}
+        >
+          {SLIDES.map((slide, i) => (
+            <div key={slide.label} className={`absolute inset-0 transition-opacity duration-500 ${active === i ? "opacity-100" : "opacity-0 pointer-events-none"}`}>
+              <slide.component />
+            </div>
+          ))}
+        </div>
       </div>
       {/* Navigation pills */}
-      <div className="flex items-center justify-center gap-3 py-3 border-t bg-muted/30">
+      <div className="flex items-center justify-center gap-1.5 sm:gap-3 py-2 sm:py-3 border-t bg-muted/30">
         {SLIDES.map((slide, i) => (
-          <button key={slide.label} onClick={() => goTo(i)} className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${active === i ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}>
+          <button key={slide.label} onClick={() => goTo(i)} className={`px-3 py-2.5 sm:py-1 rounded-full text-[11px] sm:text-xs font-medium transition-colors ${active === i ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}>
             {slide.label}
           </button>
         ))}
@@ -422,6 +459,7 @@ function HeroCarousel() {
 
 export function LandingPage() {
   const [showAuth, setShowAuth] = useState<false | "signin" | "signup">(false);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   if (showAuth) {
     return (
@@ -459,7 +497,8 @@ export function LandingPage() {
             </div>
             <span className="font-semibold text-lg tracking-tight">ProjectStatus</span>
           </div>
-          <div className="flex items-center gap-2">
+          {/* Desktop nav */}
+          <div className="hidden sm:flex items-center gap-2">
             <Button variant="ghost" size="sm" asChild>
               <Link href="/pricing/">Pricing</Link>
             </Button>
@@ -473,7 +512,32 @@ export function LandingPage() {
               Get Started
             </Button>
           </div>
+          {/* Mobile hamburger */}
+          <button
+            className="sm:hidden flex items-center justify-center h-11 w-11 -mr-2 rounded-lg hover:bg-muted transition-colors"
+            onClick={() => setMenuOpen(!menuOpen)}
+            aria-label="Toggle menu"
+          >
+            {menuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+          </button>
         </div>
+        {/* Mobile menu dropdown */}
+        {menuOpen && (
+          <div className="sm:hidden border-t px-4 py-3 bg-background flex flex-col gap-1">
+            <Button variant="ghost" className="justify-start h-11" asChild>
+              <Link href="/pricing/" onClick={() => setMenuOpen(false)}>Pricing</Link>
+            </Button>
+            <Button variant="ghost" className="justify-start h-11" asChild>
+              <Link href="/security/" onClick={() => setMenuOpen(false)}>Security</Link>
+            </Button>
+            <Button variant="ghost" className="justify-start h-11" onClick={() => { setMenuOpen(false); setShowAuth("signin"); }}>
+              Sign In
+            </Button>
+            <Button className="h-11 rounded-full mt-1" onClick={() => { setMenuOpen(false); setShowAuth("signup"); }}>
+              Get Started
+            </Button>
+          </div>
+        )}
       </header>
 
       {/* Hero */}
@@ -639,17 +703,17 @@ export function LandingPage() {
             </div>
             <span className="font-medium text-foreground/70">ProjectStatus</span>
           </div>
-          <div className="flex items-center gap-4">
-            <Link href="/pricing/" className="hover:text-foreground transition-colors">
+          <div className="flex items-center gap-1 sm:gap-4">
+            <Link href="/pricing/" className="hover:text-foreground transition-colors py-3 px-2 sm:py-0 sm:px-0">
               Pricing
             </Link>
-            <Link href="/security/" className="hover:text-foreground transition-colors">
+            <Link href="/security/" className="hover:text-foreground transition-colors py-3 px-2 sm:py-0 sm:px-0">
               Security
             </Link>
-            <Link href="/privacy/" className="hover:text-foreground transition-colors">
+            <Link href="/privacy/" className="hover:text-foreground transition-colors py-3 px-2 sm:py-0 sm:px-0">
               Privacy
             </Link>
-            <Link href="/terms/" className="hover:text-foreground transition-colors">
+            <Link href="/terms/" className="hover:text-foreground transition-colors py-3 px-2 sm:py-0 sm:px-0">
               Terms
             </Link>
           </div>
