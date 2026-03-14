@@ -13,10 +13,12 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Pencil, Plus, Trash2, Loader2, Building2, Phone, MapPin, MailIcon, ArrowLeft, Search, X, ArrowUpDown } from "lucide-react";
+import { Pencil, Plus, Trash2, Loader2, Building2, Phone, MapPin, MailIcon, ArrowLeft, Search, X, ArrowUpDown, Download } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { EmptyState } from "@/components/empty-state";
+import { generateCsv, downloadCsv } from "@/lib/csv";
+import { Pagination } from "@/components/pagination";
 
 function CompaniesInner() {
   const { orgId, isAdmin } = useAuth();
@@ -26,6 +28,8 @@ function CompaniesInner() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState("newest");
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 25;
 
   // Company dialog
   const [showCompanyDialog, setShowCompanyDialog] = useState(false);
@@ -110,6 +114,9 @@ function CompaniesInner() {
   const clientsForCompany = (companyId: string) =>
     members.filter((m) => m.role === "client" && m.company_id === companyId);
 
+  // Reset page when filters change
+  useEffect(() => { setPage(1); }, [searchQuery, sortBy]);
+
   if (!isAdmin) {
     return (
       <div className="p-4 max-w-7xl mx-auto w-full">
@@ -135,6 +142,31 @@ function CompaniesInner() {
       }
     });
 
+  const totalPages = Math.ceil(filteredCompanies.length / PAGE_SIZE);
+  const paginatedCompanies = filteredCompanies.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
+  const handleExportCsv = () => {
+    const columns = [
+      { key: "name", header: "Name" },
+      { key: "email", header: "Email" },
+      { key: "phone", header: "Phone" },
+      { key: "address", header: "Address" },
+      { key: "client_count", header: "Client Count" },
+      { key: "created", header: "Created" },
+    ];
+    const rows = filteredCompanies.map((c) => ({
+      name: c.name,
+      email: c.email || "",
+      phone: c.phone || "",
+      address: c.address || "",
+      client_count: clientsForCompany(c.id).length,
+      created: c.created_at ? new Date(c.created_at).toLocaleDateString() : "",
+    }));
+    const csv = generateCsv(columns, rows);
+    downloadCsv(csv, `companies-export-${new Date().toISOString().slice(0, 10)}.csv`);
+    toast.success(`Exported ${rows.length} companies`);
+  };
+
   return (
     <div className="p-4 max-w-7xl mx-auto w-full">
       <Button variant="ghost" className="mb-4" onClick={() => router.push("/crm/")}>
@@ -143,7 +175,14 @@ function CompaniesInner() {
 
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold">Companies</h1>
-        <Button onClick={openAddCompany}><Plus className="h-4 w-4 mr-1" /> Add Company</Button>
+        <div className="flex gap-2">
+          {filteredCompanies.length > 0 && (
+            <Button variant="outline" onClick={handleExportCsv}>
+              <Download className="h-4 w-4 mr-1" /> Export
+            </Button>
+          )}
+          <Button onClick={openAddCompany}><Plus className="h-4 w-4 mr-1" /> Add Company</Button>
+        </div>
       </div>
 
       {companies.length > 0 && (
@@ -185,62 +224,65 @@ function CompaniesInner() {
           </CardContent></Card>
         )
       ) : (
-        <div className="grid gap-3">
-          {filteredCompanies.map((c) => {
-            const clientCount = clientsForCompany(c.id).length;
-            return (
-              <Card key={c.id}>
-                <CardContent className="pt-4 pb-4">
-                  <div className="flex items-start justify-between">
-                    <div className="min-w-0 flex-1">
-                      <p className="font-medium truncate">{c.name}</p>
-                      {c.email && (
-                        <p className="text-sm text-muted-foreground truncate flex items-center gap-1 mt-0.5">
-                          <MailIcon className="h-3 w-3 shrink-0" /> {c.email}
+        <>
+          <div className="grid gap-3">
+            {paginatedCompanies.map((c) => {
+              const clientCount = clientsForCompany(c.id).length;
+              return (
+                <Card key={c.id}>
+                  <CardContent className="pt-4 pb-4">
+                    <div className="flex items-start justify-between">
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium truncate">{c.name}</p>
+                        {c.email && (
+                          <p className="text-sm text-muted-foreground truncate flex items-center gap-1 mt-0.5">
+                            <MailIcon className="h-3 w-3 shrink-0" /> {c.email}
+                          </p>
+                        )}
+                        {c.phone && (
+                          <p className="text-sm text-muted-foreground truncate flex items-center gap-1 mt-0.5">
+                            <Phone className="h-3 w-3 shrink-0" /> {c.phone}
+                          </p>
+                        )}
+                        {c.address && (
+                          <p className="text-sm text-muted-foreground truncate flex items-center gap-1 mt-0.5">
+                            <MapPin className="h-3 w-3 shrink-0" /> {c.address}
+                          </p>
+                        )}
+                        <p className="text-xs text-muted-foreground mt-1.5">
+                          {clientCount} {clientCount === 1 ? "client" : "clients"}
                         </p>
-                      )}
-                      {c.phone && (
-                        <p className="text-sm text-muted-foreground truncate flex items-center gap-1 mt-0.5">
-                          <Phone className="h-3 w-3 shrink-0" /> {c.phone}
-                        </p>
-                      )}
-                      {c.address && (
-                        <p className="text-sm text-muted-foreground truncate flex items-center gap-1 mt-0.5">
-                          <MapPin className="h-3 w-3 shrink-0" /> {c.address}
-                        </p>
-                      )}
-                      <p className="text-xs text-muted-foreground mt-1.5">
-                        {clientCount} {clientCount === 1 ? "client" : "clients"}
-                      </p>
+                      </div>
+                      <div className="flex gap-1 shrink-0 ml-2">
+                        <Button variant="ghost" size="sm" onClick={() => openEditCompany(c)}>
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button variant="ghost" size="sm"><Trash2 className="h-4 w-4" /></Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Delete Company</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                Delete &ldquo;{c.name}&rdquo;? Clients will not be removed, just disassociated from this company.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancel</AlertDialogCancel>
+                              <AlertDialogAction onClick={() => handleDeleteCompany(c.id)}>Delete</AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      </div>
                     </div>
-                    <div className="flex gap-1 shrink-0 ml-2">
-                      <Button variant="ghost" size="sm" onClick={() => openEditCompany(c)}>
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <Button variant="ghost" size="sm"><Trash2 className="h-4 w-4" /></Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>Delete Company</AlertDialogTitle>
-                            <AlertDialogDescription>
-                              Delete &ldquo;{c.name}&rdquo;? Clients will not be removed, just disassociated from this company.
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>Cancel</AlertDialogCancel>
-                            <AlertDialogAction onClick={() => handleDeleteCompany(c.id)}>Delete</AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })}
-        </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+          <Pagination page={page} totalPages={totalPages} totalCount={filteredCompanies.length} pageSize={PAGE_SIZE} onPageChange={setPage} />
+        </>
       )}
 
       {/* Company add/edit dialog */}
