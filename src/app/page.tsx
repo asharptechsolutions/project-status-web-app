@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { FolderOpen, Clock, CheckCircle2, CalendarDays, AlertTriangle, TrendingUp, ChevronRight, Building2, Plus } from "lucide-react";
 import { GettingStartedChecklist } from "@/components/getting-started-checklist";
 import { EmptyState } from "@/components/empty-state";
+import { Pagination } from "@/components/pagination";
 import Link from "next/link";
 import { toast } from "sonner";
 
@@ -80,6 +81,8 @@ function Dashboard() {
   const [projectSchedule, setProjectSchedule] = useState<Record<string, number | null>>({});
   const [upcomingAppts, setUpcomingAppts] = useState<Appointment[]>([]);
   const [checklistDismissed, setChecklistDismissed] = useState(true); // default true to avoid flash
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 25;
 
   useEffect(() => {
     if (orgId) {
@@ -144,6 +147,8 @@ function Dashboard() {
 
   const active = projects.filter((p) => p.status === "active");
   const completed = projects.filter((p) => p.status === "completed");
+  const totalPages = Math.ceil(active.length / PAGE_SIZE);
+  const paginatedActive = active.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   const stats = [
     { icon: FolderOpen, value: projects.length, label: "Total Projects", color: "text-blue-500", bg: "bg-blue-500/10" },
@@ -261,54 +266,57 @@ function Dashboard() {
               onAction={isAdmin ? () => { window.location.href = "/projects/?new=1"; } : undefined}
             />
           ) : (
-            <div className="space-y-2">
-              {active.map((p) => (
-                <Link key={p.id} href={`/projects/?id=${p.id}`}>
-                  <Card className="cursor-pointer hover:shadow-md hover:border-primary/10 transition-all duration-200 group">
-                    <CardContent className="pt-4 pb-4">
-                      <div className="flex items-center gap-4">
-                        <div className="min-w-0 flex-1">
-                          <p className="font-medium truncate group-hover:text-primary transition-colors">{p.name}</p>
-                          {p.company_id && companyMap[p.company_id] && (
-                            <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
-                              <Building2 className="h-3 w-3" /> {companyMap[p.company_id]}
-                            </p>
-                          )}
-                          <p className="text-xs text-muted-foreground mt-0.5">Created {new Date(p.created_at).toLocaleDateString()}</p>
-                        </div>
-                        <div className="flex flex-col items-end gap-1.5 shrink-0">
-                          <div className="flex items-center gap-2 w-32">
-                            <div className="flex-1 bg-secondary rounded-full h-1.5 overflow-hidden">
-                              <div
-                                className="bg-primary rounded-full h-1.5 transition-all duration-500"
-                                style={{ width: `${projectProgress[p.id] ?? 0}%` }}
-                              />
-                            </div>
-                            <span className="text-xs text-muted-foreground font-medium tabular-nums">{projectProgress[p.id] ?? 0}%</span>
+            <>
+              <div className="space-y-2">
+                {paginatedActive.map((p) => (
+                  <Link key={p.id} href={`/projects/?id=${p.id}`}>
+                    <Card className="cursor-pointer hover:shadow-md hover:border-primary/10 transition-all duration-200 group">
+                      <CardContent className="pt-4 pb-4">
+                        <div className="flex items-center gap-4">
+                          <div className="min-w-0 flex-1">
+                            <p className="font-medium truncate group-hover:text-primary transition-colors">{p.name}</p>
+                            {p.company_id && companyMap[p.company_id] && (
+                              <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                                <Building2 className="h-3 w-3" /> {companyMap[p.company_id]}
+                              </p>
+                            )}
+                            <p className="text-xs text-muted-foreground mt-0.5">Created {new Date(p.created_at).toLocaleDateString()}</p>
                           </div>
-                          {projectSchedule[p.id] != null && (
-                            <span className={`text-xs font-medium flex items-center gap-1 ${
-                              projectSchedule[p.id]! < 0
-                                ? "text-red-600 dark:text-red-400"
-                                : "text-emerald-600 dark:text-emerald-400"
-                            }`}>
-                              {projectSchedule[p.id]! < 0 ? (
-                                <><AlertTriangle className="h-3 w-3" />{Math.abs(projectSchedule[p.id]!)}d behind</>
-                              ) : projectSchedule[p.id]! === 0 ? (
-                                <>On schedule</>
-                              ) : (
-                                <><TrendingUp className="h-3 w-3" />{projectSchedule[p.id]!}d ahead</>
-                              )}
-                            </span>
-                          )}
+                          <div className="flex flex-col items-end gap-1.5 shrink-0">
+                            <div className="flex items-center gap-2 w-32">
+                              <div className="flex-1 bg-secondary rounded-full h-1.5 overflow-hidden">
+                                <div
+                                  className="bg-primary rounded-full h-1.5 transition-all duration-500"
+                                  style={{ width: `${projectProgress[p.id] ?? 0}%` }}
+                                />
+                              </div>
+                              <span className="text-xs text-muted-foreground font-medium tabular-nums">{projectProgress[p.id] ?? 0}%</span>
+                            </div>
+                            {projectSchedule[p.id] != null && (
+                              <span className={`text-xs font-medium flex items-center gap-1 ${
+                                projectSchedule[p.id]! < 0
+                                  ? "text-red-600 dark:text-red-400"
+                                  : "text-emerald-600 dark:text-emerald-400"
+                              }`}>
+                                {projectSchedule[p.id]! < 0 ? (
+                                  <><AlertTriangle className="h-3 w-3" />{Math.abs(projectSchedule[p.id]!)}d behind</>
+                                ) : projectSchedule[p.id]! === 0 ? (
+                                  <>On schedule</>
+                                ) : (
+                                  <><TrendingUp className="h-3 w-3" />{projectSchedule[p.id]!}d ahead</>
+                                )}
+                              </span>
+                            )}
+                          </div>
+                          <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0 group-hover:text-primary group-hover:translate-x-0.5 transition-all" />
                         </div>
-                        <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0 group-hover:text-primary group-hover:translate-x-0.5 transition-all" />
-                      </div>
-                    </CardContent>
-                  </Card>
-                </Link>
-              ))}
-            </div>
+                      </CardContent>
+                    </Card>
+                  </Link>
+                ))}
+              </div>
+              <Pagination page={page} totalPages={totalPages} totalCount={active.length} pageSize={PAGE_SIZE} onPageChange={setPage} />
+            </>
           )}
         </div>
       </main>

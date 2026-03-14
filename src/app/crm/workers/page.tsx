@@ -14,9 +14,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
-import { Pencil, Plus, Trash2, UserCircle, Loader2, Mail, CheckCircle2, Clock, RefreshCw, ArrowLeft, Search, X, ArrowUpDown, Shield, Wrench, Users } from "lucide-react";
+import { Pencil, Plus, Trash2, UserCircle, Loader2, Mail, CheckCircle2, Clock, RefreshCw, ArrowLeft, Search, X, ArrowUpDown, Shield, Wrench, Users, Download } from "lucide-react";
 import { toast } from "sonner";
 import { EmptyState } from "@/components/empty-state";
+import { generateCsv, downloadCsv } from "@/lib/csv";
+import { Pagination } from "@/components/pagination";
 
 function WorkersInner() {
   const { orgId, userId, isAdmin } = useAuth();
@@ -26,6 +28,8 @@ function WorkersInner() {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [sortBy, setSortBy] = useState("name-asc");
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 25;
 
   // Invite dialog
   const [showInvite, setShowInvite] = useState(false);
@@ -138,6 +142,9 @@ function WorkersInner() {
     }
   };
 
+  // Reset page when filters change
+  useEffect(() => { setPage(1); }, [searchQuery, statusFilter, sortBy]);
+
   if (!isAdmin) {
     return (
       <div className="p-4 max-w-7xl mx-auto w-full">
@@ -164,6 +171,33 @@ function WorkersInner() {
       }
     });
 
+  const totalPages = Math.ceil(filteredWorkers.length / PAGE_SIZE);
+  const paginatedWorkers = filteredWorkers.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
+  const handleExportCsv = () => {
+    const columns = [
+      { key: "name", header: "Name" },
+      { key: "email", header: "Email" },
+      { key: "phone", header: "Phone" },
+      { key: "role", header: "Role" },
+      { key: "status", header: "Status" },
+      { key: "joined", header: "Joined Date" },
+      { key: "created", header: "Created" },
+    ];
+    const rows = filteredWorkers.map((m) => ({
+      name: m.name,
+      email: m.email,
+      phone: m.phone || "",
+      role: m.role === "owner" ? "Admin" : "Worker",
+      status: m.joined_at ? "Accepted" : "Pending",
+      joined: m.joined_at ? new Date(m.joined_at).toLocaleDateString() : "",
+      created: m.created_at ? new Date(m.created_at).toLocaleDateString() : "",
+    }));
+    const csv = generateCsv(columns, rows);
+    downloadCsv(csv, `workers-export-${new Date().toISOString().slice(0, 10)}.csv`);
+    toast.success(`Exported ${rows.length} workers`);
+  };
+
   return (
     <div className="p-4 max-w-7xl mx-auto w-full">
       <Button variant="ghost" className="mb-4" onClick={() => router.push("/crm/")}>
@@ -172,9 +206,16 @@ function WorkersInner() {
 
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold">Workers</h1>
-        <Button onClick={() => { setShowInvite(true); setInviteName(""); setInviteEmail(""); setInvitePhone(""); }}>
-          <Plus className="h-4 w-4 mr-1" /> Add Worker
-        </Button>
+        <div className="flex gap-2">
+          {filteredWorkers.length > 0 && (
+            <Button variant="outline" onClick={handleExportCsv}>
+              <Download className="h-4 w-4 mr-1" /> Export
+            </Button>
+          )}
+          <Button onClick={() => { setShowInvite(true); setInviteName(""); setInviteEmail(""); setInvitePhone(""); }}>
+            <Plus className="h-4 w-4 mr-1" /> Add Worker
+          </Button>
+        </div>
       </div>
 
       {workerMembers.length > 0 && (
@@ -223,75 +264,78 @@ function WorkersInner() {
           </CardContent></Card>
         )
       ) : (
-        <div className="flex flex-col gap-3">
-          {filteredWorkers.map((m) => (
-            <Card key={m.id}>
-              <CardContent className="pt-4 pb-4 flex items-center gap-4">
-                <UserCircle className="h-10 w-10 text-muted-foreground shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <p className="font-medium truncate">{m.name || "Pending"}</p>
-                    <Badge variant="outline" className="shrink-0">
-                      {m.role === "owner" ? <><Shield className="h-3 w-3 mr-1" />Admin</> : <><Wrench className="h-3 w-3 mr-1" />Worker</>}
-                    </Badge>
+        <>
+          <div className="flex flex-col gap-3">
+            {paginatedWorkers.map((m) => (
+              <Card key={m.id}>
+                <CardContent className="pt-4 pb-4 flex items-center gap-4">
+                  <UserCircle className="h-10 w-10 text-muted-foreground shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <p className="font-medium truncate">{m.name || "Pending"}</p>
+                      <Badge variant="outline" className="shrink-0">
+                        {m.role === "owner" ? <><Shield className="h-3 w-3 mr-1" />Admin</> : <><Wrench className="h-3 w-3 mr-1" />Worker</>}
+                      </Badge>
+                    </div>
+                    <p className="text-sm text-muted-foreground truncate">{m.email}</p>
+                    {m.phone && <p className="text-sm text-muted-foreground truncate">{m.phone}</p>}
                   </div>
-                  <p className="text-sm text-muted-foreground truncate">{m.email}</p>
-                  {m.phone && <p className="text-sm text-muted-foreground truncate">{m.phone}</p>}
-                </div>
-                <div className="shrink-0 flex items-center gap-2">
-                  {m.joined_at ? (
-                    <span className="inline-flex items-center gap-1 text-xs font-medium text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 rounded-full px-2.5 py-1">
-                      <CheckCircle2 className="h-3.5 w-3.5" /> Accepted
-                    </span>
-                  ) : (
-                    <>
-                      <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-full px-2.5 py-1">
-                        <Clock className="h-3.5 w-3.5" /> Pending
+                  <div className="shrink-0 flex items-center gap-2">
+                    {m.joined_at ? (
+                      <span className="inline-flex items-center gap-1 text-xs font-medium text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 rounded-full px-2.5 py-1">
+                        <CheckCircle2 className="h-3.5 w-3.5" /> Accepted
                       </span>
-                      <Button variant="ghost" size="sm" onClick={() => handleResendInvite(m)} disabled={resendingId === m.id} title="Resend invitation">
-                        {resendingId === m.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-                      </Button>
-                    </>
-                  )}
-                </div>
-                <div className="flex gap-1 shrink-0">
-                  <Button variant="ghost" size="sm" onClick={() => openEdit(m)}>
-                    <Pencil className="h-4 w-4" />
-                  </Button>
-                  {m.user_id !== userId && (
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                        <Button variant="ghost" size="sm"><Trash2 className="h-4 w-4" /></Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>Remove Member</AlertDialogTitle>
-                          <AlertDialogDescription>Remove {m.name || m.email} from the organization?</AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>Cancel</AlertDialogCancel>
-                          <AlertDialogAction onClick={async () => {
-                            try {
-                              const res = await fetch("/api/members/delete/", {
-                                method: "POST",
-                                headers: { "Content-Type": "application/json" },
-                                body: JSON.stringify({ userId: m.user_id, teamId: m.team_id }),
-                              });
-                              const data = await res.json();
-                              if (!res.ok) throw new Error(data.error || "Failed to remove member");
-                              toast.success("Removed");
-                              load();
-                            } catch (err: any) { toast.error(err.message); }
-                          }}>Remove</AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+                    ) : (
+                      <>
+                        <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-full px-2.5 py-1">
+                          <Clock className="h-3.5 w-3.5" /> Pending
+                        </span>
+                        <Button variant="ghost" size="sm" onClick={() => handleResendInvite(m)} disabled={resendingId === m.id} title="Resend invitation">
+                          {resendingId === m.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                  <div className="flex gap-1 shrink-0">
+                    <Button variant="ghost" size="sm" onClick={() => openEdit(m)}>
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                    {m.user_id !== userId && (
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button variant="ghost" size="sm"><Trash2 className="h-4 w-4" /></Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Remove Member</AlertDialogTitle>
+                            <AlertDialogDescription>Remove {m.name || m.email} from the organization?</AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogAction onClick={async () => {
+                              try {
+                                const res = await fetch("/api/members/delete/", {
+                                  method: "POST",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({ userId: m.user_id, teamId: m.team_id }),
+                                });
+                                const data = await res.json();
+                                if (!res.ok) throw new Error(data.error || "Failed to remove member");
+                                toast.success("Removed");
+                                load();
+                              } catch (err: any) { toast.error(err.message); }
+                            }}>Remove</AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+          <Pagination page={page} totalPages={totalPages} totalCount={filteredWorkers.length} pageSize={PAGE_SIZE} onPageChange={setPage} />
+        </>
       )}
 
       {/* Invite dialog */}

@@ -10,7 +10,7 @@ import {
   parseISO,
 } from "date-fns";
 import type { ProjectStage, StageDependency, ClientVisibilitySettings } from "@/lib/types";
-import { CheckCircle2, Clock, Loader2, User, Calendar, Pencil, Plus, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { CheckCircle2, Clock, Loader2, User, Calendar, Pencil, Plus, PanelLeftClose, PanelLeftOpen, Play, Trash2, UserPlus } from "lucide-react";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -22,13 +22,18 @@ interface GanttChartProps {
   readOnly?: boolean;
   isAdmin?: boolean;
   isWorker?: boolean;
+  userId?: string;
   workerNames?: Record<string, string>;
   progress?: number;
   visibilitySettings?: ClientVisibilitySettings | null;
   onUpdateStage?: (stageId: string, updates: Partial<ProjectStage>) => void;
+  onUpdateStatus?: (stageId: string, status: ProjectStage["status"]) => void;
   onAddStage?: () => void;
   onEditStage?: (stageId: string) => void;
   onAddDependency?: (sourceId: string, targetId: string) => void;
+  onRemoveStage?: (stageId: string) => void;
+  onAssignWorker?: (stageId: string) => void;
+  timeByStage?: Record<string, number>;
 }
 
 /* ------------------------------------------------------------------ */
@@ -50,11 +55,11 @@ const CONNECTOR_SIZE = 10;
 function getStatusColor(status: ProjectStage["status"]) {
   switch (status) {
     case "completed":
-      return { bg: "rgb(34 197 94)", bgDark: "rgb(22 163 74)", text: "text-green-700 dark:text-green-400" };
+      return { bg: "rgb(34 197 94 / 0.8)", bgDark: "rgb(22 163 74 / 0.9)", text: "text-green-700 dark:text-green-400" };
     case "in_progress":
-      return { bg: "rgb(59 130 246)", bgDark: "rgb(37 99 235)", text: "text-blue-700 dark:text-blue-400" };
+      return { bg: "rgb(59 130 246 / 0.8)", bgDark: "rgb(37 99 235 / 0.9)", text: "text-blue-700 dark:text-blue-400" };
     default:
-      return { bg: "rgb(156 163 175)", bgDark: "rgb(107 114 128)", text: "text-muted-foreground" };
+      return { bg: "rgb(156 163 175 / 0.5)", bgDark: "rgb(107 114 128 / 0.6)", text: "text-muted-foreground" };
   }
 }
 
@@ -77,13 +82,18 @@ export function GanttChart({
   readOnly = false,
   isAdmin = false,
   isWorker = false,
+  userId,
   workerNames,
   progress,
   visibilitySettings,
   onUpdateStage,
+  onUpdateStatus,
   onAddStage,
   onEditStage,
   onAddDependency,
+  onRemoveStage,
+  onAssignWorker,
+  timeByStage,
 }: GanttChartProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const chartAreaRef = useRef<HTMLDivElement>(null);
@@ -108,9 +118,11 @@ export function GanttChart({
   // Clear pending updates when stage data arrives from parent
   useEffect(() => {
     if (stages !== prevStagesRef.current) {
+      const stageIds = new Set(stages.map((s) => s.id));
       for (const [stageId, pending] of pendingUpdates.current.entries()) {
         const stage = stages.find((s) => s.id === stageId);
-        if (stage && stage.planned_start === pending.planned_start && stage.estimated_completion === pending.estimated_completion) {
+        // Clear if stage was deleted, or if parent now reflects the pending values
+        if (!stageIds.has(stageId) || (stage && stage.planned_start === pending.planned_start && stage.estimated_completion === pending.estimated_completion)) {
           pendingUpdates.current.delete(stageId);
         }
       }
@@ -630,7 +642,7 @@ export function GanttChart({
           </div>
           {/* Stage rows */}
           {scheduled.map((stage) => {
-            const statusIcon =
+            const stageStatusIcon =
               stage.status === "completed" ? (
                 <CheckCircle2 className="h-3.5 w-3.5 text-green-500 shrink-0" />
               ) : stage.status === "in_progress" ? (
@@ -639,20 +651,19 @@ export function GanttChart({
                 <Clock className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
               );
 
+            const canActOnStage = !readOnly && (isAdmin || (isWorker && (!stage.assigned_to || stage.assigned_to === userId)));
+
             return (
               <div
                 key={stage.id}
-                className={`border-b px-2 flex items-center gap-2 hover:bg-muted/30 transition-colors group ${
-                  canEdit ? "cursor-pointer" : ""
-                } ${labelsCollapsed ? "justify-center" : ""}`}
+                className={`border-b px-2 flex items-center gap-2 hover:bg-muted/30 transition-colors group ${labelsCollapsed ? "justify-center" : ""}`}
                 style={{ height: ROW_HEIGHT }}
-                onClick={canEdit ? () => onEditStage!(stage.id) : undefined}
                 title={labelsCollapsed ? stage.name : undefined}
               >
-                {statusIcon}
+                {stageStatusIcon}
                 {!labelsCollapsed && (
                   <>
-                    <div className="min-w-0 flex-1">
+                    <div className="min-w-0 flex-1 cursor-pointer" onClick={canEdit ? () => onEditStage!(stage.id) : undefined}>
                       <p className="text-sm font-medium truncate">{stage.name}</p>
                       {!hideWorkerName && stage.assigned_to && workerNames?.[stage.assigned_to] && (
                         <p className="text-[10px] text-muted-foreground truncate flex items-center gap-0.5">
@@ -661,9 +672,34 @@ export function GanttChart({
                         </p>
                       )}
                     </div>
-                    {canEdit && (
-                      <Pencil className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
-                    )}
+                    {/* Action buttons on hover */}
+                    <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                      {canActOnStage && stage.status === "pending" && onUpdateStatus && (
+                        <button onClick={() => onUpdateStatus(stage.id, "in_progress")} className="p-0.5 rounded hover:bg-muted/50 text-muted-foreground hover:text-foreground" title="Start">
+                          <Play className="h-3 w-3" />
+                        </button>
+                      )}
+                      {canActOnStage && stage.status === "in_progress" && onUpdateStatus && (
+                        <button onClick={() => onUpdateStatus(stage.id, "completed")} className="p-0.5 rounded hover:bg-muted/50 text-blue-500 hover:text-blue-600" title="Complete">
+                          <CheckCircle2 className="h-3 w-3" />
+                        </button>
+                      )}
+                      {isAdmin && onAssignWorker && (
+                        <button onClick={() => onAssignWorker(stage.id)} className="p-0.5 rounded hover:bg-muted/50 text-muted-foreground hover:text-foreground" title="Assign worker">
+                          <UserPlus className="h-3 w-3" />
+                        </button>
+                      )}
+                      {canEdit && (
+                        <button onClick={() => onEditStage!(stage.id)} className="p-0.5 rounded hover:bg-muted/50 text-muted-foreground hover:text-foreground" title="Edit">
+                          <Pencil className="h-3 w-3" />
+                        </button>
+                      )}
+                      {isAdmin && onRemoveStage && (
+                        <button onClick={() => onRemoveStage(stage.id)} className="p-0.5 rounded hover:bg-muted/50 text-destructive" title="Delete">
+                          <Trash2 className="h-3 w-3" />
+                        </button>
+                      )}
+                    </div>
                   </>
                 )}
               </div>
@@ -721,8 +757,8 @@ export function GanttChart({
               {dateColumns.map((col, i) => (
                 <div
                   key={i}
-                  className={`absolute top-0 border-r ${
-                    col.isToday ? "border-primary/30" : "border-border/40"
+                  className={`absolute top-0 ${
+                    col.isToday ? "border-r border-primary/30" : "border-r border-dashed border-border/50"
                   }`}
                   style={{ left: i * colWidth + colWidth, height: chartHeight, width: 0 }}
                 />
@@ -742,7 +778,11 @@ export function GanttChart({
                 <div
                   className="absolute top-0 w-0.5 bg-primary/60 z-10"
                   style={{ left: todayOffset, height: chartHeight }}
-                />
+                >
+                  <div className="absolute -top-0.5 left-1/2 -translate-x-1/2 bg-primary text-primary-foreground text-[9px] font-medium px-1.5 py-0.5 rounded-b-sm whitespace-nowrap">
+                    Today
+                  </div>
+                </div>
               )}
 
               {/* SVG layer for dependency arrows + link drag line */}

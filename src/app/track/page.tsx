@@ -6,7 +6,7 @@ import type { Project, ProjectStage, ClientVisibilitySettings, StageDependency }
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
-import { Workflow, Loader2, FolderOpen, Shield, CalendarDays, Network, BarChart3, Bell } from "lucide-react";
+import { Workflow, Loader2, FolderOpen, Shield, CalendarDays, Network, BarChart3, Bell, Columns3, List } from "lucide-react";
 import dynamic from "next/dynamic";
 import { ChatBubble, type ChatBubbleHandle } from "@/components/chat-bubble";
 import { BookingDialog } from "@/components/booking-dialog";
@@ -22,6 +22,16 @@ const WorkflowCanvas = dynamic(
 
 const GanttChart = dynamic(
   () => import("@/components/gantt-chart").then((m) => m.GanttChart),
+  { ssr: false, loading: () => <div className="h-[300px] flex items-center justify-center border rounded-lg"><Loader2 className="h-6 w-6 animate-spin" /></div> },
+);
+
+const KanbanBoard = dynamic(
+  () => import("@/components/kanban-board").then((m) => m.KanbanBoard),
+  { ssr: false, loading: () => <div className="h-[400px] flex items-center justify-center border rounded-lg"><Loader2 className="h-6 w-6 animate-spin" /></div> },
+);
+
+const StageListView = dynamic(
+  () => import("@/components/stage-list-view").then((m) => m.StageListView),
   { ssr: false, loading: () => <div className="h-[300px] flex items-center justify-center border rounded-lg"><Loader2 className="h-6 w-6 animate-spin" /></div> },
 );
 
@@ -61,7 +71,7 @@ function TrackInner() {
   const [orgId, setOrgId] = useState<string>("");
   const [visibilitySettings, setVisibilitySettings] = useState<ClientVisibilitySettings | null>(null);
   const [dependencies, setDependencies] = useState<StageDependency[]>([]);
-  const [viewMode, setViewMode] = useState<"canvas" | "gantt">("canvas");
+  const [viewMode, setViewMode] = useState<"canvas" | "kanban" | "gantt" | "list">("list");
   const [notifyEnabled, setNotifyEnabled] = useState(true);
   const [timeByStage, setTimeByStage] = useState<Record<string, number>>({});
 
@@ -295,23 +305,23 @@ function TrackInner() {
           </div>
         </div>
 
-        {/* View toggle — only show if stages have dates */}
-        {stages.some((s) => s.planned_start || s.estimated_completion) && (
+        {/* View toggle */}
+        {stages.length > 0 && (
           <div className="flex items-center gap-1 mb-3">
-            <Button
-              size="sm"
-              variant={viewMode === "canvas" ? "default" : "outline"}
-              onClick={() => setViewMode("canvas")}
-            >
+            <Button size="sm" variant={viewMode === "list" ? "default" : "outline"} onClick={() => setViewMode("list")}>
+              <List className="h-4 w-4 mr-1" /> List
+            </Button>
+            <Button size="sm" variant={viewMode === "canvas" ? "default" : "outline"} onClick={() => setViewMode("canvas")}>
               <Network className="h-4 w-4 mr-1" /> Canvas
             </Button>
-            <Button
-              size="sm"
-              variant={viewMode === "gantt" ? "default" : "outline"}
-              onClick={() => setViewMode("gantt")}
-            >
-              <BarChart3 className="h-4 w-4 mr-1" /> Timeline
+            <Button size="sm" variant={viewMode === "kanban" ? "default" : "outline"} onClick={() => setViewMode("kanban")}>
+              <Columns3 className="h-4 w-4 mr-1" /> Kanban
             </Button>
+            {stages.some((s) => s.planned_start || s.estimated_completion) && (
+              <Button size="sm" variant={viewMode === "gantt" ? "default" : "outline"} onClick={() => setViewMode("gantt")}>
+                <BarChart3 className="h-4 w-4 mr-1" /> Timeline
+              </Button>
+            )}
           </div>
         )}
 
@@ -328,8 +338,28 @@ function TrackInner() {
             dependencies={dependencies}
             timeByStage={visibilitySettings?.show_time_tracking ? timeByStage : undefined}
           />
-        ) : (
+        ) : viewMode === "kanban" ? (
+          <KanbanBoard
+            stages={stages}
+            dependencies={dependencies}
+            readOnly
+            isAdmin={false}
+            isWorker={false}
+            progress={showProgress ? progress : undefined}
+            visibilitySettings={visibilitySettings}
+          />
+        ) : viewMode === "gantt" ? (
           <GanttChart
+            stages={stages}
+            dependencies={dependencies}
+            readOnly
+            isAdmin={false}
+            isWorker={false}
+            progress={showProgress ? progress : undefined}
+            visibilitySettings={visibilitySettings}
+          />
+        ) : (
+          <StageListView
             stages={stages}
             dependencies={dependencies}
             readOnly

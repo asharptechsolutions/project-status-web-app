@@ -1292,3 +1292,111 @@ export async function createSampleProject(orgId: string, userId: string): Promis
 
   return projectId;
 }
+
+// ============ TEST DATA SEEDING ============
+
+export async function createPaginationTestData(orgId: string, userId: string): Promise<{ projects: number; companies: number }> {
+  const now = new Date();
+  const daysAgo = (d: number) => new Date(now.getTime() - d * 24 * 60 * 60 * 1000).toISOString();
+
+  const projectNames = [
+    "Bathroom Remodel", "Roof Replacement", "Deck Construction", "Basement Finishing",
+    "Window Installation", "HVAC Upgrade", "Landscaping Design", "Pool Installation",
+    "Garage Conversion", "Fence Installation", "Driveway Paving", "Solar Panel Setup",
+    "Attic Insulation", "Flooring Replacement", "Painting Interior", "Painting Exterior",
+    "Kitchen Cabinets", "Countertop Install", "Plumbing Overhaul", "Electrical Rewiring",
+    "Foundation Repair", "Siding Replacement", "Gutter Installation", "Chimney Repair",
+    "Water Heater Install", "Septic System", "Home Theater Setup", "Smart Home Wiring",
+    "Patio Construction", "Pergola Build", "Retaining Wall", "Storm Shelter",
+    "Mudroom Addition", "Closet Organization", "Laundry Room Reno", "Home Office Build",
+    "Fireplace Installation", "Staircase Rebuild", "Crown Molding", "Tile Backsplash",
+    "Shower Remodel", "Bathtub Replacement", "Vanity Install", "Lighting Upgrade",
+    "Ceiling Fan Install", "Accent Wall", "Built-in Shelving", "Wine Cellar",
+    "Screened Porch", "Carport Construction", "Walkway Pavers", "Mailbox Upgrade",
+    "Shed Construction", "Treehouse Build", "Playground Install", "Garden Beds",
+    "Irrigation System", "Outdoor Kitchen", "Fire Pit Build", "Hot Tub Install",
+  ];
+
+  const addresses = [
+    "123 Main St", "456 Oak Ave", "789 Pine Rd", "321 Elm Blvd", "654 Maple Dr",
+    "987 Cedar Ln", "147 Birch Way", "258 Walnut Ct", "369 Spruce Pl", "741 Ash St",
+  ];
+
+  const statuses: ("active" | "completed" | "archived")[] = ["active", "active", "active", "completed", "archived"];
+
+  const stageTemplates = [
+    ["Planning", "Materials", "Construction", "Inspection"],
+    ["Assessment", "Design", "Build", "QA", "Handoff"],
+    ["Prep", "Demo", "Install", "Finish", "Cleanup"],
+  ];
+
+  // Create 60 projects with varied data
+  let projectCount = 0;
+  for (let i = 0; i < projectNames.length; i++) {
+    const addr = addresses[i % addresses.length];
+    const status = statuses[i % statuses.length];
+    const createdDaysAgo = Math.floor(Math.random() * 90) + 1;
+
+    const projectId = await createProject({
+      team_id: orgId,
+      name: `${projectNames[i]} — ${addr}`,
+      description: `Project ${i + 1}: ${projectNames[i]} at ${addr}`,
+      status,
+      client_name: `Client ${i + 1}`,
+      client_email: "",
+      client_phone: "",
+      created_by: userId,
+    });
+
+    // Add stages
+    const template = stageTemplates[i % stageTemplates.length];
+    for (let j = 0; j < template.length; j++) {
+      const stageStatus = status === "completed" ? "completed" as const
+        : status === "archived" ? "completed" as const
+        : j < Math.floor(template.length / 2) ? "completed" as const
+        : j === Math.floor(template.length / 2) ? "in_progress" as const
+        : "pending" as const;
+
+      await createProjectStage({
+        project_id: projectId,
+        name: template[j],
+        status: stageStatus,
+        position: j,
+        started_at: stageStatus !== "pending" ? daysAgo(createdDaysAgo - j * 3) : null,
+        completed_at: stageStatus === "completed" ? daysAgo(createdDaysAgo - j * 3 - 2) : null,
+        started_by: stageStatus !== "pending" ? userId : null,
+        assigned_to: null,
+        estimated_completion: null,
+        planned_start: null,
+      });
+    }
+    projectCount++;
+  }
+
+  // Create 35 companies
+  const companyTypes = [
+    "Construction", "Plumbing", "Electrical", "Landscaping", "Painting",
+    "Roofing", "HVAC", "Flooring", "Remodeling", "Design",
+    "Engineering", "Contracting", "Masonry", "Carpentry", "Demolition",
+  ];
+  const companyPrefixes = ["ABC", "Premier", "Elite", "Pro", "Valley", "Summit", "Metro", "Heritage"];
+  const companySuffixes = ["LLC", "Inc", "Co", "Services", "Group", "Solutions", "Corp"];
+
+  let companyCount = 0;
+  for (let i = 0; i < 35; i++) {
+    const prefix = companyPrefixes[i % companyPrefixes.length];
+    const type = companyTypes[i % companyTypes.length];
+    const suffix = companySuffixes[i % companySuffixes.length];
+
+    await createCompany({
+      team_id: orgId,
+      name: `${prefix} ${type} ${suffix}`,
+      email: `contact@${prefix.toLowerCase()}${type.toLowerCase()}.com`,
+      phone: `(555) ${String(100 + i).padStart(3, "0")}-${String(1000 + i * 7).slice(0, 4)}`,
+      address: `${100 + i * 10} ${addresses[i % addresses.length]}`,
+    });
+    companyCount++;
+  }
+
+  return { projects: projectCount, companies: companyCount };
+}

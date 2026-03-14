@@ -15,6 +15,7 @@ import {
   getTimeEntriesForStage, getTimeEntriesForProject, getActiveTimer,
   startTimer, stopTimer, createManualTimeEntry, deleteTimeEntry,
   createSampleProject,
+  createPaginationTestData,
 } from "@/lib/data";
 import type { Project, ProjectStage, Template, PresetStage, Member, Company, StageDependency, AutomationSettings, TimeEntry } from "@/lib/types";
 import { runStageAutomations, runAssignmentAutomations, AUTOMATION_DEFAULTS } from "@/lib/automations";
@@ -33,14 +34,16 @@ import {
   Pencil, Search, X, ArrowUpDown, Archive, ArchiveRestore,
   Clock, Loader2, GripVertical, UserPlus, Mail, Users, Building2, Save,
   AlertTriangle, TrendingUp, Link, FolderOpen, MoreHorizontal, BarChart3, Network,
-  Timer, DollarSign, Square,
+  Timer, DollarSign, Square, Download, Columns3, List,
 } from "lucide-react";
 import { toast } from "sonner";
 import { DatePicker } from "@/components/ui/date-picker";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
 import { ProjectNotes } from "@/components/project-notes";
 import { EmptyState } from "@/components/empty-state";
+import { generateCsv, downloadCsv } from "@/lib/csv";
 import { ChatBubble, type ChatBubbleHandle } from "@/components/chat-bubble";
+import { Pagination } from "@/components/pagination";
 import dynamic from "next/dynamic";
 
 const WorkflowCanvas = dynamic(
@@ -50,6 +53,16 @@ const WorkflowCanvas = dynamic(
 
 const GanttChart = dynamic(
   () => import("@/components/gantt-chart").then((m) => m.GanttChart),
+  { ssr: false, loading: () => <div className="h-[300px] flex items-center justify-center border rounded-lg"><Loader2 className="h-6 w-6 animate-spin" /></div> },
+);
+
+const KanbanBoard = dynamic(
+  () => import("@/components/kanban-board").then((m) => m.KanbanBoard),
+  { ssr: false, loading: () => <div className="h-[400px] flex items-center justify-center border rounded-lg"><Loader2 className="h-6 w-6 animate-spin" /></div> },
+);
+
+const StageListView = dynamic(
+  () => import("@/components/stage-list-view").then((m) => m.StageListView),
   { ssr: false, loading: () => <div className="h-[300px] flex items-center justify-center border rounded-lg"><Loader2 className="h-6 w-6 animate-spin" /></div> },
 );
 
@@ -90,6 +103,8 @@ function ProjectsList() {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("active-completed");
   const [sortBy, setSortBy] = useState("newest");
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 25;
   const [projectClientIds, setProjectClientIds] = useState<string[]>([]);
   const [addingClient, setAddingClient] = useState(false);
   const [detailShowNewClient, setDetailShowNewClient] = useState(false);
@@ -128,7 +143,7 @@ function ProjectsList() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const chatBubbleRef = useRef<ChatBubbleHandle>(null);
   const workflowLocked = selectedProject?.workflow_locked ?? false;
-  const [viewMode, setViewMode] = useState<"canvas" | "gantt">("canvas");
+  const [viewMode, setViewMode] = useState<"canvas" | "kanban" | "gantt" | "list">("canvas");
   const [dependencies, setDependencies] = useState<StageDependency[]>([]);
   const [automationSettings, setAutomationSettings] = useState<AutomationSettings | null>(null);
   const [stageModalPlannedStart, setStageModalPlannedStart] = useState<Date | undefined>(undefined);
@@ -149,6 +164,7 @@ function ProjectsList() {
   const [editTimeAutoStart, setEditTimeAutoStart] = useState(true);
   const [editTimeDefaultBillable, setEditTimeDefaultBillable] = useState(true);
   const [editTimeRequireNotes, setEditTimeRequireNotes] = useState(false);
+  const [seeding, setSeeding] = useState(false);
 
   // Compute schedule days from a list of stages (negative = behind, positive = ahead, null = no estimates)
   const computeScheduleDays = useCallback((stageList: ProjectStage[]): number | null => {
@@ -339,6 +355,9 @@ function ProjectsList() {
       if (found) setSelectedProjectRaw(found);
     }
   }, [searchParams, projects, router]);
+
+  // Reset page when filters change
+  useEffect(() => { setPage(1); }, [searchQuery, statusFilter, sortBy]);
 
   // Invite a new client via the API (used in new project dialog)
   const handleInviteClient = async (
@@ -734,14 +753,20 @@ function ProjectsList() {
         }
 
         await updateProjectStage(editingStageId, updates);
-        const newStages = stages.map((s) => s.id === editingStageId ? { ...s, ...updates } : s);
+
+        // Use functional updater to get latest stages
+        let resolvedStages: ProjectStage[] = [];
+        setStages((prev) => {
+          resolvedStages = prev.map((s) => s.id === editingStageId ? { ...s, ...updates } : s);
+          return resolvedStages;
+        });
 
         // Run stage automations if status changed to completed
         if (currentStage && stageModalStatus === "completed" && stageModalStatus !== currentStage.status && userId) {
           const { updatedStages, projectCompleted } = await runStageAutomations(editingStageId, "completed", {
             settings: automationSettings,
             project: selectedProject,
-            stages: newStages,
+            stages: resolvedStages,
             dependencies,
             userId,
           });
@@ -750,8 +775,6 @@ function ProjectsList() {
             setSelectedProjectRaw({ ...selectedProject, status: "completed" });
             load();
           }
-        } else {
-          setStages(newStages);
         }
 
         // Notify worker if assignment changed
@@ -829,13 +852,19 @@ function ProjectsList() {
         toast.info("Timer started");
       }
       await updateProjectStage(stageId, updates);
-      const newStages = stages.map((s) => s.id === stageId ? { ...s, ...updates } : s);
 
-      // Run automations
+      // Use functional updater to avoid stale closure
+      let resolvedStages: ProjectStage[] = [];
+      setStages((prev) => {
+        resolvedStages = prev.map((s) => s.id === stageId ? { ...s, ...updates } : s);
+        return resolvedStages;
+      });
+
+      // Run automations with the latest stages
       const { updatedStages, projectCompleted } = await runStageAutomations(stageId, status, {
         settings: automationSettings,
         project: selectedProject,
-        stages: newStages,
+        stages: resolvedStages,
         dependencies,
         userId,
       });
@@ -857,7 +886,7 @@ function ProjectsList() {
       }
       await deleteStageDependenciesForStage(stageId);
       await deleteProjectStage(stageId);
-      setStages(stages.filter((s) => s.id !== stageId));
+      setStages((prev) => prev.filter((s) => s.id !== stageId));
       setDependencies((prev) => prev.filter((d) => d.source_stage_id !== stageId && d.target_stage_id !== stageId));
       setProjectTimeEntries((prev) => prev.filter((e) => e.stage_id !== stageId));
     } catch (err: any) {
@@ -1080,19 +1109,17 @@ function ProjectsList() {
 
         {/* View toggle */}
         <div className="flex items-center gap-1 mb-3">
-          <Button
-            size="sm"
-            variant={viewMode === "canvas" ? "default" : "outline"}
-            onClick={() => setViewMode("canvas")}
-          >
+          <Button size="sm" variant={viewMode === "canvas" ? "default" : "outline"} onClick={() => setViewMode("canvas")}>
             <Network className="h-4 w-4 mr-1" /> Canvas
           </Button>
-          <Button
-            size="sm"
-            variant={viewMode === "gantt" ? "default" : "outline"}
-            onClick={() => setViewMode("gantt")}
-          >
+          <Button size="sm" variant={viewMode === "kanban" ? "default" : "outline"} onClick={() => setViewMode("kanban")}>
+            <Columns3 className="h-4 w-4 mr-1" /> Kanban
+          </Button>
+          <Button size="sm" variant={viewMode === "gantt" ? "default" : "outline"} onClick={() => setViewMode("gantt")}>
             <BarChart3 className="h-4 w-4 mr-1" /> Timeline
+          </Button>
+          <Button size="sm" variant={viewMode === "list" ? "default" : "outline"} onClick={() => setViewMode("list")}>
+            <List className="h-4 w-4 mr-1" /> List
           </Button>
         </div>
 
@@ -1114,7 +1141,7 @@ function ProjectsList() {
           </div>
         )}
 
-        {/* Workflow Canvas / Gantt Chart */}
+        {/* Stage views */}
         {stagesLoaded ? (
           viewMode === "canvas" ? (
             <WorkflowCanvas
@@ -1139,19 +1166,58 @@ function ProjectsList() {
               onRemoveDependency={handleRemoveDependency}
               timeByStage={selectedProject.time_tracking_enabled ? timeByStage : {}}
             />
-          ) : (
+          ) : viewMode === "kanban" ? (
+            <KanbanBoard
+              stages={stages}
+              dependencies={dependencies}
+              readOnly={isClient}
+              isAdmin={isAdmin}
+              isWorker={isWorker}
+              userId={userId || undefined}
+              workerNames={workerNames}
+              progress={progress}
+              onUpdateStatus={(stageId, status) => updateStageStatus(stageId, status)}
+              onAddStage={isAdmin ? handleOpenAddStage : undefined}
+              onEditStage={handleOpenEditStage}
+              onAssignWorker={(stageId) => setAssignStageId(stageId)}
+              onRemoveStage={(stageId) => removeStage(stageId)}
+              timeByStage={selectedProject.time_tracking_enabled ? timeByStage : {}}
+            />
+          ) : viewMode === "gantt" ? (
             <GanttChart
               stages={stages}
               dependencies={dependencies}
               readOnly={isClient}
               isAdmin={isAdmin}
               isWorker={isWorker}
+              userId={userId || undefined}
               workerNames={workerNames}
               progress={progress}
               onUpdateStage={isAdmin ? handleGanttUpdateStage : undefined}
+              onUpdateStatus={(stageId, status) => updateStageStatus(stageId, status)}
               onAddStage={isAdmin ? handleOpenAddStage : undefined}
               onEditStage={isAdmin ? handleOpenEditStage : undefined}
               onAddDependency={isAdmin ? handleAddDependency : undefined}
+              onRemoveStage={(stageId) => removeStage(stageId)}
+              onAssignWorker={(stageId) => setAssignStageId(stageId)}
+              timeByStage={selectedProject.time_tracking_enabled ? timeByStage : {}}
+            />
+          ) : (
+            <StageListView
+              stages={stages}
+              dependencies={dependencies}
+              readOnly={isClient}
+              isAdmin={isAdmin}
+              isWorker={isWorker}
+              userId={userId || undefined}
+              workerNames={workerNames}
+              progress={progress}
+              onUpdateStatus={(stageId, status) => updateStageStatus(stageId, status)}
+              onAddStage={isAdmin ? handleOpenAddStage : undefined}
+              onEditStage={handleOpenEditStage}
+              onAssignWorker={(stageId) => setAssignStageId(stageId)}
+              onRemoveStage={(stageId) => removeStage(stageId)}
+              timeByStage={selectedProject.time_tracking_enabled ? timeByStage : {}}
             />
           )
         ) : (
@@ -1172,7 +1238,7 @@ function ProjectsList() {
                       project_id: selectedProject.id, name: ps.name, status: "pending",
                       position: stages.length, started_at: null, completed_at: null, started_by: null, assigned_to: null, estimated_completion: null, planned_start: null,
                     });
-                    setStages([...stages, stage]);
+                    setStages((prev) => [...prev, stage]);
                   } catch (err: any) { toast.error(err.message || "Failed to add stage"); }
                 }}>
                   <Plus className="h-3 w-3 mr-1" /> {ps.name}
@@ -1849,13 +1915,69 @@ function ProjectsList() {
       }
     });
 
+  const totalPages = Math.ceil(filteredProjects.length / PAGE_SIZE);
+  const paginatedProjects = filteredProjects.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
+  const handleExportCsv = () => {
+    const columns = [
+      { key: "name", header: "Name" },
+      { key: "status", header: "Status" },
+      { key: "progress", header: "Progress (%)" },
+      { key: "client_name", header: "Client Name" },
+      { key: "client_email", header: "Client Email" },
+      { key: "client_phone", header: "Client Phone" },
+      { key: "company", header: "Company" },
+      { key: "created", header: "Created" },
+      { key: "updated", header: "Updated" },
+    ];
+    const rows = filteredProjects.map((p) => ({
+      name: p.name,
+      status: p.status,
+      progress: projectProgress[p.id] ?? 0,
+      client_name: p.client_name,
+      client_email: p.client_email,
+      client_phone: p.client_phone,
+      company: p.company_id ? companyMap[p.company_id] || "" : "",
+      created: new Date(p.created_at).toLocaleDateString(),
+      updated: new Date(p.updated_at).toLocaleDateString(),
+    }));
+    const csv = generateCsv(columns, rows);
+    downloadCsv(csv, `projects-export-${new Date().toISOString().slice(0, 10)}.csv`);
+    toast.success(`Exported ${rows.length} projects`);
+  };
+
   return (
     <div className="p-4 max-w-7xl mx-auto w-full">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold">Projects</h1>
-        {isAdmin && (
-          <Button onClick={() => setShowNew(true)}><Plus className="h-4 w-4 mr-1" /> New Project</Button>
-        )}
+        <div className="flex gap-2">
+          {filteredProjects.length > 0 && (
+            <Button variant="outline" onClick={handleExportCsv}>
+              <Download className="h-4 w-4 mr-1" /> Export
+            </Button>
+          )}
+          {isAdmin && (
+            <>
+              <Button variant="outline" onClick={async () => {
+                if (!orgId || !userId || seeding) return;
+                setSeeding(true);
+                try {
+                  const result = await createPaginationTestData(orgId, userId);
+                  toast.success(`Created ${result.projects} projects and ${result.companies} companies`);
+                  load();
+                } catch (err: any) {
+                  toast.error(err.message || "Failed to seed data");
+                } finally {
+                  setSeeding(false);
+                }
+              }} disabled={seeding}>
+                {seeding ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
+                {seeding ? "Seeding..." : "Seed Test Data"}
+              </Button>
+              <Button onClick={() => setShowNew(true)}><Plus className="h-4 w-4 mr-1" /> New Project</Button>
+            </>
+          )}
+        </div>
       </div>
 
       {projects.length > 0 && (
@@ -1919,58 +2041,61 @@ function ProjectsList() {
           </CardContent></Card>
         )
       ) : (
-        <div className="space-y-3">
-          {filteredProjects.map((p) => (
-            <Card key={p.id} className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => selectProject(p)}>
-              <CardContent className="pt-4 pb-4">
-                <div className="flex items-center gap-4">
-                  <div className="min-w-0 flex-1">
-                    <p className="font-medium truncate">{p.name}</p>
-                    {p.company_id && companyMap[p.company_id] && (
-                      <p className="text-xs text-muted-foreground flex items-center gap-1">
-                        <Building2 className="h-3 w-3" /> {companyMap[p.company_id]}
-                      </p>
-                    )}
-                    <p className="text-xs text-muted-foreground mt-1">Created {new Date(p.created_at).toLocaleDateString()}</p>
-                  </div>
-                  <div className="flex flex-col items-end gap-1 shrink-0">
-                    <div className="flex items-center gap-2 w-32">
-                      <div className="flex-1 bg-secondary rounded-full h-2">
-                        <div className="bg-primary rounded-full h-2 transition-all" style={{ width: `${projectProgress[p.id] ?? 0}%` }} />
-                      </div>
-                      <span className="text-xs text-muted-foreground font-medium">{projectProgress[p.id] ?? 0}%</span>
+        <>
+          <div className="space-y-3">
+            {paginatedProjects.map((p) => (
+              <Card key={p.id} className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => selectProject(p)}>
+                <CardContent className="pt-4 pb-4">
+                  <div className="flex items-center gap-4">
+                    <div className="min-w-0 flex-1">
+                      <p className="font-medium truncate">{p.name}</p>
+                      {p.company_id && companyMap[p.company_id] && (
+                        <p className="text-xs text-muted-foreground flex items-center gap-1">
+                          <Building2 className="h-3 w-3" /> {companyMap[p.company_id]}
+                        </p>
+                      )}
+                      <p className="text-xs text-muted-foreground mt-1">Created {new Date(p.created_at).toLocaleDateString()}</p>
                     </div>
-                    {projectSchedule[p.id] != null && (
-                      <span className={`text-xs font-medium flex items-center gap-1 ${
-                        projectSchedule[p.id]! < 0
-                          ? "text-red-600 dark:text-red-400"
-                          : projectSchedule[p.id]! === 0
-                            ? "text-green-600 dark:text-green-400"
-                            : "text-green-600 dark:text-green-400"
-                      }`}>
-                        {projectSchedule[p.id]! < 0 ? (
-                          <><AlertTriangle className="h-3 w-3" />{Math.abs(projectSchedule[p.id]!)}d behind</>
-                        ) : projectSchedule[p.id]! === 0 ? (
-                          <>On schedule</>
-                        ) : (
-                          <><TrendingUp className="h-3 w-3" />{projectSchedule[p.id]!}d ahead</>
-                        )}
-                      </span>
-                    )}
+                    <div className="flex flex-col items-end gap-1 shrink-0">
+                      <div className="flex items-center gap-2 w-32">
+                        <div className="flex-1 bg-secondary rounded-full h-2">
+                          <div className="bg-primary rounded-full h-2 transition-all" style={{ width: `${projectProgress[p.id] ?? 0}%` }} />
+                        </div>
+                        <span className="text-xs text-muted-foreground font-medium">{projectProgress[p.id] ?? 0}%</span>
+                      </div>
+                      {projectSchedule[p.id] != null && (
+                        <span className={`text-xs font-medium flex items-center gap-1 ${
+                          projectSchedule[p.id]! < 0
+                            ? "text-red-600 dark:text-red-400"
+                            : projectSchedule[p.id]! === 0
+                              ? "text-green-600 dark:text-green-400"
+                              : "text-green-600 dark:text-green-400"
+                        }`}>
+                          {projectSchedule[p.id]! < 0 ? (
+                            <><AlertTriangle className="h-3 w-3" />{Math.abs(projectSchedule[p.id]!)}d behind</>
+                          ) : projectSchedule[p.id]! === 0 ? (
+                            <>On schedule</>
+                          ) : (
+                            <><TrendingUp className="h-3 w-3" />{projectSchedule[p.id]!}d ahead</>
+                          )}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      {p.status === "archived" ? (
+                        <Badge variant="outline"><Archive className="h-3 w-3 mr-1" />Archived</Badge>
+                      ) : (
+                        <Badge className={p.status === "completed" ? "bg-green-600 text-white hover:bg-green-700" : p.status === "active" ? "bg-blue-600 text-white hover:bg-blue-700" : ""} variant={p.status === "completed" || p.status === "active" ? "default" : "secondary"}>{p.status}</Badge>
+                      )}
+                      <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    {p.status === "archived" ? (
-                      <Badge variant="outline"><Archive className="h-3 w-3 mr-1" />Archived</Badge>
-                    ) : (
-                      <Badge className={p.status === "completed" ? "bg-green-600 text-white hover:bg-green-700" : p.status === "active" ? "bg-blue-600 text-white hover:bg-blue-700" : ""} variant={p.status === "completed" || p.status === "active" ? "default" : "secondary"}>{p.status}</Badge>
-                    )}
-                    <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+          <Pagination page={page} totalPages={totalPages} totalCount={filteredProjects.length} pageSize={PAGE_SIZE} onPageChange={setPage} />
+        </>
       )}
 
       {/* New project dialog */}
