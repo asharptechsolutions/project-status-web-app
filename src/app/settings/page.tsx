@@ -15,6 +15,8 @@ import type { ClientVisibilitySettings, AutomationSettings } from "@/lib/types";
 import { BrandingSettings } from "@/components/branding-settings";
 import type { LiveBranding } from "@/components/branding-settings";
 import { EmailTemplateEditor } from "@/components/email-template-editor";
+import { WebhookSettings } from "@/components/webhook-settings";
+import { SlackSettings } from "@/components/slack-settings";
 
 type VisibilityKey = keyof Pick<
   ClientVisibilitySettings,
@@ -224,6 +226,7 @@ function SettingsContent() {
         <TabsList className="mb-4">
           <TabsTrigger value="general">General</TabsTrigger>
           <TabsTrigger value="branding">Branding & Emails</TabsTrigger>
+          <TabsTrigger value="integrations">Integrations</TabsTrigger>
         </TabsList>
 
         <TabsContent value="general" className="space-y-6">
@@ -297,6 +300,11 @@ function SettingsContent() {
         <TabsContent value="branding" className="space-y-6">
           <BrandingSettings onBrandingChange={setLiveBranding} />
           <EmailTemplateEditor liveBranding={liveBranding} />
+        </TabsContent>
+
+        <TabsContent value="integrations" className="space-y-6">
+          <WebhookSettings />
+          <SlackSettings />
         </TabsContent>
       </Tabs>
     </div>

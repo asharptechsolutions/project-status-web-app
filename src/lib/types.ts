@@ -292,3 +292,50 @@ export interface Appointment {
   slot?: AvailabilitySlot;
   project_name?: string;
 }
+
+// ============ WEBHOOKS & SLACK INTEGRATION ============
+
+export type WebhookEventType =
+  | "stage_completed"
+  | "stage_started"
+  | "project_created"
+  | "project_completed"
+  | "client_added"
+  | "member_invited";
+
+export interface Webhook {
+  id: string;
+  team_id: string;
+  name: string;
+  url: string;
+  secret: string | null;
+  events: WebhookEventType[];
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface WebhookDelivery {
+  id: string;
+  webhook_id: string;
+  team_id: string;
+  event_type: WebhookEventType;
+  payload: Record<string, unknown>;
+  status_code: number | null;
+  response_body: string | null;
+  success: boolean;
+  attempt: number;
+  error_message: string | null;
+  created_at: string;
+}
+
+export interface SlackIntegration {
+  id: string;
+  team_id: string;
+  webhook_url: string;
+  channel_name: string | null;
+  events: WebhookEventType[];
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
