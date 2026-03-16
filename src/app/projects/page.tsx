@@ -2046,9 +2046,9 @@ function ProjectsList() {
             {paginatedProjects.map((p) => (
               <Card key={p.id} className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => selectProject(p)}>
                 <CardContent className="pt-4 pb-4">
-                  <div className="flex items-center gap-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
                     <div className="min-w-0 flex-1">
-                      <p className="font-medium truncate">{p.name}</p>
+                      <p className="font-medium">{p.name}</p>
                       {p.company_id && companyMap[p.company_id] && (
                         <p className="text-xs text-muted-foreground flex items-center gap-1">
                           <Building2 className="h-3 w-3" /> {companyMap[p.company_id]}
@@ -2056,38 +2056,40 @@ function ProjectsList() {
                       )}
                       <p className="text-xs text-muted-foreground mt-1">Created {new Date(p.created_at).toLocaleDateString()}</p>
                     </div>
-                    <div className="flex flex-col items-end gap-1 shrink-0">
-                      <div className="flex items-center gap-2 w-32">
-                        <div className="flex-1 bg-secondary rounded-full h-2">
-                          <div className="bg-primary rounded-full h-2 transition-all" style={{ width: `${projectProgress[p.id] ?? 0}%` }} />
+                    <div className="flex items-center gap-3 sm:gap-2">
+                      <div className="flex flex-col items-start sm:items-end gap-1 flex-1 sm:flex-none">
+                        <div className="flex items-center gap-2 w-32">
+                          <div className="flex-1 bg-secondary rounded-full h-2">
+                            <div className="bg-primary rounded-full h-2 transition-all" style={{ width: `${projectProgress[p.id] ?? 0}%` }} />
+                          </div>
+                          <span className="text-xs text-muted-foreground font-medium">{projectProgress[p.id] ?? 0}%</span>
                         </div>
-                        <span className="text-xs text-muted-foreground font-medium">{projectProgress[p.id] ?? 0}%</span>
+                        {projectSchedule[p.id] != null && (
+                          <span className={`text-xs font-medium flex items-center gap-1 ${
+                            projectSchedule[p.id]! < 0
+                              ? "text-red-600 dark:text-red-400"
+                              : projectSchedule[p.id]! === 0
+                                ? "text-green-600 dark:text-green-400"
+                                : "text-green-600 dark:text-green-400"
+                          }`}>
+                            {projectSchedule[p.id]! < 0 ? (
+                              <><AlertTriangle className="h-3 w-3" />{Math.abs(projectSchedule[p.id]!)}d behind</>
+                            ) : projectSchedule[p.id]! === 0 ? (
+                              <>On schedule</>
+                            ) : (
+                              <><TrendingUp className="h-3 w-3" />{projectSchedule[p.id]!}d ahead</>
+                            )}
+                          </span>
+                        )}
                       </div>
-                      {projectSchedule[p.id] != null && (
-                        <span className={`text-xs font-medium flex items-center gap-1 ${
-                          projectSchedule[p.id]! < 0
-                            ? "text-red-600 dark:text-red-400"
-                            : projectSchedule[p.id]! === 0
-                              ? "text-green-600 dark:text-green-400"
-                              : "text-green-600 dark:text-green-400"
-                        }`}>
-                          {projectSchedule[p.id]! < 0 ? (
-                            <><AlertTriangle className="h-3 w-3" />{Math.abs(projectSchedule[p.id]!)}d behind</>
-                          ) : projectSchedule[p.id]! === 0 ? (
-                            <>On schedule</>
-                          ) : (
-                            <><TrendingUp className="h-3 w-3" />{projectSchedule[p.id]!}d ahead</>
-                          )}
-                        </span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      {p.status === "archived" ? (
-                        <Badge variant="outline"><Archive className="h-3 w-3 mr-1" />Archived</Badge>
-                      ) : (
-                        <Badge className={p.status === "completed" ? "bg-green-600 text-white hover:bg-green-700" : p.status === "active" ? "bg-blue-600 text-white hover:bg-blue-700" : ""} variant={p.status === "completed" || p.status === "active" ? "default" : "secondary"}>{p.status}</Badge>
-                      )}
-                      <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                      <div className="flex items-center gap-2 shrink-0">
+                        {p.status === "archived" ? (
+                          <Badge variant="outline"><Archive className="h-3 w-3 mr-1" />Archived</Badge>
+                        ) : (
+                          <Badge className={p.status === "completed" ? "bg-green-600 text-white hover:bg-green-700" : p.status === "active" ? "bg-blue-600 text-white hover:bg-blue-700" : ""} variant={p.status === "completed" || p.status === "active" ? "default" : "secondary"}>{p.status}</Badge>
+                        )}
+                        <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                      </div>
                     </div>
                   </div>
                 </CardContent>
