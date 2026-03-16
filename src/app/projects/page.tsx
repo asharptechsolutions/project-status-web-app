@@ -18,7 +18,7 @@ import {
   createPaginationTestData,
 } from "@/lib/data";
 import type { Project, ProjectStage, Template, PresetStage, Member, Company, StageDependency, AutomationSettings, TimeEntry } from "@/lib/types";
-import { runStageAutomations, runAssignmentAutomations, AUTOMATION_DEFAULTS } from "@/lib/automations";
+import { runStageAutomations, runAssignmentAutomations, dispatchWebhookEvent, AUTOMATION_DEFAULTS } from "@/lib/automations";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -566,6 +566,7 @@ function ProjectsList() {
       setNewClientName(""); setNewClientEmail(""); setNewClientPhone(""); setSelectedTemplate("");
       setSelectedCompanyId(null); setShowNewCompany(false); setShowNew(false);
       toast.success("Project created");
+      if (orgId) dispatchWebhookEvent("project_created", orgId, { project_id: createdProject.id, project_name: createdProject.name, created_by_name: member?.name || "" });
       load();
       selectProject(createdProject);
     } catch (err: any) {

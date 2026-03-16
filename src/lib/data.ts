@@ -22,6 +22,9 @@ import type {
   TimeEntry,
   OrgBranding,
   EmailTemplate,
+  Webhook,
+  WebhookDelivery,
+  SlackIntegration,
 } from "./types";
 
 // ============ PROJECT CLIENTS (junction) ============
@@ -1399,4 +1402,83 @@ export async function createPaginationTestData(orgId: string, userId: string): P
   }
 
   return { projects: projectCount, companies: companyCount };
+}
+
+// ============ WEBHOOKS ============
+
+export async function getWebhooks(orgId: string): Promise<Webhook[]> {
+  const { data, error } = await supabase
+    .from("webhooks")
+    .select("*")
+    .eq("team_id", orgId)
+    .order("created_at", { ascending: false });
+  if (error) throw new Error(error.message);
+  return (data || []) as Webhook[];
+}
+
+export async function createWebhook(webhook: Omit<Webhook, "id" | "created_at" | "updated_at">): Promise<Webhook> {
+  const { data, error } = await supabase
+    .from("webhooks")
+    .insert(webhook)
+    .select("*")
+    .single();
+  if (error) throw new Error(error.message);
+  return data as Webhook;
+}
+
+export async function updateWebhook(id: string, updates: Partial<Webhook>): Promise<void> {
+  const { error } = await supabase
+    .from("webhooks")
+    .update({ ...updates, updated_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) throw new Error(error.message);
+}
+
+export async function deleteWebhook(id: string): Promise<void> {
+  const { error } = await supabase
+    .from("webhooks")
+    .delete()
+    .eq("id", id);
+  if (error) throw new Error(error.message);
+}
+
+export async function getWebhookDeliveries(webhookId: string, limit: number = 20): Promise<WebhookDelivery[]> {
+  const { data, error } = await supabase
+    .from("webhook_deliveries")
+    .select("*")
+    .eq("webhook_id", webhookId)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (error) throw new Error(error.message);
+  return (data || []) as WebhookDelivery[];
+}
+
+// ============ SLACK INTEGRATION ============
+
+export async function getSlackIntegration(orgId: string): Promise<SlackIntegration | null> {
+  const { data, error } = await supabase
+    .from("slack_integrations")
+    .select("*")
+    .eq("team_id", orgId)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return data as SlackIntegration | null;
+}
+
+export async function upsertSlackIntegration(integration: Omit<SlackIntegration, "id" | "created_at" | "updated_at">): Promise<void> {
+  const { error } = await supabase
+    .from("slack_integrations")
+    .upsert(
+      { ...integration, updated_at: new Date().toISOString() },
+      { onConflict: "team_id" }
+    );
+  if (error) throw new Error(error.message);
+}
+
+export async function deleteSlackIntegration(orgId: string): Promise<void> {
+  const { error } = await supabase
+    .from("slack_integrations")
+    .delete()
+    .eq("team_id", orgId);
+  if (error) throw new Error(error.message);
 }

@@ -1,5 +1,18 @@
 import { updateProjectStage, updateProject } from "./data";
-import type { AutomationSettings, ProjectStage, Project, StageDependency } from "./types";
+import type { AutomationSettings, ProjectStage, Project, StageDependency, WebhookEventType } from "./types";
+
+/** Fire-and-forget webhook dispatch for an event */
+export function dispatchWebhookEvent(
+  event: WebhookEventType,
+  teamId: string,
+  payload: Record<string, unknown>
+): void {
+  fetch("/api/webhooks/dispatch", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ event, teamId, payload }),
+  }).catch(() => {});
+}
 
 /** Default settings when no row exists yet (preserves existing behavior) */
 export const AUTOMATION_DEFAULTS: Omit<AutomationSettings, "id" | "team_id" | "created_at" | "updated_at"> = {
@@ -43,6 +56,16 @@ export async function runStageAutomations(
 
   const now = new Date().toISOString();
 
+  // Dispatch webhook for stage completion
+  const completedStageName = updatedStages.find((st) => st.id === changedStageId)?.name;
+  dispatchWebhookEvent("stage_completed", ctx.project.team_id, {
+    project_id: ctx.project.id,
+    project_name: ctx.project.name,
+    stage_id: changedStageId,
+    stage_name: completedStageName || "",
+    completed_at: now,
+  });
+
   // 1. Auto-start next stage by position
   if (s.auto_start_next_stage) {
     const completedStage = updatedStages.find((st) => st.id === changedStageId);
@@ -60,6 +83,13 @@ export async function runStageAutomations(
         updatedStages = updatedStages.map((st) =>
           st.id === nextStage.id ? { ...st, ...updates } : st
         );
+        dispatchWebhookEvent("stage_started", ctx.project.team_id, {
+          project_id: ctx.project.id,
+          project_name: ctx.project.name,
+          stage_id: nextStage.id,
+          stage_name: nextStage.name,
+          started_at: now,
+        });
       }
     }
   }
@@ -94,6 +124,13 @@ export async function runStageAutomations(
         updatedStages = updatedStages.map((st) =>
           st.id === targetId ? { ...st, ...updates } : st
         );
+        dispatchWebhookEvent("stage_started", ctx.project.team_id, {
+          project_id: ctx.project.id,
+          project_name: ctx.project.name,
+          stage_id: targetId,
+          stage_name: targetStage.name,
+          started_at: now,
+        });
       }
     }
   }
@@ -104,6 +141,11 @@ export async function runStageAutomations(
     if (allDone && ctx.project.status !== "completed") {
       await updateProject(ctx.project.id, { status: "completed" });
       projectCompleted = true;
+      dispatchWebhookEvent("project_completed", ctx.project.team_id, {
+        project_id: ctx.project.id,
+        project_name: ctx.project.name,
+        completed_at: now,
+      });
     }
   }
 
