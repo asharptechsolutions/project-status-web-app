@@ -1948,17 +1948,17 @@ function ProjectsList() {
 
   return (
     <div className="p-4 max-w-7xl mx-auto w-full">
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold">Projects</h1>
-        <div className="flex gap-2">
+      <div className="flex items-center justify-between mb-6 gap-2">
+        <h1 className="text-2xl font-bold shrink-0">Projects</h1>
+        <div className="flex gap-2 flex-wrap justify-end">
           {filteredProjects.length > 0 && (
-            <Button variant="outline" onClick={handleExportCsv}>
+            <Button variant="outline" size="sm" onClick={handleExportCsv}>
               <Download className="h-4 w-4 mr-1" /> Export
             </Button>
           )}
           {isAdmin && (
             <>
-              <Button variant="outline" onClick={async () => {
+              <Button variant="outline" size="sm" className="hidden sm:inline-flex" onClick={async () => {
                 if (!orgId || !userId || seeding) return;
                 setSeeding(true);
                 try {
@@ -1974,7 +1974,7 @@ function ProjectsList() {
                 {seeding ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
                 {seeding ? "Seeding..." : "Seed Test Data"}
               </Button>
-              <Button onClick={() => setShowNew(true)}><Plus className="h-4 w-4 mr-1" /> New Project</Button>
+              <Button size="sm" onClick={() => setShowNew(true)}><Plus className="h-4 w-4 mr-1" /> New Project</Button>
             </>
           )}
         </div>
