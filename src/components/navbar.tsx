@@ -3,7 +3,8 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTheme } from "next-themes";
-import { Menu, Sun, Moon, Workflow, LogOut } from "lucide-react";
+import { Menu, Sun, Moon, Workflow, LogOut, Search } from "lucide-react";
+import { openCommandPalette } from "@/components/command-palette";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
@@ -63,6 +64,26 @@ export function Navbar() {
         </nav>
 
         <div className="flex items-center gap-1 ml-auto">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="rounded-full gap-2 text-muted-foreground hidden sm:inline-flex"
+            onClick={openCommandPalette}
+          >
+            <Search className="h-4 w-4" />
+            <span className="text-xs">Search...</span>
+            <kbd className="pointer-events-none h-5 select-none items-center gap-0.5 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium opacity-100 hidden lg:inline-flex">
+              <span className="text-xs">⌘</span>K
+            </kbd>
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="rounded-full sm:hidden"
+            onClick={openCommandPalette}
+          >
+            <Search className="h-4 w-4" />
+          </Button>
           <Button
             variant="ghost"
             size="icon"
