@@ -272,9 +272,9 @@ function Dashboard() {
                   <Link key={p.id} href={`/projects/?id=${p.id}`}>
                     <Card className="cursor-pointer hover:shadow-md hover:border-primary/10 transition-all duration-200 group">
                       <CardContent className="pt-4 pb-4">
-                        <div className="flex items-center gap-4">
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
                           <div className="min-w-0 flex-1">
-                            <p className="font-medium truncate group-hover:text-primary transition-colors">{p.name}</p>
+                            <p className="font-medium group-hover:text-primary transition-colors">{p.name}</p>
                             {p.company_id && companyMap[p.company_id] && (
                               <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
                                 <Building2 className="h-3 w-3" /> {companyMap[p.company_id]}
@@ -282,33 +282,35 @@ function Dashboard() {
                             )}
                             <p className="text-xs text-muted-foreground mt-0.5">Created {new Date(p.created_at).toLocaleDateString()}</p>
                           </div>
-                          <div className="flex flex-col items-end gap-1.5 shrink-0">
-                            <div className="flex items-center gap-2 w-32">
-                              <div className="flex-1 bg-secondary rounded-full h-1.5 overflow-hidden">
-                                <div
-                                  className="bg-primary rounded-full h-1.5 transition-all duration-500"
-                                  style={{ width: `${projectProgress[p.id] ?? 0}%` }}
-                                />
+                          <div className="flex items-center gap-3 sm:gap-2">
+                            <div className="flex flex-col items-start sm:items-end gap-1.5 flex-1 sm:flex-none">
+                              <div className="flex items-center gap-2 w-32">
+                                <div className="flex-1 bg-secondary rounded-full h-1.5 overflow-hidden">
+                                  <div
+                                    className="bg-primary rounded-full h-1.5 transition-all duration-500"
+                                    style={{ width: `${projectProgress[p.id] ?? 0}%` }}
+                                  />
+                                </div>
+                                <span className="text-xs text-muted-foreground font-medium tabular-nums">{projectProgress[p.id] ?? 0}%</span>
                               </div>
-                              <span className="text-xs text-muted-foreground font-medium tabular-nums">{projectProgress[p.id] ?? 0}%</span>
+                              {projectSchedule[p.id] != null && (
+                                <span className={`text-xs font-medium flex items-center gap-1 ${
+                                  projectSchedule[p.id]! < 0
+                                    ? "text-red-600 dark:text-red-400"
+                                    : "text-emerald-600 dark:text-emerald-400"
+                                }`}>
+                                  {projectSchedule[p.id]! < 0 ? (
+                                    <><AlertTriangle className="h-3 w-3" />{Math.abs(projectSchedule[p.id]!)}d behind</>
+                                  ) : projectSchedule[p.id]! === 0 ? (
+                                    <>On schedule</>
+                                  ) : (
+                                    <><TrendingUp className="h-3 w-3" />{projectSchedule[p.id]!}d ahead</>
+                                  )}
+                                </span>
+                              )}
                             </div>
-                            {projectSchedule[p.id] != null && (
-                              <span className={`text-xs font-medium flex items-center gap-1 ${
-                                projectSchedule[p.id]! < 0
-                                  ? "text-red-600 dark:text-red-400"
-                                  : "text-emerald-600 dark:text-emerald-400"
-                              }`}>
-                                {projectSchedule[p.id]! < 0 ? (
-                                  <><AlertTriangle className="h-3 w-3" />{Math.abs(projectSchedule[p.id]!)}d behind</>
-                                ) : projectSchedule[p.id]! === 0 ? (
-                                  <>On schedule</>
-                                ) : (
-                                  <><TrendingUp className="h-3 w-3" />{projectSchedule[p.id]!}d ahead</>
-                                )}
-                              </span>
-                            )}
+                            <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0 group-hover:text-primary group-hover:translate-x-0.5 transition-all" />
                           </div>
-                          <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0 group-hover:text-primary group-hover:translate-x-0.5 transition-all" />
                         </div>
                       </CardContent>
                     </Card>
