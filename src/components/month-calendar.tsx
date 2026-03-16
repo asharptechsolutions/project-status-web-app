@@ -132,7 +132,7 @@ export function MonthCalendar({
             <div
               key={i}
               className={cn(
-                "min-h-[90px] sm:min-h-[100px] p-2 cursor-pointer transition-colors relative",
+                "min-h-[70px] sm:min-h-[100px] p-1.5 sm:p-2 cursor-pointer transition-colors relative",
                 !isLastRow && "border-b",
                 !isLastCol && "border-r",
                 day ? "hover:bg-accent/40" : "cursor-default",
@@ -167,15 +167,17 @@ export function MonthCalendar({
                   </div>
                   <div className="flex flex-col gap-1 mt-1.5">
                     {availableCount > 0 && (
-                      <span className="inline-flex items-center gap-1 text-[11px] font-medium text-blue-600 dark:text-blue-400 bg-blue-500/10 rounded-full px-1.5 py-0.5 w-fit">
-                        <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
-                        {availableCount} open
+                      <span className="inline-flex items-center gap-1 text-[11px] font-medium text-blue-600 dark:text-blue-400 bg-blue-500/10 rounded-full px-1 sm:px-1.5 py-0.5 w-fit">
+                        <span className="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0" />
+                        <span className="hidden sm:inline">{availableCount} open</span>
+                        <span className="sm:hidden text-[10px]">{availableCount}</span>
                       </span>
                     )}
                     {bookedCount > 0 && (
-                      <span className="inline-flex items-center gap-1 text-[11px] font-medium text-green-600 dark:text-green-400 bg-green-500/10 rounded-full px-1.5 py-0.5 w-fit">
-                        <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
-                        {bookedCount} booked
+                      <span className="inline-flex items-center gap-1 text-[11px] font-medium text-green-600 dark:text-green-400 bg-green-500/10 rounded-full px-1 sm:px-1.5 py-0.5 w-fit">
+                        <span className="w-1.5 h-1.5 rounded-full bg-green-500 shrink-0" />
+                        <span className="hidden sm:inline">{bookedCount} booked</span>
+                        <span className="sm:hidden text-[10px]">{bookedCount}</span>
                       </span>
                     )}
                   </div>
