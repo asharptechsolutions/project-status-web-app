@@ -339,3 +339,47 @@ export interface SlackIntegration {
   created_at: string;
   updated_at: string;
 }
+
+// ============ ACTIVITY LOG ============
+
+export type ActivityAction =
+  | "created"
+  | "updated"
+  | "deleted"
+  | "started"
+  | "completed"
+  | "assigned"
+  | "unassigned"
+  | "invited"
+  | "archived"
+  | "restored"
+  | "uploaded"
+  | "booked"
+  | "cancelled";
+
+export type ActivityEntityType =
+  | "project"
+  | "stage"
+  | "member"
+  | "company"
+  | "template"
+  | "preset_stage"
+  | "appointment"
+  | "file"
+  | "settings"
+  | "webhook"
+  | "slack_integration";
+
+export interface ActivityLog {
+  id: string;
+  team_id: string;
+  actor_id: string;
+  actor_name: string;
+  action: ActivityAction;
+  entity_type: ActivityEntityType;
+  entity_id: string | null;
+  entity_name: string;
+  project_id: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+}

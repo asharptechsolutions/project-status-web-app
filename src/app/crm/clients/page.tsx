@@ -15,12 +15,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Pencil, Plus, Trash2, UserCircle, Loader2, Mail, CheckCircle2, Clock, RefreshCw, ArrowLeft, Search, X, ArrowUpDown, Building2, Eye, Download } from "lucide-react";
 import { toast } from "sonner";
+import { trackActivity } from "@/lib/activity";
 import { EmptyState } from "@/components/empty-state";
 import { generateCsv, downloadCsv } from "@/lib/csv";
 import { Pagination } from "@/components/pagination";
 
 function ClientsInner() {
-  const { orgId, userId, isAdmin } = useAuth();
+  const { orgId, userId, isAdmin, member } = useAuth();
   const router = useRouter();
   const [members, setMembers] = useState<Member[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
@@ -87,6 +88,16 @@ function ClientsInner() {
       setShowInvite(false);
       setInviteName(""); setInviteEmail(""); setInvitePhone(""); setInviteCompanyId(null);
       toast.success(data.invited ? `Invitation sent to ${inviteEmail}` : `${inviteName} added as client`);
+      trackActivity({
+        teamId: orgId,
+        actorId: userId!,
+        actorName: member?.name || "",
+        action: "invited",
+        entityType: "member",
+        entityName: inviteName.trim(),
+        projectId: null,
+        metadata: { role: "client", email: inviteEmail.toLowerCase().trim() },
+      });
       load();
     } catch (err: any) {
       toast.error(err.message || "Failed to invite client");
@@ -141,6 +152,17 @@ function ClientsInner() {
       if (!res.ok) throw new Error(data.error || "Failed to update client");
       setEditMember(null);
       toast.success("Client updated");
+      trackActivity({
+        teamId: editMember.team_id,
+        actorId: userId!,
+        actorName: member?.name || "",
+        action: "updated",
+        entityType: "member",
+        entityId: editMember.id,
+        entityName: editName.trim(),
+        projectId: null,
+        metadata: { email: editEmail.toLowerCase().trim(), role: "client", companyId: editCompanyId },
+      });
       load();
     } catch (err: any) {
       toast.error(err.message || "Failed to update client");
@@ -342,6 +364,17 @@ function ClientsInner() {
                                 const data = await res.json();
                                 if (!res.ok) throw new Error(data.error || "Failed to remove client");
                                 toast.success("Removed");
+                                trackActivity({
+                                  teamId: m.team_id,
+                                  actorId: userId!,
+                                  actorName: member?.name || "",
+                                  action: "deleted",
+                                  entityType: "member",
+                                  entityId: m.id,
+                                  entityName: m.name || m.email,
+                                  projectId: null,
+                                  metadata: { role: "client", email: m.email },
+                                });
                                 load();
                               } catch (err: any) { toast.error(err.message); }
                             }}>Remove</AlertDialogAction>
