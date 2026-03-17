@@ -15,9 +15,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Plus, Loader2, Mail, Building2, Wrench, Eye, ChevronRight } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
+import { trackActivity } from "@/lib/activity";
 
 function CRMInner() {
-  const { orgId, isAdmin } = useAuth();
+  const { orgId, userId, isAdmin, member } = useAuth();
   const router = useRouter();
   const [members, setMembers] = useState<Member[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
@@ -69,6 +70,15 @@ function CRMInner() {
         address: companyAddress.trim() || "",
       });
       toast.success("Company created");
+      trackActivity({
+        teamId: orgId,
+        actorId: userId!,
+        actorName: member?.name || "",
+        action: "created",
+        entityType: "company",
+        entityName: companyName.trim(),
+        projectId: null,
+      });
       setShowCompanyDialog(false);
       setCompanyName(""); setCompanyEmail(""); setCompanyPhone(""); setCompanyAddress("");
       load();
@@ -100,6 +110,16 @@ function CRMInner() {
       setInviteRole(null);
       setInviteName(""); setInviteEmail(""); setInvitePhone(""); setInviteCompanyId(null);
       toast.success(data.invited ? `Invitation sent to ${inviteEmail}` : `${inviteName} added to team`);
+      trackActivity({
+        teamId: orgId,
+        actorId: userId!,
+        actorName: member?.name || "",
+        action: "invited",
+        entityType: "member",
+        entityName: inviteName.trim(),
+        projectId: null,
+        metadata: { role: inviteRole, email: inviteEmail.toLowerCase().trim() },
+      });
       load();
     } catch (err: any) {
       toast.error(err.message || "Failed to invite member");

@@ -19,6 +19,7 @@ import {
 } from "@/lib/data";
 import type { Project, ProjectStage, Template, PresetStage, Member, Company, StageDependency, AutomationSettings, TimeEntry } from "@/lib/types";
 import { runStageAutomations, runAssignmentAutomations, dispatchWebhookEvent, AUTOMATION_DEFAULTS } from "@/lib/automations";
+import { trackActivity } from "@/lib/activity";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -385,6 +386,16 @@ function ProjectsList() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to invite client");
       toast.success(data.invited ? `Invitation sent to ${email}` : `${name} added as client`);
+      trackActivity({
+        teamId: orgId,
+        actorId: userId || "",
+        actorName: member?.name || "",
+        action: data.invited ? "invited" : "created",
+        entityType: "member",
+        entityId: data.userId,
+        entityName: name.trim(),
+        metadata: { email: email.toLowerCase().trim(), role: "client", invited: data.invited },
+      });
       // Refresh members to get the new client
       const updatedMembers = await getMembers(orgId);
       setMembers(updatedMembers);
@@ -450,6 +461,19 @@ function ProjectsList() {
       }
       setAssignStageId(null);
       toast.success(workerId ? "Worker assigned" : "Worker unassigned");
+      const assignedStage = stages.find((s) => s.id === assignStageId);
+      const assignedWorker = workerId ? workerMembers.find((w) => w.user_id === workerId) : null;
+      trackActivity({
+        teamId: orgId!,
+        actorId: userId || "",
+        actorName: member?.name || "",
+        action: workerId ? "assigned" : "unassigned",
+        entityType: "stage",
+        entityId: assignStageId,
+        entityName: assignedStage?.name,
+        projectId: selectedProject?.id,
+        metadata: { workerName: assignedWorker?.name || null, workerId: workerId || null, project_name: selectedProject?.name },
+      });
     } catch (err: any) {
       toast.error(err.message || "Failed to assign worker");
     }
@@ -473,6 +497,16 @@ function ProjectsList() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to invite worker");
       toast.success(data.invited ? `Invitation sent to ${newWorkerEmail}` : `${newWorkerName} added as worker`);
+      trackActivity({
+        teamId: orgId,
+        actorId: userId || "",
+        actorName: member?.name || "",
+        action: data.invited ? "invited" : "created",
+        entityType: "member",
+        entityId: data.userId,
+        entityName: newWorkerName.trim(),
+        metadata: { email: newWorkerEmail.toLowerCase().trim(), role: "worker", invited: data.invited },
+      });
       const updatedMembers = await getMembers(orgId);
       setMembers(updatedMembers);
       setShowNewWorker(false);
@@ -514,6 +548,15 @@ function ProjectsList() {
       // New company has no clients yet
       clientSetter([]);
       toast.success("Company created");
+      trackActivity({
+        teamId: orgId,
+        actorId: userId || "",
+        actorName: member?.name || "",
+        action: "created",
+        entityType: "company",
+        entityId: id,
+        entityName: newCompanyName.trim(),
+      });
     } catch (err: any) {
       toast.error(err.message || "Failed to create company");
     } finally {
@@ -566,6 +609,17 @@ function ProjectsList() {
       setNewClientName(""); setNewClientEmail(""); setNewClientPhone(""); setSelectedTemplate("");
       setSelectedCompanyId(null); setShowNewCompany(false); setShowNew(false);
       toast.success("Project created");
+      trackActivity({
+        teamId: orgId,
+        actorId: userId,
+        actorName: member?.name || "",
+        action: "created",
+        entityType: "project",
+        entityId: id,
+        entityName: newName.trim(),
+        projectId: id,
+        metadata: { templateUsed: selectedTemplate ? templates.find((t) => t.id === selectedTemplate)?.name : null, project_name: newName.trim() },
+      });
       if (orgId) dispatchWebhookEvent("project_created", orgId, { project_id: createdProject.id, project_name: createdProject.name, created_by_name: member?.name || "" });
       load();
       selectProject(createdProject);
@@ -787,6 +841,23 @@ function ProjectsList() {
           });
         }
         toast.success("Stage updated");
+        trackActivity({
+          teamId: orgId!,
+          actorId: userId || "",
+          actorName: member?.name || "",
+          action: currentStage && stageModalStatus !== currentStage.status
+            ? (stageModalStatus === "completed" ? "completed" : stageModalStatus === "in_progress" ? "started" : "updated")
+            : "updated",
+          entityType: "stage",
+          entityId: editingStageId,
+          entityName: stageModalName.trim(),
+          projectId: selectedProject.id,
+          metadata: {
+            ...(currentStage && stageModalStatus !== currentStage.status ? { oldStatus: currentStage.status, newStatus: stageModalStatus } : {}),
+            ...(stageModalWorker !== currentStage?.assigned_to ? { workerChanged: true, newWorker: stageModalWorker } : {}),
+            project_name: selectedProject.name,
+          },
+        });
       } else {
         const stage = await createProjectStage({
           project_id: selectedProject.id,
@@ -810,6 +881,17 @@ function ProjectsList() {
           });
         }
         toast.success("Stage added");
+        trackActivity({
+          teamId: orgId!,
+          actorId: userId || "",
+          actorName: member?.name || "",
+          action: "created",
+          entityType: "stage",
+          entityId: stage.id,
+          entityName: stageModalName.trim(),
+          projectId: selectedProject.id,
+          metadata: { assignedTo: stageModalWorker || null, project_name: selectedProject.name },
+        });
       }
       setShowStageModal(false);
     } catch (err: any) {
@@ -870,8 +952,31 @@ function ProjectsList() {
         userId,
       });
       setStages(updatedStages);
+      const updatedStageName = stages.find((s) => s.id === stageId)?.name;
+      trackActivity({
+        teamId: orgId!,
+        actorId: userId,
+        actorName: member?.name || "",
+        action: status === "completed" ? "completed" : status === "in_progress" ? "started" : "updated",
+        entityType: "stage",
+        entityId: stageId,
+        entityName: updatedStageName,
+        projectId: selectedProject.id,
+        metadata: { newStatus: status, project_name: selectedProject.name },
+      });
       if (projectCompleted) {
         setSelectedProjectRaw({ ...selectedProject, status: "completed" });
+        trackActivity({
+          teamId: orgId!,
+          actorId: userId,
+          actorName: member?.name || "",
+          action: "completed",
+          entityType: "project",
+          entityId: selectedProject.id,
+          entityName: selectedProject.name,
+          projectId: selectedProject.id,
+          metadata: { completedViaAutomation: true, project_name: selectedProject.name },
+        });
         load();
       }
     } catch (err: any) {
@@ -881,6 +986,7 @@ function ProjectsList() {
 
   const removeStage = async (stageId: string) => {
     try {
+      const removedStage = stages.find((s) => s.id === stageId);
       // Clear active timer if it's on this stage (cascade will delete the entry)
       if (activeTimer && activeTimer.stage_id === stageId) {
         setActiveTimer(null);
@@ -890,19 +996,57 @@ function ProjectsList() {
       setStages((prev) => prev.filter((s) => s.id !== stageId));
       setDependencies((prev) => prev.filter((d) => d.source_stage_id !== stageId && d.target_stage_id !== stageId));
       setProjectTimeEntries((prev) => prev.filter((e) => e.stage_id !== stageId));
+      trackActivity({
+        teamId: orgId!,
+        actorId: userId || "",
+        actorName: member?.name || "",
+        action: "deleted",
+        entityType: "stage",
+        entityId: stageId,
+        entityName: removedStage?.name,
+        projectId: selectedProject?.id,
+        metadata: { project_name: selectedProject?.name },
+      });
     } catch (err: any) {
       toast.error(err.message || "Failed to remove stage");
     }
   };
 
   const handleDelete = async (id: string) => {
-    try { await deleteProject(id); selectProject(null); toast.success("Project deleted"); load(); }
-    catch (err: any) { toast.error(err.message || "Failed to delete project"); }
+    try {
+      const deletedName = selectedProject?.name;
+      await deleteProject(id); selectProject(null); toast.success("Project deleted");
+      trackActivity({
+        teamId: orgId!,
+        actorId: userId || "",
+        actorName: member?.name || "",
+        action: "deleted",
+        entityType: "project",
+        entityId: id,
+        entityName: deletedName,
+        projectId: id,
+        metadata: { project_name: deletedName },
+      });
+      load();
+    } catch (err: any) { toast.error(err.message || "Failed to delete project"); }
   };
 
   const handleArchive = async (id: string) => {
-    try { await updateProject(id, { status: "archived" }); selectProject(null); toast.success("Project archived"); load(); }
-    catch (err: any) { toast.error(err.message || "Failed to archive project"); }
+    try {
+      await updateProject(id, { status: "archived" }); selectProject(null); toast.success("Project archived");
+      trackActivity({
+        teamId: orgId!,
+        actorId: userId || "",
+        actorName: member?.name || "",
+        action: "archived",
+        entityType: "project",
+        entityId: id,
+        entityName: selectedProject?.name,
+        projectId: id,
+        metadata: { project_name: selectedProject?.name },
+      });
+      load();
+    } catch (err: any) { toast.error(err.message || "Failed to archive project"); }
   };
 
   const handleRestore = async (id: string) => {
@@ -911,7 +1055,19 @@ function ProjectsList() {
     try {
       await updateProject(id, { status: allDone ? "completed" : "active" });
       setSelectedProjectRaw({ ...selectedProject, status: allDone ? "completed" : "active" });
-      toast.success("Project restored"); load();
+      toast.success("Project restored");
+      trackActivity({
+        teamId: orgId!,
+        actorId: userId || "",
+        actorName: member?.name || "",
+        action: "restored",
+        entityType: "project",
+        entityId: id,
+        entityName: selectedProject.name,
+        projectId: id,
+        metadata: { restoredStatus: allDone ? "completed" : "active", project_name: selectedProject.name },
+      });
+      load();
     } catch (err: any) { toast.error(err.message || "Failed to restore project"); }
   };
 
@@ -953,7 +1109,22 @@ function ProjectsList() {
         time_tracking_require_notes: editTimeRequireNotes,
       });
       setShowEdit(false);
-      toast.success("Project updated"); load();
+      toast.success("Project updated");
+      trackActivity({
+        teamId: orgId!,
+        actorId: userId || "",
+        actorName: member?.name || "",
+        action: "updated",
+        entityType: "project",
+        entityId: selectedProject.id,
+        entityName: editName.trim(),
+        projectId: selectedProject.id,
+        metadata: {
+          ...(editName.trim() !== selectedProject.name ? { oldName: selectedProject.name, newName: editName.trim() } : {}),
+          project_name: editName.trim(),
+        },
+      });
+      load();
     } catch (err: any) { toast.error(err.message || "Failed to update project"); }
   };
 
@@ -971,8 +1142,19 @@ function ProjectsList() {
         created_by: userId,
       });
       setShowSaveTemplate(false);
+      const savedTemplateName = templateName.trim();
       setTemplateName("");
       toast.success("Template saved");
+      trackActivity({
+        teamId: orgId,
+        actorId: userId,
+        actorName: member?.name || "",
+        action: "created",
+        entityType: "template",
+        entityName: savedTemplateName,
+        projectId: selectedProject.id,
+        metadata: { fromProject: selectedProject.name, stageCount: stages.length, project_name: selectedProject.name },
+      });
       const updatedTemplates = await getTemplates(orgId);
       setTemplates(updatedTemplates);
     } catch (err: any) {
@@ -1800,6 +1982,18 @@ function ProjectsList() {
                                 await removeProjectClient(selectedProject.id, cid);
                                 setProjectClientIds((prev) => prev.filter((id) => id !== cid));
                                 toast.success("Client removed");
+                                const removedClient = clientMembers.find((m) => m.user_id === cid);
+                                trackActivity({
+                                  teamId: orgId!,
+                                  actorId: userId || "",
+                                  actorName: member?.name || "",
+                                  action: "unassigned",
+                                  entityType: "member",
+                                  entityId: cid,
+                                  entityName: removedClient?.name,
+                                  projectId: selectedProject.id,
+                                  metadata: { role: "client", project_name: selectedProject.name },
+                                });
                               } catch (err: any) { toast.error(err.message || "Failed to remove client"); }
                             }}
                             className="ml-1 hover:text-destructive"
@@ -1826,6 +2020,18 @@ function ProjectsList() {
                             await addProjectClient(selectedProject.id, v);
                             setProjectClientIds((prev) => [...prev, v]);
                             toast.success("Client added");
+                            const addedClient = clientMembers.find((m) => m.user_id === v);
+                            trackActivity({
+                              teamId: orgId!,
+                              actorId: userId || "",
+                              actorName: member?.name || "",
+                              action: "assigned",
+                              entityType: "member",
+                              entityId: v,
+                              entityName: addedClient?.name,
+                              projectId: selectedProject.id,
+                              metadata: { role: "client", project_name: selectedProject.name },
+                            });
                           } catch (err: any) { toast.error(err.message || "Failed to add client"); }
                           finally { setAddingClient(false); }
                         }}

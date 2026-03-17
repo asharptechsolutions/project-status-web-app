@@ -21,6 +21,7 @@ import {
   LayoutTemplate,
   Users,
   Settings,
+  Activity,
   Plus,
   UserPlus,
   Building2,
@@ -141,6 +142,10 @@ export function CommandPalette() {
                   <CommandItem onSelect={() => handleSelect(() => router.push("/crm/"))}>
                     <Users className="text-muted-foreground" />
                     <span>CRM</span>
+                  </CommandItem>
+                  <CommandItem onSelect={() => handleSelect(() => router.push("/activity/"))}>
+                    <Activity className="text-muted-foreground" />
+                    <span>Activity Log</span>
                   </CommandItem>
                   <CommandItem onSelect={() => handleSelect(() => router.push("/settings/"))}>
                     <Settings className="text-muted-foreground" />

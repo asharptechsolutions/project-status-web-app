@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Plus, Trash2, ChevronRight, Pencil, GripVertical } from "lucide-react";
 import { toast } from "sonner";
+import { trackActivity } from "@/lib/activity";
 
 const SAMPLE_TEMPLATES = [
   { name: "Standard Manufacturing", stages: ["Process Order", "Order Supplies", "Metal Cutting", "Painting Station", "Final Prep", "Shipping"] },
@@ -21,7 +22,7 @@ const SAMPLE_TEMPLATES = [
 ];
 
 function TemplatesInner() {
-  const { orgId, userId, isAdmin } = useAuth();
+  const { orgId, userId, isAdmin, member } = useAuth();
   const [templates, setTemplates] = useState<Template[]>([]);
   const [presetStages, setPresetStages] = useState<PresetStage[]>([]);
   const [showNew, setShowNew] = useState(false);
@@ -63,6 +64,7 @@ function TemplatesInner() {
       });
       setName(""); setStageNames([]); setShowNew(false);
       toast.success("Template created");
+      trackActivity({ teamId: orgId, actorId: userId, actorName: member?.name || "", action: "created", entityType: "template", entityName: name.trim(), projectId: null });
       load();
     } catch (err: any) {
       toast.error(err.message || "Failed to create template");
@@ -78,6 +80,7 @@ function TemplatesInner() {
       });
       setShowEdit(false); setEditTemplate(null);
       toast.success("Template updated");
+      trackActivity({ teamId: orgId!, actorId: userId!, actorName: member?.name || "", action: "updated", entityType: "template", entityId: editTemplate.id, entityName: name.trim(), projectId: null });
       load();
     } catch (err: any) {
       toast.error(err.message || "Failed to update template");
@@ -102,6 +105,7 @@ function TemplatesInner() {
         created_by: userId,
       });
       toast.success("Template added");
+      trackActivity({ teamId: orgId, actorId: userId, actorName: member?.name || "", action: "created", entityType: "template", entityName: sample.name, projectId: null });
       load();
     } catch (err: any) {
       toast.error(err.message || "Failed to add template");
@@ -194,7 +198,7 @@ function TemplatesInner() {
               </div>
               <div className="flex gap-1">
                 <Button variant="ghost" size="sm" onClick={() => openEdit(t)}><Pencil className="h-4 w-4" /></Button>
-                <Button variant="ghost" size="sm" onClick={async () => { try { await deleteTemplate(t.id); toast.success("Deleted"); load(); } catch (err: any) { toast.error(err.message); } }}>
+                <Button variant="ghost" size="sm" onClick={async () => { try { await deleteTemplate(t.id); toast.success("Deleted"); trackActivity({ teamId: orgId!, actorId: userId!, actorName: member?.name || "", action: "deleted", entityType: "template", entityId: t.id, entityName: t.name, projectId: null }); load(); } catch (err: any) { toast.error(err.message); } }}>
                   <Trash2 className="h-4 w-4" />
                 </Button>
               </div>
@@ -210,12 +214,12 @@ function TemplatesInner() {
         <div className="flex gap-2 mb-4">
           <Input placeholder="Stage name (e.g. Quality Check)" value={newPresetName} onChange={(e) => setNewPresetName(e.target.value)} onKeyDown={async (e) => {
             if (e.key === "Enter" && orgId && userId && newPresetName.trim()) {
-              try { await createPresetStage({ team_id: orgId, name: newPresetName.trim(), created_by: userId }); setNewPresetName(""); toast.success("Added"); load(); } catch (err: any) { toast.error(err.message); }
+              try { await createPresetStage({ team_id: orgId, name: newPresetName.trim(), created_by: userId }); setNewPresetName(""); toast.success("Added"); trackActivity({ teamId: orgId, actorId: userId, actorName: member?.name || "", action: "created", entityType: "preset_stage", entityName: newPresetName.trim(), projectId: null }); load(); } catch (err: any) { toast.error(err.message); }
             }
           }} className="max-w-md" />
           <Button onClick={async () => {
             if (!orgId || !userId || !newPresetName.trim()) return;
-            try { await createPresetStage({ team_id: orgId, name: newPresetName.trim(), created_by: userId }); setNewPresetName(""); toast.success("Added"); load(); } catch (err: any) { toast.error(err.message); }
+            try { await createPresetStage({ team_id: orgId, name: newPresetName.trim(), created_by: userId }); setNewPresetName(""); toast.success("Added"); trackActivity({ teamId: orgId, actorId: userId, actorName: member?.name || "", action: "created", entityType: "preset_stage", entityName: newPresetName.trim(), projectId: null }); load(); } catch (err: any) { toast.error(err.message); }
           }} disabled={!newPresetName.trim()}><Plus className="h-4 w-4 mr-1" /> Add</Button>
         </div>
         {presetStages.length > 0 ? (
@@ -223,7 +227,7 @@ function TemplatesInner() {
             {presetStages.map((ps) => (
               <Badge key={ps.id} variant="secondary" className="text-sm py-1.5 px-3 flex items-center gap-1.5">
                 {ps.name}
-                <button onClick={async () => { try { await deletePresetStage(ps.id); toast.success("Removed"); load(); } catch (err: any) { toast.error(err.message); } }} className="ml-1 hover:text-destructive transition-colors">
+                <button onClick={async () => { try { await deletePresetStage(ps.id); toast.success("Removed"); trackActivity({ teamId: orgId!, actorId: userId!, actorName: member?.name || "", action: "deleted", entityType: "preset_stage", entityId: ps.id, entityName: ps.name, projectId: null }); load(); } catch (err: any) { toast.error(err.message); } }} className="ml-1 hover:text-destructive transition-colors">
                   <Trash2 className="h-3 w-3" />
                 </button>
               </Badge>

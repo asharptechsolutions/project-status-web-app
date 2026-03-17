@@ -24,6 +24,7 @@ export function Navbar() {
       { href: "/calendar/", label: "Calendar" },
       { href: "/templates/", label: "Templates" },
       { href: "/crm/", label: "CRM" },
+      { href: "/activity/", label: "Activity" },
       { href: "/settings/", label: "Settings" },
     ] : []),
   ];

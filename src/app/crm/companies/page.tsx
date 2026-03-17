@@ -16,12 +16,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Pencil, Plus, Trash2, Loader2, Building2, Phone, MapPin, MailIcon, ArrowLeft, Search, X, ArrowUpDown, Download } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
+import { trackActivity } from "@/lib/activity";
 import { EmptyState } from "@/components/empty-state";
 import { generateCsv, downloadCsv } from "@/lib/csv";
 import { Pagination } from "@/components/pagination";
 
 function CompaniesInner() {
-  const { orgId, isAdmin } = useAuth();
+  const { orgId, userId, isAdmin, member } = useAuth();
   const router = useRouter();
   const [members, setMembers] = useState<Member[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
@@ -82,6 +83,16 @@ function CompaniesInner() {
           address: companyAddress.trim() || "",
         });
         toast.success("Company updated");
+        trackActivity({
+          teamId: orgId,
+          actorId: userId!,
+          actorName: member?.name || "",
+          action: "updated",
+          entityType: "company",
+          entityId: editingCompany.id,
+          entityName: companyName.trim(),
+          projectId: null,
+        });
       } else {
         await createCompany({
           team_id: orgId,
@@ -91,6 +102,15 @@ function CompaniesInner() {
           address: companyAddress.trim() || "",
         });
         toast.success("Company created");
+        trackActivity({
+          teamId: orgId,
+          actorId: userId!,
+          actorName: member?.name || "",
+          action: "created",
+          entityType: "company",
+          entityName: companyName.trim(),
+          projectId: null,
+        });
       }
       setShowCompanyDialog(false);
       load();
@@ -102,9 +122,20 @@ function CompaniesInner() {
   };
 
   const handleDeleteCompany = async (id: string) => {
+    const company = companies.find((c) => c.id === id);
     try {
       await deleteCompany(id);
       toast.success("Company deleted");
+      trackActivity({
+        teamId: orgId!,
+        actorId: userId!,
+        actorName: member?.name || "",
+        action: "deleted",
+        entityType: "company",
+        entityId: id,
+        entityName: company?.name || "",
+        projectId: null,
+      });
       load();
     } catch (err: any) {
       toast.error(err.message || "Failed to delete company");

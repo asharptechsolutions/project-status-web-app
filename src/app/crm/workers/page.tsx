@@ -16,12 +16,13 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Badge } from "@/components/ui/badge";
 import { Pencil, Plus, Trash2, UserCircle, Loader2, Mail, CheckCircle2, Clock, RefreshCw, ArrowLeft, Search, X, ArrowUpDown, Shield, Wrench, Users, Download } from "lucide-react";
 import { toast } from "sonner";
+import { trackActivity } from "@/lib/activity";
 import { EmptyState } from "@/components/empty-state";
 import { generateCsv, downloadCsv } from "@/lib/csv";
 import { Pagination } from "@/components/pagination";
 
 function WorkersInner() {
-  const { orgId, userId, isAdmin } = useAuth();
+  const { orgId, userId, isAdmin, member } = useAuth();
   const router = useRouter();
   const [members, setMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(true);
@@ -83,6 +84,16 @@ function WorkersInner() {
       setShowInvite(false);
       setInviteName(""); setInviteEmail(""); setInvitePhone("");
       toast.success(data.invited ? `Invitation sent to ${inviteEmail}` : `${inviteName} added as worker`);
+      trackActivity({
+        teamId: orgId,
+        actorId: userId!,
+        actorName: member?.name || "",
+        action: "invited",
+        entityType: "member",
+        entityName: inviteName.trim(),
+        projectId: null,
+        metadata: { role: "worker", email: inviteEmail.toLowerCase().trim() },
+      });
       load();
     } catch (err: any) {
       toast.error(err.message || "Failed to invite worker");
@@ -136,6 +147,17 @@ function WorkersInner() {
       if (!res.ok) throw new Error(data.error || "Failed to update member");
       setEditMember(null);
       toast.success("Member updated");
+      trackActivity({
+        teamId: editMember.team_id,
+        actorId: userId!,
+        actorName: member?.name || "",
+        action: "updated",
+        entityType: "member",
+        entityId: editMember.id,
+        entityName: editName.trim(),
+        projectId: null,
+        metadata: { email: editEmail.toLowerCase().trim(), role: editRole },
+      });
       load();
     } catch (err: any) {
       toast.error(err.message || "Failed to update member");
@@ -322,6 +344,17 @@ function WorkersInner() {
                                 const data = await res.json();
                                 if (!res.ok) throw new Error(data.error || "Failed to remove member");
                                 toast.success("Removed");
+                                trackActivity({
+                                  teamId: m.team_id,
+                                  actorId: userId!,
+                                  actorName: member?.name || "",
+                                  action: "deleted",
+                                  entityType: "member",
+                                  entityId: m.id,
+                                  entityName: m.name || m.email,
+                                  projectId: null,
+                                  metadata: { role: m.role, email: m.email },
+                                });
                                 load();
                               } catch (err: any) { toast.error(err.message); }
                             }}>Remove</AlertDialogAction>

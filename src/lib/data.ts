@@ -25,6 +25,8 @@ import type {
   Webhook,
   WebhookDelivery,
   SlackIntegration,
+  ActivityLog,
+  ActivityEntityType,
 } from "./types";
 
 // ============ PROJECT CLIENTS (junction) ============
@@ -1481,4 +1483,57 @@ export async function deleteSlackIntegration(orgId: string): Promise<void> {
     .delete()
     .eq("team_id", orgId);
   if (error) throw new Error(error.message);
+}
+
+// ============ ACTIVITY LOG ============
+
+export async function logActivity(entry: Omit<ActivityLog, "id" | "created_at">): Promise<void> {
+  const { error } = await supabase
+    .from("activity_logs")
+    .insert(entry);
+  // Fire-and-forget: log failures should never break primary operations
+  if (error) console.warn("Activity log insert failed:", error.message);
+}
+
+export async function getActivityLogs(
+  orgId: string,
+  options: {
+    limit?: number;
+    offset?: number;
+    entityType?: ActivityEntityType;
+    actorId?: string;
+    projectId?: string;
+  } = {}
+): Promise<{ data: ActivityLog[]; count: number }> {
+  const { limit = 25, offset = 0, entityType, actorId, projectId } = options;
+
+  let query = supabase
+    .from("activity_logs")
+    .select("*", { count: "exact" })
+    .eq("team_id", orgId)
+    .order("created_at", { ascending: false })
+    .range(offset, offset + limit - 1);
+
+  if (entityType) query = query.eq("entity_type", entityType);
+  if (actorId) query = query.eq("actor_id", actorId);
+  if (projectId) query = query.eq("project_id", projectId);
+
+  const { data, error, count } = await query;
+  if (error) throw new Error(error.message);
+  return { data: (data || []) as ActivityLog[], count: count || 0 };
+}
+
+export async function getProjectActivityLogs(
+  projectId: string,
+  limit: number = 50,
+  offset: number = 0
+): Promise<{ data: ActivityLog[]; count: number }> {
+  const { data, error, count } = await supabase
+    .from("activity_logs")
+    .select("*", { count: "exact" })
+    .eq("project_id", projectId)
+    .order("created_at", { ascending: false })
+    .range(offset, offset + limit - 1);
+  if (error) throw new Error(error.message);
+  return { data: (data || []) as ActivityLog[], count: count || 0 };
 }
