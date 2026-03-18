@@ -383,3 +383,16 @@ export interface ActivityLog {
   metadata: Record<string, unknown>;
   created_at: string;
 }
+
+// ============ DIGEST SETTINGS ============
+
+export interface DigestSettings {
+  id: string;
+  team_id: string;
+  weekly_digest_enabled: boolean;
+  digest_day: number;
+  digest_hour: number;
+  last_sent_at: string | null;
+  created_at: string;
+  updated_at: string;
+}

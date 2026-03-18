@@ -27,6 +27,7 @@ import type {
   SlackIntegration,
   ActivityLog,
   ActivityEntityType,
+  DigestSettings,
 } from "./types";
 
 // ============ PROJECT CLIENTS (junction) ============
@@ -1536,4 +1537,28 @@ export async function getProjectActivityLogs(
     .range(offset, offset + limit - 1);
   if (error) throw new Error(error.message);
   return { data: (data || []) as ActivityLog[], count: count || 0 };
+}
+
+// ============ DIGEST SETTINGS ============
+
+export async function getDigestSettings(orgId: string): Promise<DigestSettings | null> {
+  const { data, error } = await supabase
+    .from("digest_settings")
+    .select("*")
+    .eq("team_id", orgId)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return data as DigestSettings | null;
+}
+
+export async function upsertDigestSettings(
+  settings: Omit<DigestSettings, "id" | "created_at" | "updated_at" | "last_sent_at">
+): Promise<void> {
+  const { error } = await supabase
+    .from("digest_settings")
+    .upsert(
+      { ...settings, updated_at: new Date().toISOString() },
+      { onConflict: "team_id" }
+    );
+  if (error) throw new Error(error.message);
 }

@@ -10,7 +10,8 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Loader2, Save } from "lucide-react";
 import { toast } from "sonner";
-import { getClientVisibilitySettings, upsertClientVisibilitySettings, getAutomationSettings, upsertAutomationSettings } from "@/lib/data";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { getClientVisibilitySettings, upsertClientVisibilitySettings, getAutomationSettings, upsertAutomationSettings, getDigestSettings, upsertDigestSettings } from "@/lib/data";
 import type { ClientVisibilitySettings, AutomationSettings } from "@/lib/types";
 import { BrandingSettings } from "@/components/branding-settings";
 import type { LiveBranding } from "@/components/branding-settings";
@@ -102,13 +103,21 @@ function SettingsContent() {
   const [saving, setSaving] = useState(false);
   const [savingAuto, setSavingAuto] = useState(false);
 
+  // Digest settings
+  const [digestEnabled, setDigestEnabled] = useState(true);
+  const [digestDay, setDigestDay] = useState(1);
+  const savedDigestEnabled = useRef(true);
+  const savedDigestDay = useRef(1);
+  const [savingDigest, setSavingDigest] = useState(false);
+
   useEffect(() => {
     if (!orgId) return;
     (async () => {
       try {
-        const [visData, autoData] = await Promise.all([
+        const [visData, autoData, digestData] = await Promise.all([
           getClientVisibilitySettings(orgId),
           getAutomationSettings(orgId),
+          getDigestSettings(orgId),
         ]);
         if (visData) {
           const loaded = {
@@ -134,6 +143,12 @@ function SettingsContent() {
           };
           setAutoSettings(loaded);
           savedAutoSettings.current = loaded;
+        }
+        if (digestData) {
+          setDigestEnabled(digestData.weekly_digest_enabled);
+          setDigestDay(digestData.digest_day);
+          savedDigestEnabled.current = digestData.weekly_digest_enabled;
+          savedDigestDay.current = digestData.digest_day;
         }
       } catch {
         // Use defaults
@@ -178,6 +193,28 @@ function SettingsContent() {
       setSavingAuto(false);
     }
   };
+
+  const handleSaveDigest = async () => {
+    if (!orgId) return;
+    setSavingDigest(true);
+    try {
+      await upsertDigestSettings({
+        team_id: orgId,
+        weekly_digest_enabled: digestEnabled,
+        digest_day: digestDay,
+        digest_hour: 9,
+      });
+      savedDigestEnabled.current = digestEnabled;
+      savedDigestDay.current = digestDay;
+      toast.success("Digest settings saved");
+    } catch {
+      toast.error("Failed to save digest settings");
+    } finally {
+      setSavingDigest(false);
+    }
+  };
+
+  const digestDirty = digestEnabled !== savedDigestEnabled.current || digestDay !== savedDigestDay.current;
 
   if (!isAdmin) {
     return (
@@ -290,6 +327,60 @@ function SettingsContent() {
               <div className="pt-6">
                 <Button onClick={handleSaveAuto} disabled={savingAuto || !automationDirty}>
                   {savingAuto ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
+                  Save Changes
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Weekly Email Digest</CardTitle>
+              <CardDescription>
+                Send clients a weekly summary email with project progress, infographics, and recently completed stages.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between py-1">
+                <div className="space-y-0.5 pr-4">
+                  <Label htmlFor="digest-enabled" className="text-sm font-medium cursor-pointer">
+                    Weekly Digest Emails
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    Automatically email clients assigned to active projects with a progress summary
+                  </p>
+                </div>
+                <Switch
+                  id="digest-enabled"
+                  checked={digestEnabled}
+                  onCheckedChange={setDigestEnabled}
+                />
+              </div>
+
+              {digestEnabled && (
+                <div className="flex items-center gap-3 pt-1">
+                  <Label className="text-sm text-muted-foreground whitespace-nowrap">Send every</Label>
+                  <Select value={String(digestDay)} onValueChange={(v) => setDigestDay(Number(v))}>
+                    <SelectTrigger className="w-[140px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="0">Sunday</SelectItem>
+                      <SelectItem value="1">Monday</SelectItem>
+                      <SelectItem value="2">Tuesday</SelectItem>
+                      <SelectItem value="3">Wednesday</SelectItem>
+                      <SelectItem value="4">Thursday</SelectItem>
+                      <SelectItem value="5">Friday</SelectItem>
+                      <SelectItem value="6">Saturday</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <span className="text-sm text-muted-foreground">at 9:00 AM UTC</span>
+                </div>
+              )}
+
+              <div className="pt-4">
+                <Button onClick={handleSaveDigest} disabled={savingDigest || !digestDirty}>
+                  {savingDigest ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
                   Save Changes
                 </Button>
               </div>
