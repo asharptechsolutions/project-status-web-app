@@ -12,6 +12,8 @@ import {
   setProjectClients, getProjectClients, addProjectClient, removeProjectClient,
   getStageDependencies, createStageDependency, deleteStageDependency, deleteStageDependenciesForStage,
   getAutomationSettings,
+  enableProjectShare, disableProjectShare, regenerateProjectShareToken,
+  registerDeviceKey, getDeviceKeysForUsers, createKeyGrants, enableProjectEncryption,
   getTimeEntriesForStage, getTimeEntriesForProject, getActiveTimer,
   startTimer, stopTimer, createManualTimeEntry, deleteTimeEntry,
   createSampleProject,
@@ -19,6 +21,8 @@ import {
 } from "@/lib/data";
 import type { Project, ProjectStage, Template, PresetStage, Member, Company, StageDependency, AutomationSettings, TimeEntry } from "@/lib/types";
 import { runStageAutomations, runAssignmentAutomations, dispatchWebhookEvent, AUTOMATION_DEFAULTS } from "@/lib/automations";
+import { performStageTransition } from "@/lib/stage-actions";
+import { getOrCreateDeviceKey, getDeviceLabel, generateProjectKey, wrapProjectKey } from "@/lib/crypto";
 import { trackActivity } from "@/lib/activity";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -35,7 +39,7 @@ import {
   Pencil, Search, X, ArrowUpDown, Archive, ArchiveRestore,
   Clock, Loader2, GripVertical, UserPlus, Mail, Users, Building2, Save,
   AlertTriangle, TrendingUp, Link, FolderOpen, MoreHorizontal, BarChart3, Network,
-  Timer, DollarSign, Square, Download, Columns3, List,
+  Timer, DollarSign, Square, Download, Columns3, List, QrCode, RefreshCw, Lock,
 } from "lucide-react";
 import { toast } from "sonner";
 import { DatePicker } from "@/components/ui/date-picker";
@@ -142,6 +146,10 @@ function ProjectsList() {
   const [savingTemplate, setSavingTemplate] = useState(false);
   const [showArchiveConfirm, setShowArchiveConfirm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showShareDialog, setShowShareDialog] = useState(false);
+  const [shareBusy, setShareBusy] = useState(false);
+  const [showEncryptConfirm, setShowEncryptConfirm] = useState(false);
+  const [encryptBusy, setEncryptBusy] = useState(false);
   const chatBubbleRef = useRef<ChatBubbleHandle>(null);
   const workflowLocked = selectedProject?.workflow_locked ?? false;
   const [viewMode, setViewMode] = useState<"canvas" | "kanban" | "gantt" | "list">("canvas");
@@ -227,7 +235,7 @@ function ProjectsList() {
 
   // Derived member lists
   const clientMembers = useMemo(() => members.filter((m) => m.role === "client"), [members]);
-  const workerMembers = useMemo(() => members.filter((m) => m.role === "worker" || m.role === "owner"), [members]);
+  const workerMembers = useMemo(() => members.filter((m) => m.role === "worker" || m.role === "owner" || m.role === "admin"), [members]);
 
   const workerNames = useMemo(() => {
     const map: Record<string, string> = {};
@@ -901,82 +909,36 @@ function ProjectsList() {
 
   const updateStageStatus = async (stageId: string, status: ProjectStage["status"]) => {
     if (!selectedProject || !userId) return;
-    // Workers can only update unassigned stages or stages assigned to them
-    if (isWorker && !isAdmin) {
-      const stage = stages.find((s) => s.id === stageId);
-      if (stage?.assigned_to && stage.assigned_to !== userId) {
-        toast.error("You can only update stages assigned to you");
-        return;
-      }
-    }
-    const now = new Date().toISOString();
-    const updates: Partial<ProjectStage> = { status };
-    if (status === "in_progress") { updates.started_at = now; updates.started_by = userId; }
-    if (status === "completed") { updates.completed_at = now; }
+    // Use functional updater to avoid stale closure
+    let currentStages: ProjectStage[] = stages;
+    setStages((prev) => { currentStages = prev; return prev; });
+    const stage = currentStages.find((s) => s.id === stageId);
+    if (!stage) return;
     try {
-      // Auto-stop timer if completing a stage with active timer
-      if (status === "completed" && activeTimer && activeTimer.stage_id === stageId) {
-        const stopped = await stopTimer(activeTimer.id);
-        setProjectTimeEntries((prev) => prev.map((e) => e.id === stopped.id ? stopped : e).concat(prev.some((e) => e.id === stopped.id) ? [] : [stopped]));
+      const { updatedStages, projectCompleted, stoppedTimer, startedTimer } = await performStageTransition({
+        stage,
+        project: selectedProject,
+        stages: currentStages,
+        dependencies,
+        automationSettings,
+        userId,
+        actorName: member?.name || "",
+        status,
+        canActOnAnyStage: isAdmin || !isWorker,
+        activeTimer,
+      });
+      if (stoppedTimer) {
+        setProjectTimeEntries((prev) => prev.map((e) => e.id === stoppedTimer.id ? stoppedTimer : e).concat(prev.some((e) => e.id === stoppedTimer.id) ? [] : [stoppedTimer]));
         setActiveTimer(null);
-        toast.info(`Timer auto-stopped: ${formatMinutes(stopped.duration_minutes || 0)} logged`);
+        toast.info(`Timer ${status === "completed" ? "auto-stopped" : "stopped"}: ${formatMinutes(stoppedTimer.duration_minutes || 0)} logged`);
       }
-      // Auto-start timer when starting a stage — attribute to assigned worker if present, otherwise logged-in user
-      if (status === "in_progress" && orgId && selectedProject.time_tracking_enabled && selectedProject.time_tracking_auto_start !== false) {
-        const stage = stages.find((s) => s.id === stageId);
-        const timerUserId = stage?.assigned_to || userId;
-        if (activeTimer) {
-          const stopped = await stopTimer(activeTimer.id);
-          setProjectTimeEntries((prev) => prev.map((e) => e.id === stopped.id ? stopped : e).concat(prev.some((e) => e.id === stopped.id) ? [] : [stopped]));
-          toast.info(`Previous timer stopped: ${formatMinutes(stopped.duration_minutes || 0)} logged`);
-        }
-        const entry = await startTimer({ team_id: orgId, project_id: selectedProject.id, stage_id: stageId, user_id: timerUserId, billable: selectedProject.time_tracking_default_billable ?? true });
-        setActiveTimer(entry);
+      if (startedTimer) {
+        setActiveTimer(startedTimer);
         toast.info("Timer started");
       }
-      await updateProjectStage(stageId, updates);
-
-      // Use functional updater to avoid stale closure
-      let resolvedStages: ProjectStage[] = [];
-      setStages((prev) => {
-        resolvedStages = prev.map((s) => s.id === stageId ? { ...s, ...updates } : s);
-        return resolvedStages;
-      });
-
-      // Run automations with the latest stages
-      const { updatedStages, projectCompleted } = await runStageAutomations(stageId, status, {
-        settings: automationSettings,
-        project: selectedProject,
-        stages: resolvedStages,
-        dependencies,
-        userId,
-      });
       setStages(updatedStages);
-      const updatedStageName = stages.find((s) => s.id === stageId)?.name;
-      trackActivity({
-        teamId: orgId!,
-        actorId: userId,
-        actorName: member?.name || "",
-        action: status === "completed" ? "completed" : status === "in_progress" ? "started" : "updated",
-        entityType: "stage",
-        entityId: stageId,
-        entityName: updatedStageName,
-        projectId: selectedProject.id,
-        metadata: { newStatus: status, project_name: selectedProject.name },
-      });
       if (projectCompleted) {
         setSelectedProjectRaw({ ...selectedProject, status: "completed" });
-        trackActivity({
-          teamId: orgId!,
-          actorId: userId,
-          actorName: member?.name || "",
-          action: "completed",
-          entityType: "project",
-          entityId: selectedProject.id,
-          entityName: selectedProject.name,
-          projectId: selectedProject.id,
-          metadata: { completedViaAutomation: true, project_name: selectedProject.name },
-        });
         load();
       }
     } catch (err: any) {
@@ -1010,6 +972,91 @@ function ProjectsList() {
     } catch (err: any) {
       toast.error(err.message || "Failed to remove stage");
     }
+  };
+
+  const applyShareUpdate = (updates: Partial<Project>) => {
+    setSelectedProjectRaw((prev) => prev ? { ...prev, ...updates } : prev);
+    setProjects((prev) => prev.map((p) => selectedProject && p.id === selectedProject.id ? { ...p, ...updates } : p));
+  };
+
+  const handleShareToggle = async (enabled: boolean) => {
+    if (!selectedProject) return;
+    setShareBusy(true);
+    try {
+      if (enabled) {
+        const token = await enableProjectShare(selectedProject.id);
+        applyShareUpdate({ share_token: token, share_enabled: true });
+        toast.success("Share link enabled");
+      } else {
+        await disableProjectShare(selectedProject.id);
+        applyShareUpdate({ share_enabled: false });
+        toast.success("Share link disabled");
+      }
+    } catch (err: any) {
+      toast.error(err.message || "Failed to update share link");
+    } finally {
+      setShareBusy(false);
+    }
+  };
+
+  const handleRegenerateShareToken = async () => {
+    if (!selectedProject) return;
+    setShareBusy(true);
+    try {
+      const token = await regenerateProjectShareToken(selectedProject.id);
+      applyShareUpdate({ share_token: token, share_enabled: true });
+      toast.success("New link generated — the old link no longer works");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to regenerate link");
+    } finally {
+      setShareBusy(false);
+    }
+  };
+
+  const handleEnableEncryption = async () => {
+    if (!selectedProject || !userId) return;
+    setEncryptBusy(true);
+    try {
+      // Register this browser as a device and generate the project key locally
+      const device = await getOrCreateDeviceKey();
+      await registerDeviceKey(userId, device.deviceId, device.publicKeyJwk, getDeviceLabel());
+      const projectKey = await generateProjectKey();
+
+      // Wrap the key for every known device of every participant (team + assigned clients)
+      const clientIds = await getProjectClients(selectedProject.id);
+      const participantIds = new Set<string>([
+        ...members.filter((m) => m.role !== "client").map((m) => m.user_id),
+        ...clientIds,
+        userId,
+      ]);
+      const deviceKeys = await getDeviceKeysForUsers([...participantIds]);
+      const grants = await Promise.all(deviceKeys.map(async (dk) => {
+        const { wrappedKey, ephemeralPublicKey } = await wrapProjectKey(projectKey, dk.public_key);
+        return {
+          project_id: selectedProject.id,
+          user_id: dk.user_id,
+          device_id: dk.device_id,
+          wrapped_key: wrappedKey,
+          ephemeral_public_key: ephemeralPublicKey,
+          granted_by: userId,
+        };
+      }));
+      await createKeyGrants(grants);
+      await enableProjectEncryption(selectedProject.id);
+      applyShareUpdate({ encryption_enabled: true });
+      setShowEncryptConfirm(false);
+      toast.success("End-to-end encryption enabled");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to enable encryption");
+    } finally {
+      setEncryptBusy(false);
+    }
+  };
+
+  const copyShareLink = () => {
+    if (!selectedProject?.share_token) return;
+    const url = `${window.location.origin}/share/${selectedProject.share_token}`;
+    navigator.clipboard.writeText(url).then(() => toast.success("Share link copied")).catch(() => toast.error("Failed to copy link"));
   };
 
   const handleDelete = async (id: string) => {
@@ -1212,15 +1259,26 @@ function ProjectsList() {
                 <DropdownMenuItem onClick={() => chatBubbleRef.current?.openFiles()}>
                   <FolderOpen className="h-4 w-4" /> View Files
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => {
-                  const url = `${window.location.origin}/track/?id=${selectedProject.id}`;
-                  navigator.clipboard.writeText(url).then(() => toast.success("Client link copied to clipboard")).catch(() => toast.error("Failed to copy link"));
-                }}>
-                  <Link className="h-4 w-4" /> Copy Client Link
-                </DropdownMenuItem>
+                {isAdmin ? (
+                  <DropdownMenuItem onClick={() => setShowShareDialog(true)}>
+                    <Link className="h-4 w-4" /> Share with Client
+                  </DropdownMenuItem>
+                ) : (
+                  <DropdownMenuItem onClick={() => {
+                    const url = `${window.location.origin}/track/?id=${selectedProject.id}`;
+                    navigator.clipboard.writeText(url).then(() => toast.success("Client link copied to clipboard")).catch(() => toast.error("Failed to copy link"));
+                  }}>
+                    <Link className="h-4 w-4" /> Copy Client Link
+                  </DropdownMenuItem>
+                )}
                 {isAdmin && stages.length > 0 && (
                   <DropdownMenuItem onClick={() => { setTemplateName(selectedProject.name); setShowSaveTemplate(true); }}>
                     <Save className="h-4 w-4" /> Save as Template
+                  </DropdownMenuItem>
+                )}
+                {isAdmin && stages.length > 0 && (
+                  <DropdownMenuItem onClick={() => router.push(`/projects/qr/?id=${selectedProject.id}`)}>
+                    <QrCode className="h-4 w-4" /> Print QR Codes
                   </DropdownMenuItem>
                 )}
                 {isAdmin && (
@@ -1268,6 +1326,46 @@ function ProjectsList() {
                 </AlertDialogFooter>
               </AlertDialogContent>
             </AlertDialog>
+
+            {/* Share link dialog */}
+            <Dialog open={showShareDialog} onOpenChange={setShowShareDialog}>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Share with Client</DialogTitle>
+                  <DialogDescription>
+                    Send clients a link to track this project. The link is not public — clients verify with a one-time
+                    code emailed to them, and only contacts assigned to this project can see it.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label>Share link</Label>
+                      <p className="text-xs text-muted-foreground">Anyone with the link must verify their email</p>
+                    </div>
+                    <Switch checked={!!selectedProject.share_enabled} onCheckedChange={handleShareToggle} disabled={shareBusy} />
+                  </div>
+                  {selectedProject.share_enabled && selectedProject.share_token && (
+                    <>
+                      <div className="flex gap-2">
+                        <Input readOnly value={`${typeof window !== "undefined" ? window.location.origin : ""}/share/${selectedProject.share_token}`} className="text-xs" />
+                        <Button variant="outline" size="sm" className="shrink-0" onClick={copyShareLink}>
+                          <Link className="h-4 w-4 mr-1" /> Copy
+                        </Button>
+                      </div>
+                      <Button variant="outline" size="sm" onClick={handleRegenerateShareToken} disabled={shareBusy}>
+                        {shareBusy ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <RefreshCw className="h-4 w-4 mr-1" />}
+                        Regenerate link
+                      </Button>
+                      <p className="text-xs text-muted-foreground">
+                        Regenerating invalidates the previous link. Clients must be added as contacts on this project
+                        before they can view it.
+                      </p>
+                    </>
+                  )}
+                </div>
+              </DialogContent>
+            </Dialog>
           </div>
         </div>
 
@@ -1530,7 +1628,7 @@ function ProjectsList() {
         )}
 
         {/* Floating Chat Bubble */}
-        <ChatBubble ref={chatBubbleRef} projectId={selectedProject.id} />
+        <ChatBubble ref={chatBubbleRef} projectId={selectedProject.id} encryptionEnabled={!!selectedProject.encryption_enabled} teamId={selectedProject.team_id} />
 
         {/* Edit dialog */}
         <Dialog open={showEdit} onOpenChange={setShowEdit}>
@@ -1669,10 +1767,49 @@ function ProjectsList() {
                   )}
                 </div>
               </div>
+              {/* End-to-End Encryption */}
+              <div className="border-t pt-3 mt-1">
+                <p className="text-sm font-medium mb-2">Privacy</p>
+                {selectedProject?.encryption_enabled ? (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Lock className="h-4 w-4 text-green-600 dark:text-green-400" />
+                    End-to-end encryption is enabled for chat and files
+                  </div>
+                ) : (
+                  <Button type="button" variant="outline" size="sm" onClick={() => setShowEncryptConfirm(true)}>
+                    <Lock className="h-4 w-4 mr-1" /> Enable end-to-end encryption
+                  </Button>
+                )}
+              </div>
               <Button onClick={handleEdit} className="w-full" disabled={!editName.trim()}>Save Changes</Button>
             </div>
           </DialogContent>
         </Dialog>
+
+        {/* Enable E2EE confirm */}
+        <AlertDialog open={showEncryptConfirm} onOpenChange={setShowEncryptConfirm}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Enable end-to-end encryption?</AlertDialogTitle>
+              <AlertDialogDescription>
+                New chat messages and file attachments will be encrypted in the browser — the server can never read
+                them. Each participant&apos;s browser becomes a &quot;device&quot; that you approve from the chat window.
+                This cannot be turned off, and if every approved device is lost, encrypted history is unrecoverable.
+                Existing messages stay readable.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={encryptBusy}>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={(e) => { e.preventDefault(); handleEnableEncryption(); }}
+                disabled={encryptBusy}
+              >
+                {encryptBusy ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Lock className="h-4 w-4 mr-1" />}
+                Enable encryption
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
 
         {/* Assign Worker Dialog */}
         <Dialog open={!!assignStageId} onOpenChange={(open) => { if (!open) { setAssignStageId(null); setShowNewWorker(false); setNewWorkerName(""); setNewWorkerEmail(""); setNewWorkerPhone(""); } }}>

@@ -14,7 +14,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
-import { Pencil, Plus, Trash2, UserCircle, Loader2, Mail, CheckCircle2, Clock, RefreshCw, ArrowLeft, Search, X, ArrowUpDown, Shield, Wrench, Users, Download } from "lucide-react";
+import { Pencil, Plus, Trash2, UserCircle, Loader2, Mail, CheckCircle2, Clock, RefreshCw, ArrowLeft, Search, X, ArrowUpDown, Shield, Wrench, Users, Download, ClipboardList } from "lucide-react";
 import { toast } from "sonner";
 import { trackActivity } from "@/lib/activity";
 import { EmptyState } from "@/components/empty-state";
@@ -22,7 +22,7 @@ import { generateCsv, downloadCsv } from "@/lib/csv";
 import { Pagination } from "@/components/pagination";
 
 function WorkersInner() {
-  const { orgId, userId, isAdmin, member } = useAuth();
+  const { orgId, userId, isAdmin, isOwner, member } = useAuth();
   const router = useRouter();
   const [members, setMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(true);
@@ -37,6 +37,7 @@ function WorkersInner() {
   const [inviteName, setInviteName] = useState("");
   const [inviteEmail, setInviteEmail] = useState("");
   const [invitePhone, setInvitePhone] = useState("");
+  const [inviteRole, setInviteRole] = useState<"admin" | "worker">("worker");
   const [inviting, setInviting] = useState(false);
 
   // Edit dialog
@@ -44,7 +45,7 @@ function WorkersInner() {
   const [editName, setEditName] = useState("");
   const [editEmail, setEditEmail] = useState("");
   const [editPhone, setEditPhone] = useState("");
-  const [editRole, setEditRole] = useState<"owner" | "worker">("worker");
+  const [editRole, setEditRole] = useState<"owner" | "admin" | "worker">("worker");
 
   const [resendingId, setResendingId] = useState<string | null>(null);
 
@@ -62,7 +63,7 @@ function WorkersInner() {
 
   useEffect(() => { load(); }, [load]);
 
-  const workerMembers = members.filter((m) => m.role === "owner" || m.role === "worker");
+  const workerMembers = members.filter((m) => m.role === "owner" || m.role === "admin" || m.role === "worker");
 
   const handleInvite = async () => {
     if (!orgId || !inviteName.trim() || !inviteEmail.trim()) return;
@@ -74,7 +75,7 @@ function WorkersInner() {
         body: JSON.stringify({
           email: inviteEmail.toLowerCase().trim(),
           name: inviteName.trim(),
-          role: "worker",
+          role: inviteRole,
           teamId: orgId,
           phone: invitePhone.trim() || undefined,
         }),
@@ -82,8 +83,8 @@ function WorkersInner() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to invite");
       setShowInvite(false);
-      setInviteName(""); setInviteEmail(""); setInvitePhone("");
-      toast.success(data.invited ? `Invitation sent to ${inviteEmail}` : `${inviteName} added as worker`);
+      setInviteName(""); setInviteEmail(""); setInvitePhone(""); setInviteRole("worker");
+      toast.success(data.invited ? `Invitation sent to ${inviteEmail}` : `${inviteName} added as ${inviteRole === "admin" ? "project manager" : "worker"}`);
       trackActivity({
         teamId: orgId,
         actorId: userId!,
@@ -92,7 +93,7 @@ function WorkersInner() {
         entityType: "member",
         entityName: inviteName.trim(),
         projectId: null,
-        metadata: { role: "worker", email: inviteEmail.toLowerCase().trim() },
+        metadata: { role: inviteRole, email: inviteEmail.toLowerCase().trim() },
       });
       load();
     } catch (err: any) {
@@ -128,7 +129,7 @@ function WorkersInner() {
     setEditName(m.name);
     setEditEmail(m.email);
     setEditPhone(m.phone);
-    setEditRole(m.role as "owner" | "worker");
+    setEditRole(m.role as "owner" | "admin" | "worker");
   };
 
   const handleUpdate = async () => {
@@ -210,7 +211,7 @@ function WorkersInner() {
       name: m.name,
       email: m.email,
       phone: m.phone || "",
-      role: m.role === "owner" ? "Admin" : "Worker",
+      role: m.role === "owner" ? "Admin" : m.role === "admin" ? "Project Manager" : "Worker",
       status: m.joined_at ? "Accepted" : "Pending",
       joined: m.joined_at ? new Date(m.joined_at).toLocaleDateString() : "",
       created: m.created_at ? new Date(m.created_at).toLocaleDateString() : "",
@@ -234,7 +235,7 @@ function WorkersInner() {
               <Download className="h-4 w-4 mr-1" /> Export
             </Button>
           )}
-          <Button onClick={() => { setShowInvite(true); setInviteName(""); setInviteEmail(""); setInvitePhone(""); }}>
+          <Button onClick={() => { setShowInvite(true); setInviteName(""); setInviteEmail(""); setInvitePhone(""); setInviteRole("worker"); }}>
             <Plus className="h-4 w-4 mr-1" /> Add Worker
           </Button>
         </div>
@@ -278,7 +279,7 @@ function WorkersInner() {
             title="No workers yet"
             description="Workers are team members who progress project stages. Invite them by email to get started."
             actionLabel="Invite Worker"
-            onAction={() => { setShowInvite(true); setInviteName(""); setInviteEmail(""); setInvitePhone(""); }}
+            onAction={() => { setShowInvite(true); setInviteName(""); setInviteEmail(""); setInvitePhone(""); setInviteRole("worker"); }}
           />
         ) : (
           <Card><CardContent className="pt-6 text-center text-muted-foreground">
@@ -296,7 +297,9 @@ function WorkersInner() {
                     <div className="flex items-center gap-2">
                       <p className="font-medium truncate">{m.name || "Pending"}</p>
                       <Badge variant="outline" className="shrink-0">
-                        {m.role === "owner" ? <><Shield className="h-3 w-3 mr-1" />Admin</> : <><Wrench className="h-3 w-3 mr-1" />Worker</>}
+                        {m.role === "owner" ? <><Shield className="h-3 w-3 mr-1" />Admin</>
+                          : m.role === "admin" ? <><ClipboardList className="h-3 w-3 mr-1" />Project Manager</>
+                          : <><Wrench className="h-3 w-3 mr-1" />Worker</>}
                       </Badge>
                     </div>
                     <p className="text-sm text-muted-foreground truncate">{m.email}</p>
@@ -319,10 +322,12 @@ function WorkersInner() {
                     )}
                   </div>
                   <div className="flex gap-1 shrink-0">
-                    <Button variant="ghost" size="sm" onClick={() => openEdit(m)}>
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                    {m.user_id !== userId && (
+                    {(isOwner || m.role === "worker" || m.user_id === userId) && (
+                      <Button variant="ghost" size="sm" onClick={() => openEdit(m)}>
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                    )}
+                    {m.user_id !== userId && (isOwner || m.role === "worker") && (
                       <AlertDialog>
                         <AlertDialogTrigger asChild>
                           <Button variant="ghost" size="sm"><Trash2 className="h-4 w-4" /></Button>
@@ -382,6 +387,18 @@ function WorkersInner() {
             <div><Label>Name</Label><Input value={inviteName} onChange={(e) => setInviteName(e.target.value)} placeholder="e.g. John Smith" /></div>
             <div><Label>Email</Label><Input type="email" value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} placeholder="john@example.com" /></div>
             <div><Label>Phone (optional)</Label><Input value={invitePhone} onChange={(e) => setInvitePhone(e.target.value)} placeholder="(555) 123-4567" /></div>
+            {isOwner && (
+              <div>
+                <Label>Role</Label>
+                <Select value={inviteRole} onValueChange={(v) => setInviteRole(v as "admin" | "worker")}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="worker">Worker — Update stages</SelectItem>
+                    <SelectItem value="admin">Project Manager — Manage projects</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             <Button onClick={handleInvite} className="w-full" disabled={!inviteName.trim() || !inviteEmail.trim() || inviting}>
               {inviting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Mail className="h-4 w-4 mr-2" />}
               {inviting ? "Sending..." : "Send Invitation"}
@@ -401,16 +418,19 @@ function WorkersInner() {
             <div><Label>Name</Label><Input value={editName} onChange={(e) => setEditName(e.target.value)} /></div>
             <div><Label>Email</Label><Input type="email" value={editEmail} onChange={(e) => setEditEmail(e.target.value)} /></div>
             <div><Label>Phone</Label><Input value={editPhone} onChange={(e) => setEditPhone(e.target.value)} /></div>
-            <div>
-              <Label>Role</Label>
-              <Select value={editRole} onValueChange={(v) => setEditRole(v as "owner" | "worker")}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="owner">Admin — Full access</SelectItem>
-                  <SelectItem value="worker">Worker — Update stages</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+            {isOwner && (
+              <div>
+                <Label>Role</Label>
+                <Select value={editRole} onValueChange={(v) => setEditRole(v as "owner" | "admin" | "worker")}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="owner">Admin — Full access</SelectItem>
+                    <SelectItem value="admin">Project Manager — Manage projects</SelectItem>
+                    <SelectItem value="worker">Worker — Update stages</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             <Button onClick={handleUpdate} className="w-full" disabled={!editName.trim() || !editEmail.trim()}>Save Changes</Button>
           </div>
         </DialogContent>

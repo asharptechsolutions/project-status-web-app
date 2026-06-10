@@ -18,6 +18,7 @@ import type { LiveBranding } from "@/components/branding-settings";
 import { EmailTemplateEditor } from "@/components/email-template-editor";
 import { WebhookSettings } from "@/components/webhook-settings";
 import { SlackSettings } from "@/components/slack-settings";
+import { BillingSettings } from "@/components/billing-settings";
 
 type VisibilityKey = keyof Pick<
   ClientVisibilitySettings,
@@ -93,7 +94,7 @@ const automationDefaults: Record<AutomationKey, boolean> = {
 };
 
 function SettingsContent() {
-  const { orgId, isAdmin } = useAuth();
+  const { orgId, isAdmin, isOwner } = useAuth();
   const [settings, setSettings] = useState<Record<VisibilityKey, boolean>>(defaults);
   const [autoSettings, setAutoSettings] = useState<Record<AutomationKey, boolean>>(automationDefaults);
   const savedSettings = useRef<Record<VisibilityKey, boolean>>(defaults);
@@ -264,6 +265,7 @@ function SettingsContent() {
           <TabsTrigger value="general">General</TabsTrigger>
           <TabsTrigger value="branding">Branding & Emails</TabsTrigger>
           <TabsTrigger value="integrations">Integrations</TabsTrigger>
+          {isOwner && <TabsTrigger value="billing">Billing</TabsTrigger>}
         </TabsList>
 
         <TabsContent value="general" className="space-y-6">
@@ -397,6 +399,12 @@ function SettingsContent() {
           <WebhookSettings />
           <SlackSettings />
         </TabsContent>
+
+        {isOwner && orgId && (
+          <TabsContent value="billing" className="space-y-6">
+            <BillingSettings orgId={orgId} />
+          </TabsContent>
+        )}
       </Tabs>
     </div>
   );

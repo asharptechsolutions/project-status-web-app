@@ -27,6 +27,7 @@ interface AuthCtx {
   loading: boolean;
   isPlatformAdmin: boolean;
   isAdmin: boolean;
+  isOwner: boolean;
   isWorker: boolean;
   isClient: boolean;
   refreshMember: () => Promise<void>;
@@ -44,6 +45,7 @@ const AuthContext = createContext<AuthCtx>({
   loading: true,
   isPlatformAdmin: false,
   isAdmin: false,
+  isOwner: false,
   isWorker: false,
   isClient: false,
   refreshMember: async () => {},
@@ -182,7 +184,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         member,
         loading,
         isPlatformAdmin,
-        isAdmin: role === "owner",
+        isAdmin: role === "owner" || role === "admin",
+        isOwner: role === "owner",
         isWorker: role === "worker",
         isClient: role === "client",
         refreshMember,

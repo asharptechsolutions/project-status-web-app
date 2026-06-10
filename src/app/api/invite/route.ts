@@ -12,7 +12,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
 
-    if (!["owner", "worker", "client"].includes(role)) {
+    if (!["owner", "admin", "worker", "client"].includes(role)) {
       return NextResponse.json({ error: "Invalid role" }, { status: 400 });
     }
 
@@ -34,8 +34,13 @@ export async function POST(request: NextRequest) {
       .eq("team_id", teamId)
       .single();
 
-    if (!callerMember || callerMember.role !== "owner") {
-      return NextResponse.json({ error: "Only team owners can invite members" }, { status: 403 });
+    if (!callerMember || !["owner", "admin"].includes(callerMember.role)) {
+      return NextResponse.json({ error: "Only admins can invite members" }, { status: 403 });
+    }
+
+    // Only the owner (super admin) may grant elevated roles
+    if (["owner", "admin"].includes(role) && callerMember.role !== "owner") {
+      return NextResponse.json({ error: "Only the team owner can invite admins or project managers" }, { status: 403 });
     }
 
     const adminClient = createAdminClient();

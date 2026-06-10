@@ -6,6 +6,7 @@ import { createAvailabilitySlots, deleteAvailabilitySlot, deleteRecurringSlots, 
 import type { AvailabilitySlot, Appointment, OfficeHoursSettings } from "@/lib/types";
 import { toast } from "sonner";
 import { Trash2, Repeat, X, User, Clock } from "lucide-react";
+import { JoinCallButton } from "@/components/join-call-button";
 import { cn } from "@/lib/utils";
 
 interface DayDetailDialogProps {
@@ -294,6 +295,9 @@ export function DayDetailDialog({
                         {appt.project_name && (
                           <span className="text-[10px] text-muted-foreground truncate">({appt.project_name})</span>
                         )}
+                        <span onMouseDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}>
+                          <JoinCallButton appointment={{ ...appt, slot: entry.slot }} size="sm" variant="outline" className="h-6 text-[10px] px-1.5" label="Join" />
+                        </span>
                         <Button
                           variant="ghost"
                           size="icon"

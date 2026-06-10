@@ -63,9 +63,10 @@ try {
 
 ### Auth & Roles
 
-- `useAuth()` provides: `user`, `userId`, `orgId`, `role`, `isAdmin`, `isWorker`, `isClient`, `isPlatformAdmin`
-- **`isAdmin` means `role === "owner"`** — this naming is confusing but intentional. Don't change it.
-- Roles: `owner`/`admin` (full access), `worker` (progress stages), `client` (read-only)
+- `useAuth()` provides: `user`, `userId`, `orgId`, `role`, `isAdmin`, `isOwner`, `isWorker`, `isClient`, `isPlatformAdmin`
+- **`isAdmin` means `role === "owner" || role === "admin"`** (full project powers). **`isOwner` means `role === "owner"`** (super admin) — use it for billing, role management, and other org-level controls.
+- Roles: `owner` (super admin), `admin` (project manager — full project access), `worker` (progress stages), `client` (read-only)
+- Only the `owner` may invite, edit, or remove `owner`/`admin` members (enforced in the invite/update/delete member API routes).
 - Platform admin is a separate flag on `profiles.is_platform_admin`, not a team role.
 - All people live in `team_members` + `profiles`. There are no separate workers or clients tables.
 

@@ -26,8 +26,30 @@ export async function POST(request: NextRequest) {
       .eq("team_id", teamId)
       .single();
 
-    if (!callerMember || callerMember.role !== "owner") {
-      return NextResponse.json({ error: "Only team owners can update members" }, { status: 403 });
+    if (!callerMember || !["owner", "admin"].includes(callerMember.role)) {
+      return NextResponse.json({ error: "Only admins can update members" }, { status: 403 });
+    }
+
+    // Only the owner (super admin) may grant or modify elevated roles
+    if (callerMember.role !== "owner") {
+      const { data: targetMember } = await adminClient
+        .from("team_members")
+        .select("role")
+        .eq("user_id", userId)
+        .eq("team_id", teamId)
+        .single();
+      const targetRole = targetMember?.role;
+      const isSelf = userId === user.id;
+      const roleChanged = role && role !== targetRole;
+      if (roleChanged && ["owner", "admin"].includes(role)) {
+        return NextResponse.json({ error: "Only the team owner can assign elevated roles" }, { status: 403 });
+      }
+      if (roleChanged && targetRole && ["owner", "admin"].includes(targetRole)) {
+        return NextResponse.json({ error: "Only the team owner can change an admin's role" }, { status: 403 });
+      }
+      if (!isSelf && targetRole && ["owner", "admin"].includes(targetRole)) {
+        return NextResponse.json({ error: "Only the team owner can edit admins or project managers" }, { status: 403 });
+      }
     }
 
     // Update role/company_id on team_members

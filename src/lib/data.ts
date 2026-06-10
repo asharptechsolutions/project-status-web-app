@@ -1,4 +1,5 @@
 import { createClient } from "./supabase";
+import { nanoid } from "nanoid";
 
 const supabase = createClient();
 import type {
@@ -28,6 +29,9 @@ import type {
   ActivityLog,
   ActivityEntityType,
   DigestSettings,
+  UserDeviceKey,
+  ProjectKeyGrant,
+  Subscription,
 } from "./types";
 
 // ============ PROJECT CLIENTS (junction) ============
@@ -96,6 +100,42 @@ export async function getProject(id: string): Promise<Project | null> {
   return data as Project;
 }
 
+// ============ SHARE LINKS ============
+
+export async function enableProjectShare(projectId: string): Promise<string> {
+  const { data: existing, error: fetchError } = await supabase
+    .from("projects")
+    .select("share_token")
+    .eq("id", projectId)
+    .single();
+  if (fetchError) throw new Error(fetchError.message);
+  const token = existing?.share_token || nanoid(21);
+  const { error } = await supabase
+    .from("projects")
+    .update({ share_token: token, share_enabled: true })
+    .eq("id", projectId);
+  if (error) throw new Error(error.message);
+  return token;
+}
+
+export async function regenerateProjectShareToken(projectId: string): Promise<string> {
+  const token = nanoid(21);
+  const { error } = await supabase
+    .from("projects")
+    .update({ share_token: token, share_enabled: true })
+    .eq("id", projectId);
+  if (error) throw new Error(error.message);
+  return token;
+}
+
+export async function disableProjectShare(projectId: string): Promise<void> {
+  const { error } = await supabase
+    .from("projects")
+    .update({ share_enabled: false })
+    .eq("id", projectId);
+  if (error) throw new Error(error.message);
+}
+
 export async function createProject(
   project: Omit<Project, "id" | "created_at" | "updated_at">
 ): Promise<string> {
@@ -137,6 +177,16 @@ export async function getProjectStages(projectId: string): Promise<ProjectStage[
     .order("position", { ascending: true });
   if (error) throw new Error(error.message);
   return (data || []) as ProjectStage[];
+}
+
+export async function getProjectStage(stageId: string): Promise<ProjectStage | null> {
+  const { data, error } = await supabase
+    .from("project_stages")
+    .select("*")
+    .eq("id", stageId)
+    .single();
+  if (error) return null;
+  return data as ProjectStage;
 }
 
 export async function getStagesForProjects(projectIds: string[]): Promise<ProjectStage[]> {
@@ -330,9 +380,10 @@ export async function sendFileMessage(
   projectId: string,
   senderId: string,
   senderName: string,
-  file: File
+  file: File,
+  encryption?: { iv: string; encryptedMetadata: string }
 ): Promise<ProjectMessage> {
-  const uploaded = await uploadFile(projectId, file, senderId);
+  const uploaded = await uploadFile(projectId, file, senderId, encryption);
   const { data, error } = await supabase
     .from("messages")
     .insert({
@@ -386,7 +437,8 @@ export async function deleteFileRecord(id: string): Promise<void> {
 export async function uploadFile(
   projectId: string,
   file: File,
-  uploadedBy: string
+  uploadedBy: string,
+  encryption?: { iv: string; encryptedMetadata: string }
 ): Promise<ProjectFile> {
   const fileName = `${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
   const path = `project-files/${projectId}/${fileName}`;
@@ -394,7 +446,7 @@ export async function uploadFile(
   const { error: uploadError } = await supabase.storage
     .from("files")
     .upload(path, file, { contentType: file.type });
-  
+
   if (uploadError) {
     // If storage bucket doesn't exist, store as a placeholder URL
     console.warn("Storage upload failed, using placeholder:", uploadError.message);
@@ -411,6 +463,7 @@ export async function uploadFile(
     file_url: urlData?.publicUrl || "#",
     file_size: file.size,
     content_type: file.type,
+    ...(encryption ? { iv: encryption.iv, encrypted: true, encrypted_metadata: encryption.encryptedMetadata } : {}),
   });
 }
 
@@ -889,6 +942,22 @@ export async function getAppointments(
   })) as Appointment[];
 }
 
+export async function getAppointment(id: string): Promise<Appointment | null> {
+  const { data, error } = await supabase
+    .from("appointments")
+    .select("*, slot:availability_slots(*), project:projects(name)")
+    .eq("id", id)
+    .single();
+  if (error) return null;
+  const d = data as any;
+  return {
+    ...d,
+    slot: d.slot || undefined,
+    project_name: d.project?.name || undefined,
+    project: undefined,
+  } as Appointment;
+}
+
 export async function getAppointmentsBySlots(
   slotIds: string[]
 ): Promise<Appointment[]> {
@@ -971,9 +1040,9 @@ export async function bookAppointment(data: {
   client_id: string;
   client_name: string;
   notes?: string;
-}): Promise<void> {
+}): Promise<string> {
   // Insert appointment (UNIQUE on slot_id prevents double-booking)
-  const { error: apptError } = await supabase
+  const { data: appt, error: apptError } = await supabase
     .from("appointments")
     .insert({
       team_id: data.team_id,
@@ -983,7 +1052,9 @@ export async function bookAppointment(data: {
       client_name: data.client_name,
       notes: data.notes || null,
       status: "confirmed",
-    });
+    })
+    .select("id")
+    .single();
   if (apptError) {
     if (apptError.message.includes("duplicate") || apptError.message.includes("unique")) {
       throw new Error("This slot was just booked by someone else. Please pick another time.");
@@ -997,6 +1068,34 @@ export async function bookAppointment(data: {
     .update({ is_booked: true })
     .eq("id", data.slot_id);
   if (slotError) throw new Error(slotError.message);
+
+  return appt.id as string;
+}
+
+/** Upcoming confirmed appointments booked by this client for one project */
+export async function getClientAppointments(
+  teamId: string,
+  projectId: string,
+  clientId: string
+): Promise<Appointment[]> {
+  const { data, error } = await supabase
+    .from("appointments")
+    .select("*, slot:availability_slots(*), project:projects(name)")
+    .eq("team_id", teamId)
+    .eq("project_id", projectId)
+    .eq("client_id", clientId)
+    .eq("status", "confirmed");
+  if (error) throw new Error(error.message);
+  const now = new Date();
+  return (data || [])
+    .filter((d: any) => d.slot && new Date(d.slot.end_time) > now)
+    .sort((a: any, b: any) => new Date(a.slot.start_time).getTime() - new Date(b.slot.start_time).getTime())
+    .map((d: any) => ({
+      ...d,
+      slot: d.slot || undefined,
+      project_name: d.project?.name || undefined,
+      project: undefined,
+    })) as Appointment[];
 }
 
 export async function cancelAppointment(
@@ -1561,4 +1660,86 @@ export async function upsertDigestSettings(
       { onConflict: "team_id" }
     );
   if (error) throw new Error(error.message);
+}
+
+// ============ END-TO-END ENCRYPTION ============
+
+export async function registerDeviceKey(
+  userId: string,
+  deviceId: string,
+  publicKey: JsonWebKey,
+  deviceLabel: string
+): Promise<void> {
+  const { error } = await supabase
+    .from("user_device_keys")
+    .upsert(
+      { user_id: userId, device_id: deviceId, public_key: publicKey, device_label: deviceLabel },
+      { onConflict: "user_id,device_id" }
+    );
+  if (error) throw new Error(error.message);
+}
+
+export async function getDeviceKeysForUsers(userIds: string[]): Promise<UserDeviceKey[]> {
+  if (userIds.length === 0) return [];
+  const { data, error } = await supabase
+    .from("user_device_keys")
+    .select("*")
+    .in("user_id", userIds);
+  if (error) throw new Error(error.message);
+  return (data || []) as UserDeviceKey[];
+}
+
+export async function getMyKeyGrant(
+  projectId: string,
+  userId: string,
+  deviceId: string
+): Promise<ProjectKeyGrant | null> {
+  const { data, error } = await supabase
+    .from("project_key_grants")
+    .select("*")
+    .eq("project_id", projectId)
+    .eq("user_id", userId)
+    .eq("device_id", deviceId)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return data as ProjectKeyGrant | null;
+}
+
+export async function getProjectKeyGrants(projectId: string): Promise<ProjectKeyGrant[]> {
+  const { data, error } = await supabase
+    .from("project_key_grants")
+    .select("*")
+    .eq("project_id", projectId);
+  if (error) throw new Error(error.message);
+  return (data || []) as ProjectKeyGrant[];
+}
+
+export async function createKeyGrants(
+  grants: Omit<ProjectKeyGrant, "id" | "created_at">[]
+): Promise<void> {
+  if (grants.length === 0) return;
+  const { error } = await supabase
+    .from("project_key_grants")
+    .upsert(grants, { onConflict: "project_id,user_id,device_id" });
+  if (error) throw new Error(error.message);
+}
+
+export async function enableProjectEncryption(projectId: string): Promise<void> {
+  const { error } = await supabase
+    .from("projects")
+    .update({ encryption_enabled: true })
+    .eq("id", projectId);
+  if (error) throw new Error(error.message);
+}
+
+// ============ BILLING ============
+
+export async function getSubscription(orgId: string): Promise<Subscription | null> {
+  const { data, error } = await supabase
+    .from("subscriptions")
+    .select("*")
+    .eq("team_id", orgId)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return data as Subscription | null;
 }

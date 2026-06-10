@@ -99,7 +99,7 @@ export function CommandPalette() {
     callback();
   };
 
-  const workers = members.filter((m) => m.role === "owner" || m.role === "worker");
+  const workers = members.filter((m) => m.role === "owner" || m.role === "admin" || m.role === "worker");
   const clients = members.filter((m) => m.role === "client");
 
   return (

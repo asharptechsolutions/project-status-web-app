@@ -1,14 +1,23 @@
 "use client";
 import { useEffect, useState, useRef, useCallback, forwardRef, useImperativeHandle } from "react";
-import { getProjectMessages, sendProjectMessage, sendFileMessage, deleteFileRecord, getProjectFiles, getMessageReadStatus, markMessagesRead } from "@/lib/data";
+import {
+  getProjectMessages, sendProjectMessage, sendFileMessage, deleteFileRecord, getProjectFiles, getMessageReadStatus, markMessagesRead,
+  registerDeviceKey, getMyKeyGrant, getProjectKeyGrants, getDeviceKeysForUsers, createKeyGrants, getMembers, getProjectClients,
+} from "@/lib/data";
+import {
+  getOrCreateDeviceKey, getDeviceLabel, unwrapProjectKey, wrapProjectKey,
+  encryptText, decryptText, encryptFile, decryptFileBytes, decryptFileMetadata,
+  type DeviceKeyRecord,
+} from "@/lib/crypto";
 import { createClient } from "@/lib/supabase";
 import { useAuth } from "@/lib/auth-context";
-import type { ProjectMessage, ProjectFile } from "@/lib/types";
+import type { ProjectMessage, ProjectFile, UserDeviceKey } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   MessageCircle, Send, Paperclip, X, Download, Trash2,
   File, FileText, Image, FileArchive, Loader2, FolderOpen, ArrowLeft,
+  Lock, ShieldCheck, UserCheck,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -61,9 +70,13 @@ interface ChatBubbleProps {
   projectId: string;
   chatDisabled?: boolean;
   filesDisabled?: boolean;
+  /** True end-to-end encryption: content is encrypted/decrypted in the browser */
+  encryptionEnabled?: boolean;
+  /** Team id — used to discover participant devices for key approvals */
+  teamId?: string;
 }
 
-export const ChatBubble = forwardRef<ChatBubbleHandle, ChatBubbleProps>(function ChatBubble({ projectId, chatDisabled, filesDisabled }, ref) {
+export const ChatBubble = forwardRef<ChatBubbleHandle, ChatBubbleProps>(function ChatBubble({ projectId, chatDisabled, filesDisabled, encryptionEnabled, teamId }, ref) {
   const { userId, user, isAdmin, isClient } = useAuth();
   const [open, setOpen] = useState(false);
   const [view, setView] = useState<"chat" | "files">(chatDisabled ? "files" : "chat");
@@ -75,6 +88,15 @@ export const ChatBubble = forwardRef<ChatBubbleHandle, ChatBubbleProps>(function
   const [stagedFile, setStagedFile] = useState<File | null>(null);
   const [files, setFiles] = useState<ProjectFile[]>([]);
   const [filesLoading, setFilesLoading] = useState(false);
+
+  // E2EE state — the unwrapped project key lives only in memory
+  const [keyStatus, setKeyStatus] = useState<"off" | "loading" | "ready" | "pending">(encryptionEnabled ? "loading" : "off");
+  const projectKeyRef = useRef<CryptoKey | null>(null);
+  const deviceRef = useRef<DeviceKeyRecord | null>(null);
+  const [pendingDevices, setPendingDevices] = useState<UserDeviceKey[]>([]);
+  const [pendingNames, setPendingNames] = useState<Record<string, string>>({});
+  const [showPending, setShowPending] = useState(false);
+  const [approvingId, setApprovingId] = useState<string | null>(null);
 
   useImperativeHandle(ref, () => ({
     openFiles: () => { setOpen(true); setView("files"); },
@@ -90,9 +112,35 @@ export const ChatBubble = forwardRef<ChatBubbleHandle, ChatBubbleProps>(function
   const openRef = useRef(open);
   openRef.current = open;
 
+  // Decrypt encrypted content in-memory (ciphertext never renders)
+  const decorateMessages = useCallback(async (msgs: ProjectMessage[]): Promise<ProjectMessage[]> => {
+    const key = projectKeyRef.current;
+    return Promise.all(msgs.map(async (m) => {
+      let out = m;
+      if (m.encrypted) {
+        if (key && m.iv) {
+          try {
+            out = { ...out, content: await decryptText(key, m.content, m.iv) };
+          } catch {
+            out = { ...out, content: "" };
+          }
+        } else {
+          out = { ...out, content: "" };
+        }
+      }
+      if (m.file?.encrypted && key && m.file.encrypted_metadata) {
+        try {
+          const meta = await decryptFileMetadata(key, m.file.encrypted_metadata);
+          out = { ...out, file: { ...m.file, file_name: meta.name, content_type: meta.type } };
+        } catch { /* show as-is */ }
+      }
+      return out;
+    }));
+  }, []);
+
   const loadMessages = useCallback(async () => {
     try {
-      const msgs = await getProjectMessages(projectId);
+      const msgs = await decorateMessages(await getProjectMessages(projectId));
       setMessages(msgs);
 
       // First load: fetch last_read_at from DB
@@ -115,7 +163,7 @@ export const ChatBubble = forwardRef<ChatBubbleHandle, ChatBubbleProps>(function
     } finally {
       setLoading(false);
     }
-  }, [projectId, userId]);
+  }, [projectId, userId, decorateMessages]);
 
   const loadMessagesRef = useRef(loadMessages);
   loadMessagesRef.current = loadMessages;
@@ -124,13 +172,120 @@ export const ChatBubble = forwardRef<ChatBubbleHandle, ChatBubbleProps>(function
     setFilesLoading(true);
     try {
       const f = await getProjectFiles(projectId);
-      setFiles(f);
+      const key = projectKeyRef.current;
+      const decorated = await Promise.all(f.map(async (file) => {
+        if (file.encrypted && key && file.encrypted_metadata) {
+          try {
+            const meta = await decryptFileMetadata(key, file.encrypted_metadata);
+            return { ...file, file_name: meta.name, content_type: meta.type };
+          } catch { return file; }
+        }
+        return file;
+      }));
+      setFiles(decorated);
     } catch (err) {
       console.error("Failed to load files:", err);
     } finally {
       setFilesLoading(false);
     }
   }, [projectId]);
+
+  // ----- E2EE key bootstrap -----
+  const initKey = useCallback(async () => {
+    if (!encryptionEnabled || !userId) return;
+    try {
+      const device = deviceRef.current ?? await getOrCreateDeviceKey();
+      deviceRef.current = device;
+      await registerDeviceKey(userId, device.deviceId, device.publicKeyJwk, getDeviceLabel());
+      const grant = await getMyKeyGrant(projectId, userId, device.deviceId);
+      if (grant) {
+        projectKeyRef.current = await unwrapProjectKey(grant.wrapped_key, grant.ephemeral_public_key, device.privateKey);
+        setKeyStatus("ready");
+        loadMessagesRef.current();
+      } else {
+        projectKeyRef.current = null;
+        setKeyStatus("pending");
+      }
+    } catch (err) {
+      console.error("E2EE setup failed:", err);
+      setKeyStatus("pending");
+    }
+  }, [encryptionEnabled, userId, projectId]);
+
+  const initKeyRef = useRef(initKey);
+  initKeyRef.current = initKey;
+
+  useEffect(() => {
+    if (encryptionEnabled) {
+      setKeyStatus("loading");
+      projectKeyRef.current = null;
+      initKeyRef.current();
+    } else {
+      setKeyStatus("off");
+      projectKeyRef.current = null;
+    }
+  }, [encryptionEnabled, projectId, userId]);
+
+  // While waiting for approval, retry until a grant appears
+  useEffect(() => {
+    if (keyStatus !== "pending") return;
+    const t = setInterval(() => initKeyRef.current(), 10000);
+    return () => clearInterval(t);
+  }, [keyStatus]);
+
+  // ----- Pending device discovery (for key holders) -----
+  const loadPendingDevices = useCallback(async () => {
+    if (!projectKeyRef.current || !teamId) return;
+    try {
+      const [grants, members, clientIds] = await Promise.all([
+        getProjectKeyGrants(projectId),
+        getMembers(teamId).catch(() => []),
+        getProjectClients(projectId).catch(() => [] as string[]),
+      ]);
+      const participantIds = new Set<string>([
+        ...members.filter((m) => m.role !== "client").map((m) => m.user_id),
+        ...clientIds,
+      ]);
+      const names: Record<string, string> = {};
+      members.forEach((m) => { names[m.user_id] = m.name || m.email; });
+      const keys = await getDeviceKeysForUsers([...participantIds]);
+      const granted = new Set(grants.map((g) => `${g.user_id}:${g.device_id}`));
+      setPendingNames(names);
+      setPendingDevices(keys.filter((k) => !granted.has(`${k.user_id}:${k.device_id}`)));
+    } catch (err) {
+      console.error("Failed to load pending devices:", err);
+    }
+  }, [projectId, teamId]);
+
+  useEffect(() => {
+    if (!open || keyStatus !== "ready") return;
+    loadPendingDevices();
+    const t = setInterval(loadPendingDevices, 15000);
+    return () => clearInterval(t);
+  }, [open, keyStatus, loadPendingDevices]);
+
+  const approveDevice = async (dk: UserDeviceKey) => {
+    const key = projectKeyRef.current;
+    if (!key || !userId) return;
+    setApprovingId(dk.id);
+    try {
+      const { wrappedKey, ephemeralPublicKey } = await wrapProjectKey(key, dk.public_key);
+      await createKeyGrants([{
+        project_id: projectId,
+        user_id: dk.user_id,
+        device_id: dk.device_id,
+        wrapped_key: wrappedKey,
+        ephemeral_public_key: ephemeralPublicKey,
+        granted_by: userId,
+      }]);
+      setPendingDevices((prev) => prev.filter((p) => p.id !== dk.id));
+      toast.success("Device approved");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to approve device");
+    } finally {
+      setApprovingId(null);
+    }
+  };
 
   // Load files when switching to files view
   useEffect(() => {
@@ -150,6 +305,8 @@ export const ChatBubble = forwardRef<ChatBubbleHandle, ChatBubbleProps>(function
       setText("");
       setStagedFile(null);
       setFiles([]);
+      setPendingDevices([]);
+      setShowPending(false);
     }
   }, [projectId]);
 
@@ -214,29 +371,52 @@ export const ChatBubble = forwardRef<ChatBubbleHandle, ChatBubbleProps>(function
   const handleSend = async () => {
     const trimmed = text.trim();
     if ((!trimmed && !stagedFile) || !userId) return;
+    const encKey = encryptionEnabled ? projectKeyRef.current : null;
+    if (encryptionEnabled && !encKey) {
+      toast.error("Waiting for encryption access — ask your project manager to approve this device");
+      return;
+    }
     setSending(true);
     try {
       const senderName = user?.user_metadata?.full_name || user?.email || "Unknown";
-      if (stagedFile) {
-        await sendFileMessage(projectId, userId, senderName, stagedFile);
-        setStagedFile(null);
-        if (trimmed) {
+      const sendText = async (content: string) => {
+        if (encKey) {
+          const { ciphertext, iv } = await encryptText(encKey, content);
           await sendProjectMessage({
             project_id: projectId,
             sender_id: userId,
             sender_name: senderName,
-            content: trimmed,
+            content: ciphertext,
+            file_id: null,
+            iv,
+            encrypted: true,
+          });
+        } else {
+          await sendProjectMessage({
+            project_id: projectId,
+            sender_id: userId,
+            sender_name: senderName,
+            content,
             file_id: null,
           });
         }
+      };
+      if (stagedFile) {
+        if (encKey) {
+          const payload = await encryptFile(encKey, stagedFile);
+          // window.File — the lucide `File` icon import shadows the DOM constructor
+          const encFile = new window.File([payload.blob], "encrypted.bin", { type: "application/octet-stream" });
+          await sendFileMessage(projectId, userId, senderName, encFile, {
+            iv: payload.iv,
+            encryptedMetadata: payload.encryptedMetadata,
+          });
+        } else {
+          await sendFileMessage(projectId, userId, senderName, stagedFile);
+        }
+        setStagedFile(null);
+        if (trimmed) await sendText(trimmed);
       } else {
-        await sendProjectMessage({
-          project_id: projectId,
-          sender_id: userId,
-          sender_name: senderName,
-          content: trimmed,
-          file_id: null,
-        });
+        await sendText(trimmed);
       }
       setText("");
       wasNearBottomRef.current = true;
@@ -245,6 +425,33 @@ export const ChatBubble = forwardRef<ChatBubbleHandle, ChatBubbleProps>(function
       toast.error(err.message || "Failed to send message");
     } finally {
       setSending(false);
+    }
+  };
+
+  // Fetch ciphertext, decrypt in-memory, save with the real name
+  const handleDownload = async (file: ProjectFile) => {
+    if (!file.encrypted) {
+      await downloadFile(file.file_url, file.file_name);
+      return;
+    }
+    const key = projectKeyRef.current;
+    if (!key || !file.iv) {
+      toast.error("Waiting for encryption access to download this file");
+      return;
+    }
+    try {
+      const res = await fetch(file.file_url);
+      const decrypted = await decryptFileBytes(key, await res.arrayBuffer(), file.iv);
+      const blobUrl = URL.createObjectURL(new Blob([decrypted], { type: file.content_type || "application/octet-stream" }));
+      const a = document.createElement("a");
+      a.href = blobUrl;
+      a.download = file.file_name;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(blobUrl);
+    } catch {
+      toast.error("Failed to decrypt file");
     }
   };
 
@@ -315,6 +522,11 @@ export const ChatBubble = forwardRef<ChatBubbleHandle, ChatBubbleProps>(function
                 <>
                   <MessageCircle className="h-5 w-5 text-primary" />
                   <h3 className="font-semibold text-sm">Messages</h3>
+                  {encryptionEnabled && (
+                    <span title="End-to-end encrypted">
+                      <Lock className="h-3.5 w-3.5 text-green-600 dark:text-green-400" />
+                    </span>
+                  )}
                   {messages.length > 0 && (
                     <span className="text-xs bg-muted px-2 py-0.5 rounded-full">{messages.length}</span>
                   )}
@@ -322,6 +534,18 @@ export const ChatBubble = forwardRef<ChatBubbleHandle, ChatBubbleProps>(function
               )}
             </div>
             <div className="flex items-center gap-1">
+              {view === "chat" && keyStatus === "ready" && pendingDevices.length > 0 && (
+                <button
+                  onClick={() => setShowPending((v) => !v)}
+                  className="relative text-muted-foreground hover:text-foreground p-1 rounded hover:bg-muted"
+                  title="Approve new devices"
+                >
+                  <UserCheck className="h-4 w-4" />
+                  <span className="absolute -top-1 -right-1 flex items-center justify-center min-w-[16px] h-4 px-0.5 text-[10px] font-bold bg-amber-500 text-white rounded-full">
+                    {pendingDevices.length}
+                  </span>
+                </button>
+              )}
               {view === "chat" && !filesDisabled && (
                 <button onClick={() => setView("files")} className="text-muted-foreground hover:text-foreground p-1 rounded hover:bg-muted" title="View Files">
                   <FolderOpen className="h-4 w-4" />
@@ -332,6 +556,37 @@ export const ChatBubble = forwardRef<ChatBubbleHandle, ChatBubbleProps>(function
               </button>
             </div>
           </div>
+
+          {/* Pending device approvals (visible to key holders) */}
+          {view === "chat" && showPending && pendingDevices.length > 0 && (
+            <div className="border-b bg-muted/30 px-3 py-2 space-y-2 max-h-40 overflow-y-auto">
+              <p className="text-xs font-medium flex items-center gap-1">
+                <ShieldCheck className="h-3.5 w-3.5 text-primary" /> New devices waiting for access
+              </p>
+              {pendingDevices.map((dk) => (
+                <div key={dk.id} className="flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="text-xs truncate">{pendingNames[dk.user_id] || "Project member"}</p>
+                    <p className="text-[10px] text-muted-foreground truncate">{dk.device_label || "Unknown device"}</p>
+                  </div>
+                  <Button size="sm" variant="outline" className="h-7 text-xs shrink-0" onClick={() => approveDevice(dk)} disabled={approvingId === dk.id}>
+                    {approvingId === dk.id ? <Loader2 className="h-3 w-3 animate-spin" /> : "Approve"}
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* This device is waiting for a key grant */}
+          {view === "chat" && keyStatus === "pending" && (
+            <div className="border-b bg-amber-500/10 px-3 py-2 text-xs flex items-start gap-2">
+              <Lock className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+              <span>
+                This chat is end-to-end encrypted. Waiting for access — ask your project manager to open the chat
+                and approve this device.
+              </span>
+            </div>
+          )}
 
           {/* Files view */}
           {view === "files" && (
@@ -354,7 +609,7 @@ export const ChatBubble = forwardRef<ChatBubbleHandle, ChatBubbleProps>(function
                     </div>
                     <div className="flex items-center gap-1">
                       <button
-                        onClick={() => downloadFile(file.file_url, file.file_name)}
+                        onClick={() => handleDownload(file)}
                         className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground"
                         title="Download"
                       >
@@ -430,7 +685,7 @@ export const ChatBubble = forwardRef<ChatBubbleHandle, ChatBubbleProps>(function
                           </div>
                           <div className="flex items-center gap-0.5">
                             <button
-                              onClick={() => downloadFile(msg.file!.file_url, msg.file!.file_name)}
+                              onClick={() => handleDownload(msg.file!)}
                               className={`p-1 rounded hover:bg-black/10 ${own ? "" : "text-muted-foreground hover:text-foreground"}`}
                               title="Download"
                             >
@@ -459,6 +714,13 @@ export const ChatBubble = forwardRef<ChatBubbleHandle, ChatBubbleProps>(function
                       {/* Text content */}
                       {msg.content && (
                         <p className="text-sm whitespace-pre-wrap break-words">{msg.content}</p>
+                      )}
+
+                      {/* Encrypted content this device can't read yet */}
+                      {msg.encrypted && !msg.content && (
+                        <p className={`text-xs italic flex items-center gap-1 ${own ? "opacity-70" : "text-muted-foreground"}`}>
+                          <Lock className="h-3 w-3 shrink-0" /> Encrypted message — access pending
+                        </p>
                       )}
                     </div>
                     <span className="text-[10px] text-muted-foreground mt-0.5 px-1">
@@ -506,16 +768,16 @@ export const ChatBubble = forwardRef<ChatBubbleHandle, ChatBubbleProps>(function
               </>
             )}
             <Input
-              placeholder="Type a message..."
+              placeholder={keyStatus === "pending" ? "Waiting for encryption access..." : "Type a message..."}
               value={text}
               onChange={(e) => setText(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSend()}
-              disabled={sending}
+              disabled={sending || keyStatus === "pending"}
               className="h-8 text-sm"
             />
             <Button
               onClick={handleSend}
-              disabled={sending || (!text.trim() && !stagedFile)}
+              disabled={sending || keyStatus === "pending" || (!text.trim() && !stagedFile)}
               size="icon"
               className="h-8 w-8 shrink-0"
             >

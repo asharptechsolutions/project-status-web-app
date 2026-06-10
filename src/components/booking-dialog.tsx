@@ -7,9 +7,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Calendar } from "@/components/ui/calendar";
 import { getAvailableSlotsForClient, bookAppointment } from "@/lib/data";
-import type { Project, AvailabilitySlot } from "@/lib/types";
+import type { Project, AvailabilitySlot, Appointment } from "@/lib/types";
 import { toast } from "sonner";
 import { Loader2, ArrowLeft, Check } from "lucide-react";
+import { JoinCallButton } from "@/components/join-call-button";
 import { createClient } from "@/lib/supabase";
 
 interface BookingDialogProps {
@@ -40,6 +41,7 @@ export function BookingDialog({
   const [loading, setLoading] = useState(false);
   const [booking, setBooking] = useState(false);
   const [booked, setBooked] = useState(false);
+  const [bookedId, setBookedId] = useState<string | null>(null);
   const [availableDates, setAvailableDates] = useState<Date[]>([]);
   const [calendarMonth, setCalendarMonth] = useState<Date>(new Date());
   const [loadingDates, setLoadingDates] = useState(false);
@@ -60,6 +62,7 @@ export function BookingDialog({
       setSelectedSlot(null);
       setNotes("");
       setBooked(false);
+      setBookedId(null);
       setCalendarMonth(new Date());
     }
   }, [open, projects]);
@@ -134,7 +137,7 @@ export function BookingDialog({
     if (!selectedSlot || !selectedProject) return;
     setBooking(true);
     try {
-      await bookAppointment({
+      const apptId = await bookAppointment({
         team_id: orgId,
         slot_id: selectedSlot.id,
         project_id: selectedProject.id,
@@ -142,6 +145,7 @@ export function BookingDialog({
         client_name: userName,
         notes: notes.trim() || undefined,
       });
+      setBookedId(apptId);
       setBooked(true);
       toast.success("Appointment booked!");
     } catch (err: any) {
@@ -201,6 +205,26 @@ export function BookingDialog({
                 </p>
               )}
             </div>
+            {bookedId && selectedSlot && selectedProject && (
+              <JoinCallButton
+                appointment={{
+                  id: bookedId,
+                  team_id: orgId,
+                  slot_id: selectedSlot.id,
+                  project_id: selectedProject.id,
+                  client_id: userId,
+                  client_name: userName,
+                  notes: null,
+                  status: "confirmed",
+                  created_at: new Date().toISOString(),
+                  slot: selectedSlot,
+                } satisfies Appointment}
+              />
+            )}
+            <p className="text-xs text-muted-foreground text-center max-w-xs">
+              This is a video call — a &quot;Join video call&quot; button appears on your project page from 10 minutes
+              before the start time.
+            </p>
             <Button onClick={() => onOpenChange(false)}>Done</Button>
           </div>
         ) : (
