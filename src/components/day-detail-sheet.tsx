@@ -18,6 +18,7 @@ import {
 import type { AvailabilitySlot, Appointment, OfficeHoursSettings } from "@/lib/types";
 import { toast } from "sonner";
 import { Trash2, X, Plus, Clock, User, CalendarOff } from "lucide-react";
+import { JoinCallButton } from "@/components/join-call-button";
 import { cn } from "@/lib/utils";
 
 interface DayDetailSheetProps {
@@ -258,15 +259,18 @@ export function DayDetailSheet({
 
                     {/* Action */}
                     {appointment ? (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7 shrink-0 hover:bg-destructive/10 hover:text-destructive"
-                        onClick={() => handleCancelAppointment(appointment)}
-                        title="Cancel appointment"
-                      >
-                        <X className="h-3.5 w-3.5" />
-                      </Button>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <JoinCallButton appointment={{ ...appointment, slot }} size="sm" variant="outline" className="h-7 text-xs" label="Join" />
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 shrink-0 hover:bg-destructive/10 hover:text-destructive"
+                          onClick={() => handleCancelAppointment(appointment)}
+                          title="Cancel appointment"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
                     ) : (
                       <Button
                         variant="ghost"

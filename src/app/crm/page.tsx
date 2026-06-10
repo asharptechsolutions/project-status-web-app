@@ -55,7 +55,7 @@ function CRMInner() {
 
   useEffect(() => { load(); }, [load]);
 
-  const workerCount = members.filter((m) => m.role === "owner" || m.role === "worker").length;
+  const workerCount = members.filter((m) => m.role === "owner" || m.role === "admin" || m.role === "worker").length;
   const clientCount = members.filter((m) => m.role === "client").length;
 
   const handleSaveCompany = async () => {

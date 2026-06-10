@@ -20,9 +20,6 @@ export function ProjectNotes({ projectId }: ProjectNotesProps) {
   const [adding, setAdding] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  // Hidden from clients
-  if (isClient) return null;
-
   const loadNotes = async () => {
     try {
       const data = await getProjectNotes(projectId);
@@ -35,8 +32,13 @@ export function ProjectNotes({ projectId }: ProjectNotesProps) {
   };
 
   useEffect(() => {
+    if (isClient) return;
     loadNotes();
-  }, [projectId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId, isClient]);
+
+  // Hidden from clients — checked after hooks so hook order stays stable
+  if (isClient) return null;
 
   const handleAdd = async () => {
     const trimmed = content.trim();

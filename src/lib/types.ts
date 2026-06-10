@@ -36,6 +36,9 @@ export interface Project {
   time_tracking_auto_start?: boolean;
   time_tracking_default_billable?: boolean;
   time_tracking_require_notes?: boolean;
+  share_token?: string | null;
+  share_enabled?: boolean;
+  encryption_enabled?: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -68,6 +71,8 @@ export interface ProjectMessage {
   content: string;
   file_id: string | null;
   file?: ProjectFile | null;
+  iv?: string | null;
+  encrypted?: boolean;
   created_at: string;
 }
 
@@ -88,6 +93,9 @@ export interface ProjectFile {
   file_url: string;
   file_size: number;
   content_type: string;
+  iv?: string | null;
+  encrypted?: boolean;
+  encrypted_metadata?: string | null;
   created_at: string;
 }
 
@@ -381,6 +389,42 @@ export interface ActivityLog {
   entity_name: string;
   project_id: string | null;
   metadata: Record<string, unknown>;
+  created_at: string;
+}
+
+// ============ BILLING ============
+
+export interface Subscription {
+  id: string;
+  team_id: string;
+  stripe_customer_id: string | null;
+  stripe_subscription_id: string | null;
+  status: string | null;
+  plan: "free" | "pro";
+  current_period_end: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// ============ END-TO-END ENCRYPTION ============
+
+export interface UserDeviceKey {
+  id: string;
+  user_id: string;
+  device_id: string;
+  public_key: JsonWebKey;
+  device_label: string;
+  created_at: string;
+}
+
+export interface ProjectKeyGrant {
+  id: string;
+  project_id: string;
+  user_id: string;
+  device_id: string;
+  wrapped_key: string;
+  ephemeral_public_key: JsonWebKey;
+  granted_by: string;
   created_at: string;
 }
 

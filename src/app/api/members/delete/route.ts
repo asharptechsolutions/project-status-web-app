@@ -26,8 +26,21 @@ export async function POST(request: NextRequest) {
       .eq("team_id", teamId)
       .single();
 
-    if (!callerMember || callerMember.role !== "owner") {
-      return NextResponse.json({ error: "Only team owners can remove members" }, { status: 403 });
+    if (!callerMember || !["owner", "admin"].includes(callerMember.role)) {
+      return NextResponse.json({ error: "Only admins can remove members" }, { status: 403 });
+    }
+
+    // Only the owner (super admin) may remove admins or project managers
+    if (callerMember.role !== "owner") {
+      const { data: targetMember } = await adminClient
+        .from("team_members")
+        .select("role")
+        .eq("user_id", userId)
+        .eq("team_id", teamId)
+        .single();
+      if (targetMember && ["owner", "admin"].includes(targetMember.role)) {
+        return NextResponse.json({ error: "Only the team owner can remove admins or project managers" }, { status: 403 });
+      }
     }
 
     // Prevent self-deletion

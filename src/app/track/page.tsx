@@ -2,7 +2,7 @@
 import { Suspense, useRef, useEffect, useState, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase";
-import type { Project, ProjectStage, ClientVisibilitySettings, StageDependency } from "@/lib/types";
+import type { Project, ProjectStage, ClientVisibilitySettings, StageDependency, Appointment } from "@/lib/types";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -13,7 +13,8 @@ import { BookingDialog } from "@/components/booking-dialog";
 import { useAuth } from "@/lib/auth-context";
 import { AuthForm } from "@/components/auth-form";
 import { toast } from "sonner";
-import { getClientProjects, getClientVisibilitySettings, getStageDependencies, getClientNotificationPreferences, upsertClientNotificationPreferences, getTimeSummaryByStage } from "@/lib/data";
+import { getClientProjects, getClientVisibilitySettings, getStageDependencies, getClientNotificationPreferences, upsertClientNotificationPreferences, getTimeSummaryByStage, getClientAppointments } from "@/lib/data";
+import { JoinCallButton } from "@/components/join-call-button";
 
 const WorkflowCanvas = dynamic(
   () => import("@/components/workflow-canvas").then((m) => m.WorkflowCanvas),
@@ -74,8 +75,20 @@ function TrackInner() {
   const [viewMode, setViewMode] = useState<"canvas" | "kanban" | "gantt" | "list">("list");
   const [notifyEnabled, setNotifyEnabled] = useState(true);
   const [timeByStage, setTimeByStage] = useState<Record<string, number>>({});
+  const [myAppointments, setMyAppointments] = useState<Appointment[]>([]);
 
   const projectId = searchParams.get("id");
+
+  const loadAppointments = useCallback(async () => {
+    if (!userId || !projectId || !orgId) return;
+    try {
+      setMyAppointments(await getClientAppointments(orgId, projectId, userId));
+    } catch {
+      // non-fatal — appointments strip just stays hidden
+    }
+  }, [userId, projectId, orgId]);
+
+  useEffect(() => { loadAppointments(); }, [loadAppointments]);
 
   const loadProject = useCallback(async () => {
     if (!projectId || !userId) return;
@@ -305,6 +318,25 @@ function TrackInner() {
           </div>
         </div>
 
+        {/* Upcoming video calls */}
+        {myAppointments.length > 0 && (
+          <Card className="mb-4">
+            <CardContent className="pt-4 pb-4 space-y-2">
+              <p className="text-sm font-medium flex items-center gap-2">
+                <CalendarDays className="h-4 w-4 text-primary" /> Upcoming calls
+              </p>
+              {myAppointments.map((a) => (
+                <div key={a.id} className="flex items-center justify-between gap-2">
+                  <p className="text-sm text-muted-foreground">
+                    {a.slot ? new Date(a.slot.start_time).toLocaleString(undefined, { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : ""}
+                  </p>
+                  <JoinCallButton appointment={a} />
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        )}
+
         {/* View toggle */}
         {stages.length > 0 && (
           <div className="flex items-center gap-1 mb-3">
@@ -372,13 +404,13 @@ function TrackInner() {
       </main>
 
       {project && showChatBubble && (
-        <ChatBubble ref={chatBubbleRef} projectId={project.id} chatDisabled={!showChat} filesDisabled={!showFiles} />
+        <ChatBubble ref={chatBubbleRef} projectId={project.id} chatDisabled={!showChat} filesDisabled={!showFiles} encryptionEnabled={!!project.encryption_enabled} teamId={project.team_id} />
       )}
 
       {orgId && userId && showBooking && (
         <BookingDialog
           open={bookingOpen}
-          onOpenChange={setBookingOpen}
+          onOpenChange={(o) => { setBookingOpen(o); if (!o) loadAppointments(); }}
           orgId={orgId}
           userId={userId}
           userName={user?.user_metadata?.full_name || user?.email || "Client"}

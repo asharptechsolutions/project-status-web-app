@@ -21,18 +21,27 @@ import type { Metadata } from "next";
 export const metadata: Metadata = {
   title: "Pricing - ProjectStatus",
   description:
-    "ProjectStatus is free during early access. Manage projects, track workflows, and collaborate with clients at no cost.",
+    "Simple pricing for teams of every size. Start free, upgrade to Pro when you need more.",
 };
 
-const included = [
-  { icon: FolderOpen, text: "Unlimited projects" },
-  { icon: Users, text: "Unlimited team members" },
+const freeFeatures = [
+  { icon: FolderOpen, text: "Up to 3 active projects" },
+  { icon: Users, text: "Up to 5 team members" },
   { icon: Globe, text: "Client tracking portal" },
   { icon: Zap, text: "Workflow templates" },
-  { icon: BarChart3, text: "Progress dashboards" },
   { icon: MessageSquare, text: "Project chat" },
-  { icon: CalendarDays, text: "Scheduling & booking" },
   { icon: Upload, text: "File uploads" },
+];
+
+const proFeatures = [
+  { icon: FolderOpen, text: "Unlimited projects" },
+  { icon: Users, text: "Unlimited team members" },
+  { icon: Globe, text: "Client tracking portal & share links" },
+  { icon: Zap, text: "Workflow automations & QR stage tracking" },
+  { icon: BarChart3, text: "Time tracking & progress dashboards" },
+  { icon: MessageSquare, text: "End-to-end encrypted chat" },
+  { icon: CalendarDays, text: "Scheduling, booking & video calls" },
+  { icon: Upload, text: "Branded client emails" },
 ];
 
 export default function PricingPage() {
@@ -61,37 +70,66 @@ export default function PricingPage() {
         <div className="max-w-3xl mx-auto">
           <Badge variant="secondary" className="mb-4">
             <Sparkles className="mr-1 h-3 w-3" />
-            Early Access
+            Simple pricing
           </Badge>
           <h1 className="text-4xl sm:text-5xl font-bold tracking-tight mb-4">
-            Free while we&apos;re in{" "}
-            <span className="text-primary">early access</span>
+            Start free, upgrade when{" "}
+            <span className="text-primary">you grow</span>
           </h1>
           <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-            We&apos;re building ProjectStatus in the open. Everything is free
-            right now — no credit card, no trial limits, no catch.
+            Every plan includes the client tracking portal that cuts down
+            &quot;where&apos;s my order?&quot; calls. No credit card required to start.
           </p>
         </div>
       </section>
 
-      {/* Pricing Card */}
+      {/* Pricing Cards */}
       <section className="px-4 pb-16">
-        <div className="max-w-md mx-auto">
-          <Card className="relative overflow-hidden border-primary/30 shadow-lg shadow-primary/5">
-            <div className="absolute top-0 left-0 right-0 h-1 bg-primary" />
+        <div className="max-w-4xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-6">
+          <Card className="relative overflow-hidden">
             <CardHeader className="text-center pb-2">
-              <CardTitle className="text-2xl">Early Access</CardTitle>
+              <CardTitle className="text-2xl">Free</CardTitle>
               <div className="mt-4">
                 <span className="text-5xl font-bold">$0</span>
                 <span className="text-muted-foreground ml-1">/month</span>
               </div>
               <p className="text-sm text-muted-foreground mt-2">
-                Full access to every feature, free forever during early access
+                For small shops getting started
               </p>
             </CardHeader>
             <CardContent className="pt-4">
               <div className="space-y-3 mb-8">
-                {included.map((item) => (
+                {freeFeatures.map((item) => (
+                  <div key={item.text} className="flex items-center gap-3">
+                    <div className="h-5 w-5 rounded-full bg-muted flex items-center justify-center shrink-0">
+                      <Check className="h-3 w-3 text-muted-foreground" />
+                    </div>
+                    <span className="text-sm">{item.text}</span>
+                  </div>
+                ))}
+              </div>
+              <Button variant="outline" className="w-full rounded-full h-11" asChild>
+                <Link href="/">Get Started Free</Link>
+              </Button>
+            </CardContent>
+          </Card>
+
+          <Card className="relative overflow-hidden border-primary/30 shadow-lg shadow-primary/5">
+            <div className="absolute top-0 left-0 right-0 h-1 bg-primary" />
+            <CardHeader className="text-center pb-2">
+              <Badge className="absolute top-4 right-4">Most popular</Badge>
+              <CardTitle className="text-2xl">Pro</CardTitle>
+              <div className="mt-4">
+                <span className="text-5xl font-bold">$29</span>
+                <span className="text-muted-foreground ml-1">/month</span>
+              </div>
+              <p className="text-sm text-muted-foreground mt-2">
+                Everything unlimited, per organization
+              </p>
+            </CardHeader>
+            <CardContent className="pt-4">
+              <div className="space-y-3 mb-8">
+                {proFeatures.map((item) => (
                   <div key={item.text} className="flex items-center gap-3">
                     <div className="h-5 w-5 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
                       <Check className="h-3 w-3 text-primary" />
@@ -101,8 +139,11 @@ export default function PricingPage() {
                 ))}
               </div>
               <Button className="w-full rounded-full h-11" asChild>
-                <Link href="/">Get Started Free</Link>
+                <Link href="/">Start with Pro</Link>
               </Button>
+              <p className="text-xs text-muted-foreground text-center mt-3">
+                Upgrade any time from Settings → Billing
+              </p>
             </CardContent>
           </Card>
         </div>
@@ -117,21 +158,22 @@ export default function PricingPage() {
           <div className="space-y-8">
             <div>
               <h3 className="font-semibold mb-1">
-                Will it always be free?
+                How do I upgrade to Pro?
               </h3>
               <p className="text-sm text-muted-foreground leading-relaxed">
-                We plan to introduce paid tiers in the future for advanced
-                features like white-label branding, priority support, and
-                integrations. Users who sign up during early access will be
-                grandfathered into generous free limits.
+                Create your organization on the free plan, then the account
+                owner can upgrade any time from Settings → Billing. Payments
+                are handled securely by Stripe.
               </p>
             </div>
             <div>
               <h3 className="font-semibold mb-1">
-                Is there a limit on projects or team members?
+                Can I cancel any time?
               </h3>
               <p className="text-sm text-muted-foreground leading-relaxed">
-                Not right now. During early access, everything is unlimited.
+                Yes. Manage or cancel your subscription from the billing
+                portal — you keep Pro until the end of the period you&apos;ve
+                paid for, then move back to the free plan.
               </p>
             </div>
             <div>
@@ -140,17 +182,16 @@ export default function PricingPage() {
               </h3>
               <p className="text-sm text-muted-foreground leading-relaxed">
                 No. Just create an account and start using ProjectStatus
-                immediately.
+                immediately on the free plan.
               </p>
             </div>
             <div>
               <h3 className="font-semibold mb-1">
-                What happens to my data if pricing changes?
+                What happens to my data if I downgrade?
               </h3>
               <p className="text-sm text-muted-foreground leading-relaxed">
-                Your data is yours. You&apos;ll always be able to export it, and
-                we&apos;ll give plenty of notice before any pricing changes take
-                effect.
+                Your data is yours. Nothing is deleted when you change plans,
+                and you can export your data at any time.
               </p>
             </div>
           </div>
