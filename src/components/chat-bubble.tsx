@@ -746,7 +746,8 @@ export const ChatBubble = forwardRef<ChatBubbleHandle, ChatBubbleProps>(function
 
           {/* Input row — only for logged-in users */}
           {view === "chat" && userId && <div className="flex items-center gap-2 px-3 py-2 border-t">
-            {!isClient && (
+            {/* Clients can attach too, unless the org disabled file access for them */}
+            {(!isClient || !filesDisabled) && (
               <>
                 <Button
                   variant="ghost"
