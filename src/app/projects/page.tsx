@@ -23,6 +23,8 @@ import type { Project, ProjectStage, Template, PresetStage, Member, Company, Sta
 import { runStageAutomations, runAssignmentAutomations, dispatchWebhookEvent, AUTOMATION_DEFAULTS } from "@/lib/automations";
 import { performStageTransition } from "@/lib/stage-actions";
 import { notifyClientStageEvent } from "@/lib/client-notify";
+import { useEtaModel } from "@/lib/use-eta-model";
+import { EtaBadge } from "@/components/eta-badge";
 import { getOrCreateDeviceKey, getDeviceLabel, generateProjectKey, wrapProjectKey } from "@/lib/crypto";
 import { trackActivity } from "@/lib/activity";
 import { Button } from "@/components/ui/button";
@@ -75,6 +77,7 @@ const StageListView = dynamic(
 
 function ProjectsList() {
   const { orgId, userId, isAdmin, isWorker, isClient, member } = useAuth();
+  const etaModel = useEtaModel(orgId);
   const searchParams = useSearchParams();
   const router = useRouter();
   const handledParams = useRef(false);
@@ -1423,6 +1426,11 @@ function ProjectsList() {
             </Dialog>
           </div>
         </div>
+
+        {/* Predicted ETA */}
+        {selectedProject.status !== "completed" && stages.length > 0 && (
+          <EtaBadge stages={stages} dependencies={dependencies} model={etaModel} variant="card" className="mb-4" />
+        )}
 
         {/* Schedule status */}
         {scheduleDays !== null && (

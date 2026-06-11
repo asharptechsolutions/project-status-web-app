@@ -4,6 +4,8 @@ import { Navbar } from "@/components/navbar";
 import { AuthGate } from "@/components/auth-gate";
 import { useAuth } from "@/lib/auth-context";
 import { getProjects, getAssignedProjects, getClientProjects, getUpcomingAppointments, getStagesForProjects, getCompanies } from "@/lib/data";
+import { useEtaModel } from "@/lib/use-eta-model";
+import { EtaBadge } from "@/components/eta-badge";
 import { createClient } from "@/lib/supabase";
 import type { Project, ProjectStage, Appointment } from "@/lib/types";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
@@ -75,10 +77,12 @@ function groupAppointmentsByDay(appts: Appointment[]): { label: string; appointm
 
 function Dashboard() {
   const { orgId, isAdmin, isWorker, isClient, member } = useAuth();
+  const etaModel = useEtaModel(orgId);
   const [projects, setProjects] = useState<Project[]>([]);
   const [companyMap, setCompanyMap] = useState<Record<string, string>>({});
   const [projectProgress, setProjectProgress] = useState<Record<string, number>>({});
   const [projectSchedule, setProjectSchedule] = useState<Record<string, number | null>>({});
+  const [stagesByProject, setStagesByProject] = useState<Record<string, ProjectStage[]>>({});
   const [upcomingAppts, setUpcomingAppts] = useState<Appointment[]>([]);
   const [checklistDismissed, setChecklistDismissed] = useState(true); // default true to avoid flash
   const [page, setPage] = useState(1);
@@ -112,14 +116,17 @@ function Dashboard() {
           const allStages = await getStagesForProjects(p.map((proj) => proj.id));
           const progMap: Record<string, number> = {};
           const schedMap: Record<string, number | null> = {};
+          const stageMap: Record<string, ProjectStage[]> = {};
           for (const proj of p) {
             const projStages = allStages.filter((s) => s.project_id === proj.id);
             const done = projStages.filter((s) => s.status === "completed").length;
             progMap[proj.id] = projStages.length ? Math.round((done / projStages.length) * 100) : 0;
             schedMap[proj.id] = computeScheduleDays(projStages);
+            stageMap[proj.id] = projStages;
           }
           setProjectProgress(progMap);
           setProjectSchedule(schedMap);
+          setStagesByProject(stageMap);
         }
 
         if (isAdmin) {
@@ -307,6 +314,9 @@ function Dashboard() {
                                     <><TrendingUp className="h-3 w-3" />{projectSchedule[p.id]!}d ahead</>
                                   )}
                                 </span>
+                              )}
+                              {stagesByProject[p.id]?.length > 0 && (
+                                <EtaBadge stages={stagesByProject[p.id]} dependencies={[]} model={etaModel} variant="inline" />
                               )}
                             </div>
                             <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0 group-hover:text-primary group-hover:translate-x-0.5 transition-all" />

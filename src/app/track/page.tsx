@@ -15,6 +15,8 @@ import { AuthForm } from "@/components/auth-form";
 import { toast } from "sonner";
 import { getClientProjects, getClientVisibilitySettings, getStageDependencies, getClientNotificationPreferences, upsertClientNotificationPreferences, getTimeSummaryByStage, getClientAppointments } from "@/lib/data";
 import { JoinCallButton } from "@/components/join-call-button";
+import { useEtaModel } from "@/lib/use-eta-model";
+import { EtaBadge } from "@/components/eta-badge";
 
 const WorkflowCanvas = dynamic(
   () => import("@/components/workflow-canvas").then((m) => m.WorkflowCanvas),
@@ -76,6 +78,7 @@ function TrackInner() {
   const [notifyEnabled, setNotifyEnabled] = useState(true);
   const [timeByStage, setTimeByStage] = useState<Record<string, number>>({});
   const [myAppointments, setMyAppointments] = useState<Appointment[]>([]);
+  const etaModel = useEtaModel(orgId || null);
 
   const projectId = searchParams.get("id");
 
@@ -317,6 +320,11 @@ function TrackInner() {
             )}
           </div>
         </div>
+
+        {/* Predicted ready date — the headline a client wants */}
+        {project.status !== "completed" && stages.length > 0 && (
+          <EtaBadge stages={stages} dependencies={dependencies} model={etaModel} variant="card" className="mb-4" />
+        )}
 
         {/* Upcoming video calls */}
         {myAppointments.length > 0 && (

@@ -207,6 +207,19 @@ export async function getStagesForProjects(projectIds: string[]): Promise<Projec
   return (data || []) as ProjectStage[];
 }
 
+/** Completed stages across the team (for the predictive-ETA duration model). */
+export async function getTeamCompletedStages(orgId: string): Promise<ProjectStage[]> {
+  const { data, error } = await supabase
+    .from("project_stages")
+    .select("*, projects!inner(team_id)")
+    .eq("projects.team_id", orgId)
+    .eq("status", "completed")
+    .not("started_at", "is", null)
+    .not("completed_at", "is", null);
+  if (error) throw new Error(error.message);
+  return (data || []).map((d: any) => { const { projects: _p, ...rest } = d; return rest; }) as ProjectStage[];
+}
+
 export async function createProjectStage(
   stage: Omit<ProjectStage, "id">
 ): Promise<ProjectStage> {
