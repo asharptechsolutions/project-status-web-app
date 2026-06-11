@@ -401,6 +401,36 @@ export interface ActivityLog {
   created_at: string;
 }
 
+// ============ QUOTES & INVOICES ============
+
+export interface InvoiceLineItem {
+  description: string;
+  quantity: number;
+  unit_price: number;
+}
+
+export interface Invoice {
+  id: string;
+  team_id: string;
+  project_id: string | null;
+  kind: "quote" | "invoice";
+  status: "draft" | "sent" | "accepted" | "paid" | "void";
+  line_items: InvoiceLineItem[];
+  subtotal: number;
+  tax_rate: number;
+  tax_amount: number;
+  total: number;
+  currency: string;
+  notes: string | null;
+  payment_url: string | null;
+  created_by: string | null;
+  issued_at: string | null;
+  due_at: string | null;
+  paid_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 // ============ BILLING ============
 
 export interface Subscription {

@@ -49,6 +49,7 @@ import { toast } from "sonner";
 import { DatePicker } from "@/components/ui/date-picker";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
 import { ProjectNotes } from "@/components/project-notes";
+import { InvoiceManager } from "@/components/invoice-manager";
 import { EmptyState } from "@/components/empty-state";
 import { generateCsv, downloadCsv } from "@/lib/csv";
 import { ChatBubble, type ChatBubbleHandle } from "@/components/chat-bubble";
@@ -1681,6 +1682,18 @@ function ProjectsList() {
               </CardContent>
             )}
           </Card>
+        )}
+
+        {/* Quotes & Invoices (admin only) */}
+        {isAdmin && userId && (
+          <div className="mt-8">
+            <InvoiceManager
+              projectId={selectedProject.id}
+              teamId={selectedProject.team_id}
+              userId={userId}
+              billableMinutes={timeSummary.billableMinutes}
+            />
+          </div>
         )}
 
         {/* Notes (internal, hidden from clients) */}

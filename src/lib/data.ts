@@ -32,7 +32,60 @@ import type {
   UserDeviceKey,
   ProjectKeyGrant,
   Subscription,
+  Invoice,
+  InvoiceLineItem,
 } from "./types";
+
+// ============ INVOICES & QUOTES ============
+
+export function computeInvoiceTotals(lineItems: InvoiceLineItem[], taxRate: number): { subtotal: number; tax_amount: number; total: number } {
+  const subtotal = lineItems.reduce((sum, li) => sum + (li.quantity || 0) * (li.unit_price || 0), 0);
+  const tax_amount = +(subtotal * (taxRate || 0) / 100).toFixed(2);
+  return { subtotal: +subtotal.toFixed(2), tax_amount, total: +(subtotal + tax_amount).toFixed(2) };
+}
+
+export async function getProjectInvoices(projectId: string): Promise<Invoice[]> {
+  const { data, error } = await supabase
+    .from("invoices")
+    .select("*")
+    .eq("project_id", projectId)
+    .order("created_at", { ascending: false });
+  if (error) throw new Error(error.message);
+  return (data || []) as Invoice[];
+}
+
+export async function getTeamInvoices(orgId: string): Promise<Invoice[]> {
+  const { data, error } = await supabase
+    .from("invoices")
+    .select("*")
+    .eq("team_id", orgId)
+    .order("created_at", { ascending: false });
+  if (error) throw new Error(error.message);
+  return (data || []) as Invoice[];
+}
+
+export async function createInvoice(invoice: Omit<Invoice, "id" | "created_at" | "updated_at">): Promise<Invoice> {
+  const { data, error } = await supabase
+    .from("invoices")
+    .insert(invoice)
+    .select("*")
+    .single();
+  if (error) throw new Error(error.message);
+  return data as Invoice;
+}
+
+export async function updateInvoice(id: string, updates: Partial<Invoice>): Promise<void> {
+  const { error } = await supabase
+    .from("invoices")
+    .update({ ...updates, updated_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) throw new Error(error.message);
+}
+
+export async function deleteInvoice(id: string): Promise<void> {
+  const { error } = await supabase.from("invoices").delete().eq("id", id);
+  if (error) throw new Error(error.message);
+}
 
 // ============ PROJECT CLIENTS (junction) ============
 

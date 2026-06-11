@@ -17,6 +17,7 @@ import { getClientProjects, getClientVisibilitySettings, getStageDependencies, g
 import { JoinCallButton } from "@/components/join-call-button";
 import { useEtaModel } from "@/lib/use-eta-model";
 import { EtaBadge } from "@/components/eta-badge";
+import { ClientInvoices } from "@/components/client-invoices";
 
 const WorkflowCanvas = dynamic(
   () => import("@/components/workflow-canvas").then((m) => m.WorkflowCanvas),
@@ -325,6 +326,9 @@ function TrackInner() {
         {project.status !== "completed" && stages.length > 0 && (
           <EtaBadge stages={stages} dependencies={dependencies} model={etaModel} variant="card" className="mb-4" />
         )}
+
+        {/* Quotes & invoices shared with the client */}
+        <ClientInvoices projectId={project.id} />
 
         {/* Upcoming video calls */}
         {myAppointments.length > 0 && (
