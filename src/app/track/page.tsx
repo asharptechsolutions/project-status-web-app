@@ -18,6 +18,11 @@ import { JoinCallButton } from "@/components/join-call-button";
 import { useEtaModel } from "@/lib/use-eta-model";
 import { EtaBadge } from "@/components/eta-badge";
 import { ClientInvoices } from "@/components/client-invoices";
+import { ClientApprovals } from "@/components/client-approvals";
+import { StagePhotoTimeline } from "@/components/stage-photo-timeline";
+import { ClientFeedback } from "@/components/client-feedback";
+import { getOrgBranding } from "@/lib/data";
+import type { OrgBranding } from "@/lib/types";
 
 const WorkflowCanvas = dynamic(
   () => import("@/components/workflow-canvas").then((m) => m.WorkflowCanvas),
@@ -79,9 +84,18 @@ function TrackInner() {
   const [notifyEnabled, setNotifyEnabled] = useState(true);
   const [timeByStage, setTimeByStage] = useState<Record<string, number>>({});
   const [myAppointments, setMyAppointments] = useState<Appointment[]>([]);
+  const [branding, setBranding] = useState<OrgBranding | null>(null);
+  const [orgName, setOrgName] = useState<string>("");
   const etaModel = useEtaModel(orgId || null);
 
   const projectId = searchParams.get("id");
+
+  useEffect(() => {
+    if (!orgId) return;
+    getOrgBranding(orgId).then(setBranding).catch(() => {});
+    createClient().from("teams").select("name").eq("id", orgId).single()
+      .then(({ data }) => { if (data?.name) setOrgName(data.name); });
+  }, [orgId]);
 
   const loadAppointments = useCallback(async () => {
     if (!userId || !projectId || !orgId) return;
@@ -293,14 +307,35 @@ function TrackInner() {
 
   return (
     <div className="min-h-[100dvh] bg-background">
-      <header className="border-b py-4 px-4">
+      <header className="border-b py-4 px-4" style={branding?.primary_color ? { borderBottomColor: `${branding.primary_color}33` } : undefined}>
         <div className="max-w-7xl mx-auto flex items-center gap-2">
-          <Workflow className="h-5 w-5 text-primary" />
-          <span className="font-bold">ProjectStatus</span>
+          {branding?.logo_url ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={branding.logo_url} alt={orgName || "Logo"} className="h-7 w-auto max-w-[160px] object-contain" />
+          ) : (
+            <>
+              <Workflow className="h-5 w-5" style={branding?.primary_color ? { color: branding.primary_color } : { color: "hsl(var(--primary))" }} />
+              <span className="font-bold">{orgName || "ProjectStatus"}</span>
+            </>
+          )}
         </div>
       </header>
 
       <main className="p-4 max-w-7xl mx-auto">
+        {/* Order history — switch between this client's projects */}
+        {clientProjects.length > 1 && (
+          <div className="mb-4 flex items-center gap-2 overflow-x-auto pb-1">
+            {clientProjects.map((cp) => (
+              <button
+                key={cp.id}
+                onClick={() => { window.location.href = `/track/?id=${cp.id}`; }}
+                className={`shrink-0 rounded-full border px-3 py-1 text-sm transition-colors ${cp.id === project.id ? "bg-primary text-primary-foreground border-primary" : "hover:bg-muted"}`}
+              >
+                {cp.name}
+              </button>
+            ))}
+          </div>
+        )}
         <div className="mb-6 flex items-center justify-between">
           <h1 className="text-2xl font-bold">{project.name}</h1>
           <div className="flex items-center gap-2">
@@ -327,8 +362,19 @@ function TrackInner() {
           <EtaBadge stages={stages} dependencies={dependencies} model={etaModel} variant="card" className="mb-4" />
         )}
 
+        {/* Stages awaiting this client's approval */}
+        <ClientApprovals stages={stages} onResolved={loadProject} />
+
+        {/* Completed-project feedback prompt */}
+        {project.status === "completed" && orgId && userId && (
+          <ClientFeedback projectId={project.id} teamId={orgId} clientId={userId} />
+        )}
+
         {/* Quotes & invoices shared with the client */}
         <ClientInvoices projectId={project.id} />
+
+        {/* Progress photos from the shop floor */}
+        {showFiles && <StagePhotoTimeline projectId={project.id} stages={stages} />}
 
         {/* Upcoming video calls */}
         {myAppointments.length > 0 && (

@@ -5,7 +5,7 @@ import { Navbar } from "@/components/navbar";
 import { AuthGate } from "@/components/auth-gate";
 import { useAuth } from "@/lib/auth-context";
 import {
-  getProjects, createProject, updateProject, deleteProject,
+  getProjects, getProject, createProject, updateProject, deleteProject, duplicateProject,
   getProjectStages, getStagesForProjects, createProjectStage, updateProjectStage, deleteProjectStage,
   getTemplates, getPresetStages,
   getAssignedProjects, getClientProjects, getMembers, getCompanies, createCompany, createTemplate,
@@ -43,7 +43,7 @@ import {
   Clock, Loader2, GripVertical, UserPlus, Mail, Users, Building2, Save,
   AlertTriangle, TrendingUp, Link, FolderOpen, MoreHorizontal, BarChart3, Network,
   Timer, DollarSign, Square, Download, Columns3, List, QrCode, RefreshCw, Lock,
-  ShieldCheck, Zap, PauseCircle, PlayCircle,
+  ShieldCheck, Zap, PauseCircle, Copy,
 } from "lucide-react";
 import { toast } from "sonner";
 import { DatePicker } from "@/components/ui/date-picker";
@@ -689,6 +689,8 @@ function ProjectsList() {
     setStageModalEstDate(undefined);
     setStageModalPlannedStart(undefined);
     setStageModalRequiresApproval(false);
+    setStageModalOnHold(false);
+    setStageModalHoldReason("");
     setShowStageModal(true);
   };
 
@@ -701,6 +703,8 @@ function ProjectsList() {
     setStageModalEstDate(stage.estimated_completion ? new Date(stage.estimated_completion + "T00:00:00") : undefined);
     setStageModalPlannedStart(stage.planned_start ? new Date(stage.planned_start + "T00:00:00") : undefined);
     setStageModalRequiresApproval(!!stage.requires_client_approval);
+    setStageModalOnHold(!!stage.on_hold);
+    setStageModalHoldReason(stage.hold_reason || "");
     setStageModalStatus(stage.status);
     setShowManualEntry(false);
     setManualDuration("");
@@ -801,6 +805,8 @@ function ProjectsList() {
           planned_start: plannedStart,
           status: stageModalStatus,
           requires_client_approval: stageModalRequiresApproval,
+          on_hold: stageModalOnHold,
+          hold_reason: stageModalOnHold ? (stageModalHoldReason.trim() || null) : null,
         };
         // Handle timestamp changes when status changes
         if (currentStage && stageModalStatus !== currentStage.status) {
@@ -966,6 +972,19 @@ function ProjectsList() {
     }
   };
 
+  const handleDuplicateProject = async () => {
+    if (!selectedProject || !userId) return;
+    try {
+      const newId = await duplicateProject(selectedProject.id, userId);
+      toast.success("Project duplicated");
+      await load();
+      const fresh = await getProject(newId);
+      if (fresh) selectProject(fresh);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to duplicate project");
+    }
+  };
+
   const handleTogglePriority = async () => {
     if (!selectedProject) return;
     const next = selectedProject.priority === "rush" ? "normal" : "rush";
@@ -975,17 +994,6 @@ function ProjectsList() {
       toast.success(next === "rush" ? "Marked as rush" : "Rush flag cleared");
     } catch (err: any) {
       toast.error(err.message || "Failed to update priority");
-    }
-  };
-
-  const handleToggleStageHold = async (stageId: string, hold: boolean, reason?: string) => {
-    try {
-      const updates: Partial<ProjectStage> = { on_hold: hold, hold_reason: hold ? (reason || null) : null };
-      await updateProjectStage(stageId, updates);
-      setStages((prev) => prev.map((s) => s.id === stageId ? { ...s, ...updates } : s));
-      toast.success(hold ? "Stage placed on hold" : "Hold cleared");
-    } catch (err: any) {
-      toast.error(err.message || "Failed to update hold");
     }
   };
 
@@ -1338,6 +1346,11 @@ function ProjectsList() {
                 {isAdmin && stages.length > 0 && (
                   <DropdownMenuItem onClick={() => router.push(`/projects/qr/?id=${selectedProject.id}`)}>
                     <QrCode className="h-4 w-4" /> Print QR Codes
+                  </DropdownMenuItem>
+                )}
+                {isAdmin && (
+                  <DropdownMenuItem onClick={() => handleDuplicateProject()}>
+                    <Copy className="h-4 w-4" /> Duplicate Project
                   </DropdownMenuItem>
                 )}
                 {isAdmin && (
@@ -2050,6 +2063,22 @@ function ProjectsList() {
                   </div>
                 </div>
                 <Switch id="stage-approval" checked={stageModalRequiresApproval} onCheckedChange={setStageModalRequiresApproval} />
+              </div>
+
+              <div className="rounded-md border p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <PauseCircle className="h-4 w-4 text-muted-foreground" />
+                    <div>
+                      <Label htmlFor="stage-hold" className="text-sm cursor-pointer">Place on hold</Label>
+                      <p className="text-xs text-muted-foreground">Blocks start/complete (e.g. waiting on materials)</p>
+                    </div>
+                  </div>
+                  <Switch id="stage-hold" checked={stageModalOnHold} onCheckedChange={setStageModalOnHold} />
+                </div>
+                {stageModalOnHold && (
+                  <Input value={stageModalHoldReason} onChange={(e) => setStageModalHoldReason(e.target.value)} placeholder="Reason (e.g. waiting on steel delivery)" />
+                )}
               </div>
 
               {/* Time Tracking Section — only shown when editing an existing stage with time tracking enabled */}

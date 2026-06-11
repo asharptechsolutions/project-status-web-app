@@ -401,6 +401,18 @@ export interface ActivityLog {
   created_at: string;
 }
 
+// ============ CLIENT FEEDBACK ============
+
+export interface ProjectFeedback {
+  id: string;
+  team_id: string;
+  project_id: string;
+  client_id: string;
+  rating: number;
+  comment: string | null;
+  created_at: string;
+}
+
 // ============ QUOTES & INVOICES ============
 
 export interface InvoiceLineItem {

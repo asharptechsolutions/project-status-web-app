@@ -34,7 +34,28 @@ import type {
   Subscription,
   Invoice,
   InvoiceLineItem,
+  ProjectFeedback,
 } from "./types";
+
+// ============ CLIENT FEEDBACK ============
+
+export async function getMyProjectFeedback(projectId: string, clientId: string): Promise<ProjectFeedback | null> {
+  const { data, error } = await supabase
+    .from("project_feedback")
+    .select("*")
+    .eq("project_id", projectId)
+    .eq("client_id", clientId)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return data as ProjectFeedback | null;
+}
+
+export async function submitProjectFeedback(feedback: Omit<ProjectFeedback, "id" | "created_at">): Promise<void> {
+  const { error } = await supabase
+    .from("project_feedback")
+    .upsert(feedback, { onConflict: "project_id,client_id" });
+  if (error) throw new Error(error.message);
+}
 
 // ============ INVOICES & QUOTES ============
 
@@ -218,6 +239,52 @@ export async function deleteProject(id: string): Promise<void> {
     .delete()
     .eq("id", id);
   if (error) throw new Error(error.message);
+}
+
+/** Clone a project's workflow (stages reset to pending) into a fresh project. */
+export async function duplicateProject(sourceId: string, createdBy: string): Promise<string> {
+  const source = await getProject(sourceId);
+  if (!source) throw new Error("Project not found");
+
+  const { data: created, error } = await supabase
+    .from("projects")
+    .insert({
+      team_id: source.team_id,
+      name: `${source.name} (copy)`,
+      description: source.description || null,
+      status: "active",
+      company_id: source.company_id || null,
+      created_by: createdBy,
+      time_tracking_enabled: source.time_tracking_enabled ?? false,
+      time_tracking_auto_start: source.time_tracking_auto_start ?? false,
+      time_tracking_default_billable: source.time_tracking_default_billable ?? true,
+      time_tracking_require_notes: source.time_tracking_require_notes ?? false,
+    })
+    .select("id")
+    .single();
+  if (error) throw new Error(error.message);
+  const newId = created.id as string;
+
+  const stages = await getProjectStages(sourceId);
+  if (stages.length > 0) {
+    const rows = stages.map((s) => ({
+      project_id: newId,
+      name: s.name,
+      status: "pending",
+      position: s.position,
+      started_at: null,
+      completed_at: null,
+      started_by: null,
+      assigned_to: s.assigned_to,
+      estimated_completion: null,
+      planned_start: null,
+      requires_client_approval: s.requires_client_approval ?? false,
+    }));
+    const { error: stageErr } = await supabase.from("project_stages").insert(rows);
+    if (stageErr) throw new Error(stageErr.message);
+  }
+
+  return newId;
 }
 
 export async function setProjectPriority(projectId: string, priority: "normal" | "rush"): Promise<void> {
