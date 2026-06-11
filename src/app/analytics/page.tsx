@@ -10,7 +10,8 @@ import {
 } from "@/lib/analytics";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, BarChart3, Clock, Gauge, Users, AlertTriangle, TrendingUp } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
+import { BarChart3, Clock, Gauge, Users, AlertTriangle, TrendingUp } from "lucide-react";
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, Cell,
 } from "recharts";
@@ -75,7 +76,16 @@ function AnalyticsInner() {
     return <div className="p-8 text-center text-muted-foreground">Only admins can view analytics.</div>;
   }
   if (loading) {
-    return <div className="flex items-center justify-center py-20"><Loader2 className="h-6 w-6 animate-spin" /></div>;
+    return (
+      <div className="p-4 max-w-6xl mx-auto w-full space-y-4">
+        <Skeleton className="h-9 w-48" />
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          {[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-20" />)}
+        </div>
+        <Skeleton className="h-64 w-full" />
+        <Skeleton className="h-64 w-full" />
+      </div>
+    );
   }
 
   const hasHistory = completedTotal > 0;

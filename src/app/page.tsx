@@ -184,13 +184,13 @@ function Dashboard() {
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
           {stats.map((s, i) => (
-            <Card key={s.label} className={`opacity-0 animate-scale-in stagger-${i + 1} overflow-hidden relative group hover:shadow-md transition-shadow`}>
+            <Card key={s.label} className={`opacity-0 animate-scale-in stagger-${i + 1} overflow-hidden relative group hover:shadow-md transition-shadow bg-gradient-to-br from-card to-muted/30`}>
               <CardContent className="pt-6 flex items-center gap-4">
-                <div className={`h-12 w-12 rounded-xl ${s.bg} flex items-center justify-center shrink-0`}>
+                <div className={`h-12 w-12 rounded-xl ${s.bg} ring-1 ring-inset ring-current/10 flex items-center justify-center shrink-0`}>
                   <s.icon className={`h-6 w-6 ${s.color}`} />
                 </div>
                 <div>
-                  <p className="text-3xl font-bold tracking-tight">{s.value}</p>
+                  <p className="text-3xl font-bold tracking-tight tabular-nums">{s.value}</p>
                   <p className="text-sm text-muted-foreground">{s.label}</p>
                 </div>
               </CardContent>

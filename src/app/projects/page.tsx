@@ -54,6 +54,7 @@ import { EmptyState } from "@/components/empty-state";
 import { generateCsv, downloadCsv } from "@/lib/csv";
 import { ChatBubble, type ChatBubbleHandle } from "@/components/chat-bubble";
 import { Pagination } from "@/components/pagination";
+import { Skeleton } from "@/components/ui/skeleton";
 import dynamic from "next/dynamic";
 
 const WorkflowCanvas = dynamic(
@@ -1262,7 +1263,14 @@ function ProjectsList() {
     }
   };
 
-  if (loading) return <div className="flex items-center justify-center p-8"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" /></div>;
+  if (loading) return (
+    <div className="p-4 max-w-7xl mx-auto w-full space-y-3">
+      <Skeleton className="h-9 w-40 mb-4" />
+      {[0, 1, 2, 3].map((i) => (
+        <Skeleton key={i} className="h-20 w-full" />
+      ))}
+    </div>
+  );
 
   // Project detail view
   if (selectedProject) {
