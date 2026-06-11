@@ -154,6 +154,128 @@ The {{org_name}} Team`,
     ],
   },
   {
+    type: "stage_started",
+    label: "Stage Started",
+    description: "Sent to clients when their order advances to a new stage",
+    placeholders: [
+      ...GLOBAL_PLACEHOLDERS,
+      { key: "project_name", label: "Project Name", example: "Kitchen Renovation" },
+      { key: "stage_name", label: "Stage Name", example: "Finishing" },
+      { key: "eta", label: "Estimated Completion", example: "Jun 18–20" },
+    ],
+    presets: [
+      {
+        id: "friendly",
+        label: "Friendly",
+        subject: "Your order is now in {{stage_name}}",
+        body: `Hi {{recipient_name}},
+
+Good news — your project **{{project_name}}** just moved into **{{stage_name}}**.
+
+**Estimated completion:** {{eta}}
+
+You can follow along live any time from your tracking page.`,
+      },
+      {
+        id: "professional",
+        label: "Professional",
+        subject: "Project update: now in {{stage_name}} — {{project_name}}",
+        body: `Hi {{recipient_name}},
+
+Your project **{{project_name}}** has advanced to **{{stage_name}}**.
+
+**Estimated completion:** {{eta}}
+
+Log in to your tracking page for the full status.`,
+      },
+    ],
+  },
+  {
+    type: "approval_requested",
+    label: "Approval Requested",
+    description: "Sent to clients when a stage needs their sign-off to proceed",
+    placeholders: [
+      ...GLOBAL_PLACEHOLDERS,
+      { key: "project_name", label: "Project Name", example: "Storefront Sign" },
+      { key: "stage_name", label: "Stage Name", example: "Proof Approval" },
+    ],
+    presets: [
+      {
+        id: "professional",
+        label: "Professional",
+        subject: "Your approval is needed: {{stage_name}} — {{project_name}}",
+        body: `Hi {{recipient_name}},
+
+We've reached a step on **{{project_name}}** that needs your sign-off: **{{stage_name}}**.
+
+Please open your tracking page to review and approve so we can keep moving.`,
+      },
+      {
+        id: "friendly",
+        label: "Friendly",
+        subject: "Quick approval needed on {{project_name}}",
+        body: `Hi {{recipient_name}},
+
+We're ready for your go-ahead on **{{stage_name}}** for **{{project_name}}**.
+
+Hop over to your tracking page to take a look and approve — we'll pick right back up once you do!`,
+      },
+    ],
+  },
+  {
+    type: "photo_added",
+    label: "Progress Photo Added",
+    description: "Sent to clients when a new progress photo is posted",
+    placeholders: [
+      ...GLOBAL_PLACEHOLDERS,
+      { key: "project_name", label: "Project Name", example: "Custom Cabinets" },
+      { key: "stage_name", label: "Stage Name", example: "Staining" },
+    ],
+    presets: [
+      {
+        id: "friendly",
+        label: "Friendly",
+        subject: "New progress photo on {{project_name}}",
+        body: `Hi {{recipient_name}},
+
+We just added a new progress photo for **{{stage_name}}** on **{{project_name}}**.
+
+Take a look on your tracking page!`,
+      },
+    ],
+  },
+  {
+    type: "project_completed",
+    label: "Project Completed",
+    description: "Sent to clients when their whole project is finished",
+    placeholders: [
+      ...GLOBAL_PLACEHOLDERS,
+      { key: "project_name", label: "Project Name", example: "Kitchen Renovation" },
+    ],
+    presets: [
+      {
+        id: "friendly",
+        label: "Friendly",
+        subject: "Your project is complete! 🎉",
+        body: `Hi {{recipient_name}},
+
+Your project **{{project_name}}** is finished and ready.
+
+Thank you for working with **{{org_name}}** — we'd love to hear how we did. You can leave feedback right from your tracking page.`,
+      },
+      {
+        id: "professional",
+        label: "Professional",
+        subject: "Completed: {{project_name}}",
+        body: `Hi {{recipient_name}},
+
+We're pleased to let you know that **{{project_name}}** is now complete.
+
+Thank you for choosing **{{org_name}}**. Please visit your tracking page if you'd like to share feedback.`,
+      },
+    ],
+  },
+  {
     type: "worker_assigned",
     label: "Worker Assignment",
     description: "Sent to a worker when they are assigned to a stage",

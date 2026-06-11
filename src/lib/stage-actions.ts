@@ -25,6 +25,88 @@ export interface StageTransitionResult {
   stoppedTimer: TimeEntry | null;
   /** Timer that was auto-started */
   startedTimer: TimeEntry | null;
+  /** Completion was intercepted by a client approval gate — stage now awaits sign-off */
+  approvalRequested?: boolean;
+}
+
+export interface StageApprovalParams {
+  stage: ProjectStage;
+  project: Project;
+  stages: ProjectStage[];
+  dependencies: StageDependency[];
+  automationSettings: AutomationSettings | null;
+  userId: string;
+  actorName: string;
+  approve: boolean;
+  note?: string;
+}
+
+/**
+ * Client sign-off on an approval-gated stage. Approving completes the
+ * stage (running automations); requesting changes flags it back to the
+ * team with an optional note.
+ */
+export async function resolveStageApproval({
+  stage,
+  project,
+  stages,
+  dependencies,
+  automationSettings,
+  userId,
+  actorName,
+  approve,
+  note,
+}: StageApprovalParams): Promise<StageTransitionResult> {
+  if (stage.approval_status !== "pending") {
+    throw new Error("This stage is not awaiting approval");
+  }
+
+  if (!approve) {
+    const updates: Partial<ProjectStage> = {
+      approval_status: "changes_requested",
+      approval_note: note || null,
+    };
+    await updateProjectStage(stage.id, updates);
+    trackActivity({
+      teamId: project.team_id,
+      actorId: userId,
+      actorName,
+      action: "updated",
+      entityType: "stage",
+      entityId: stage.id,
+      entityName: stage.name,
+      projectId: project.id,
+      metadata: { changesRequested: true, note: note || "", project_name: project.name },
+    });
+    return {
+      updatedStages: stages.map((s) => (s.id === stage.id ? { ...s, ...updates } : s)),
+      projectCompleted: false,
+      stoppedTimer: null,
+      startedTimer: null,
+    };
+  }
+
+  const approvalUpdates: Partial<ProjectStage> = {
+    approval_status: "approved",
+    approved_by: userId,
+    approved_at: new Date().toISOString(),
+    approval_note: note || null,
+  };
+  await updateProjectStage(stage.id, approvalUpdates);
+  const approvedStage = { ...stage, ...approvalUpdates };
+
+  // The approval itself authorizes completion
+  return performStageTransition({
+    stage: approvedStage,
+    project,
+    stages: stages.map((s) => (s.id === stage.id ? approvedStage : s)),
+    dependencies,
+    automationSettings,
+    userId,
+    actorName,
+    status: "completed",
+    canActOnAnyStage: true,
+  });
 }
 
 /**
@@ -48,6 +130,34 @@ export async function performStageTransition({
   // Workers can only update unassigned stages or stages assigned to them
   if (!canActOnAnyStage && stage.assigned_to && stage.assigned_to !== userId) {
     throw new Error("You can only update stages assigned to you");
+  }
+
+  if (stage.on_hold) {
+    throw new Error(`This stage is on hold${stage.hold_reason ? ` — ${stage.hold_reason}` : ""}. Clear the hold first.`);
+  }
+
+  // Approval gate: completing a gated stage routes through client sign-off instead
+  if (status === "completed" && stage.requires_client_approval && stage.approval_status !== "approved") {
+    const gateUpdates: Partial<ProjectStage> = { approval_status: "pending" };
+    await updateProjectStage(stage.id, gateUpdates);
+    trackActivity({
+      teamId: project.team_id,
+      actorId: userId,
+      actorName,
+      action: "updated",
+      entityType: "stage",
+      entityId: stage.id,
+      entityName: stage.name,
+      projectId: project.id,
+      metadata: { approvalRequested: true, project_name: project.name },
+    });
+    return {
+      updatedStages: stages.map((s) => (s.id === stage.id ? { ...s, ...gateUpdates } : s)),
+      projectCompleted: false,
+      stoppedTimer: null,
+      startedTimer: null,
+      approvalRequested: true,
+    };
   }
 
   const now = new Date().toISOString();

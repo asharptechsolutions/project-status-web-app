@@ -167,6 +167,14 @@ export async function deleteProject(id: string): Promise<void> {
   if (error) throw new Error(error.message);
 }
 
+export async function setProjectPriority(projectId: string, priority: "normal" | "rush"): Promise<void> {
+  const { error } = await supabase
+    .from("projects")
+    .update({ priority })
+    .eq("id", projectId);
+  if (error) throw new Error(error.message);
+}
+
 // ============ PROJECT STAGES ============
 
 export async function getProjectStages(projectId: string): Promise<ProjectStage[]> {
@@ -438,7 +446,8 @@ export async function uploadFile(
   projectId: string,
   file: File,
   uploadedBy: string,
-  encryption?: { iv: string; encryptedMetadata: string }
+  encryption?: { iv: string; encryptedMetadata: string },
+  stageId?: string
 ): Promise<ProjectFile> {
   const fileName = `${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
   const path = `project-files/${projectId}/${fileName}`;
@@ -464,7 +473,22 @@ export async function uploadFile(
     file_size: file.size,
     content_type: file.type,
     ...(encryption ? { iv: encryption.iv, encrypted: true, encrypted_metadata: encryption.encryptedMetadata } : {}),
+    ...(stageId ? { stage_id: stageId } : {}),
   });
+}
+
+/** Unencrypted progress photos for a project, keyed by stage */
+export async function getStagePhotos(projectId: string): Promise<ProjectFile[]> {
+  const { data, error } = await supabase
+    .from("files")
+    .select("*")
+    .eq("project_id", projectId)
+    .not("stage_id", "is", null)
+    .eq("encrypted", false)
+    .like("content_type", "image/%")
+    .order("created_at", { ascending: true });
+  if (error) throw new Error(error.message);
+  return (data || []) as ProjectFile[];
 }
 
 // ============ TEMPLATES ============

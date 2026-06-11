@@ -1,0 +1,15 @@
+[     819ms] [WARNING] GoTrueClient@sb-gzykxphmixqjxmwvsuiy-auth-token:1 (2.95.3) 2026-03-17T14:08:15.764Z Multiple GoTrueClient instances detected in the same browser context. It is not an error, but this should be avoided as it may produce undefined behavior when used concurrently under the same storage key. @ webpack-internal:///(app-pages-browser)/./node_modules/@supabase/auth-js/dist/module/GoTrueClient.js:125
+[  197061ms] [ERROR] ./src/lib/activity.ts
+Error: 
+
+Caused by:
+    0: Failed to read source code from C:\Users\aaron\Documents\Software Development\Claude\project-status-web-app\src\lib\activity.ts
+    1: The system cannot find the file specified. (os error 2)
+
+Import trace for requested module:
+./src/lib/activity.ts
+./src/app/projects/page.tsx @ webpack-internal:///(app-pages-browser)/./node_modules/next/dist/next-devtools/userspace/app/errors/intercept-console-error.js:56
+[  198897ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://localhost:3000/activity/?_rsc=8w8d6:0
+[  199060ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://localhost:3000/activity/?_rsc=8w8d6:0
+[  199315ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://localhost:3000/activity/:0
+[  199607ms] [WARNING] GoTrueClient@sb-gzykxphmixqjxmwvsuiy-auth-token:1 (2.95.3) 2026-03-17T14:11:34.552Z Multiple GoTrueClient instances detected in the same browser context. It is not an error, but this should be avoided as it may produce undefined behavior when used concurrently under the same storage key. @ webpack-internal:///(app-pages-browser)/./node_modules/@supabase/auth-js/dist/module/GoTrueClient.js:125

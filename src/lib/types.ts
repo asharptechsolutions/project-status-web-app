@@ -39,6 +39,7 @@ export interface Project {
   share_token?: string | null;
   share_enabled?: boolean;
   encryption_enabled?: boolean;
+  priority?: "normal" | "rush";
   created_at: string;
   updated_at: string;
 }
@@ -55,6 +56,13 @@ export interface ProjectStage {
   assigned_to: string | null;
   estimated_completion: string | null;
   planned_start: string | null;
+  requires_client_approval?: boolean;
+  approval_status?: "pending" | "approved" | "changes_requested" | null;
+  approved_by?: string | null;
+  approved_at?: string | null;
+  approval_note?: string | null;
+  on_hold?: boolean;
+  hold_reason?: string | null;
 }
 
 export interface ProjectAssignment {
@@ -96,6 +104,7 @@ export interface ProjectFile {
   iv?: string | null;
   encrypted?: boolean;
   encrypted_metadata?: string | null;
+  stage_id?: string | null;
   created_at: string;
 }
 

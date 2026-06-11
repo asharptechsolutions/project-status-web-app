@@ -5,16 +5,17 @@ import { AuthGate } from "@/components/auth-gate";
 import { useAuth } from "@/lib/auth-context";
 import {
   getProjectStage, getProject, getProjectStages, getStageDependencies,
-  getAutomationSettings, getActiveTimer, getMembers,
+  getAutomationSettings, getActiveTimer, getMembers, uploadFile, getStagePhotos,
 } from "@/lib/data";
 import { performStageTransition } from "@/lib/stage-actions";
-import type { Project, ProjectStage, StageDependency, AutomationSettings, TimeEntry, Member } from "@/lib/types";
+import { notifyClientStageEvent } from "@/lib/client-notify";
+import type { Project, ProjectStage, StageDependency, AutomationSettings, TimeEntry, Member, ProjectFile } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
   Play, CheckCircle2, Clock, Loader2, AlertTriangle, UserCircle,
-  CalendarDays, FolderOpen, Building2, ArrowRight,
+  CalendarDays, FolderOpen, Building2, ArrowRight, Camera, PauseCircle, ShieldCheck,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -47,6 +48,8 @@ function StageActionInner() {
   const [automationSettings, setAutomationSettings] = useState<AutomationSettings | null>(null);
   const [activeTimer, setActiveTimer] = useState<TimeEntry | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
+  const [photos, setPhotos] = useState<ProjectFile[]>([]);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
 
   const load = useCallback(async () => {
     if (!id || !userId) return;
@@ -55,12 +58,13 @@ function StageActionInner() {
       if (!s) { setStage(null); return; }
       const p = await getProject(s.project_id);
       if (!p) { setStage(null); return; }
-      const [allStages, deps, autoSettings, timer, teamMembers] = await Promise.all([
+      const [allStages, deps, autoSettings, timer, teamMembers, stagePhotos] = await Promise.all([
         getProjectStages(p.id),
         getStageDependencies(p.id),
         getAutomationSettings(p.team_id),
         getActiveTimer(userId, p.team_id),
         getMembers(p.team_id).catch(() => [] as Member[]),
+        getStagePhotos(p.id).catch(() => [] as ProjectFile[]),
       ]);
       setStage(s);
       setProject(p);
@@ -69,6 +73,7 @@ function StageActionInner() {
       setAutomationSettings(autoSettings);
       setActiveTimer(timer);
       setMembers(teamMembers);
+      setPhotos(stagePhotos.filter((ph) => ph.stage_id === s.id));
     } catch (err: any) {
       toast.error(err.message || "Failed to load stage");
     } finally {
@@ -76,13 +81,31 @@ function StageActionInner() {
     }
   }, [id, userId]);
 
+  const handlePhotoCapture = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file || !stage || !project || !userId) return;
+    if (file.size > 10 * 1024 * 1024) { toast.error("Photo too large (max 10MB)"); return; }
+    setUploadingPhoto(true);
+    try {
+      const uploaded = await uploadFile(project.id, file, userId, undefined, stage.id);
+      setPhotos((prev) => [...prev, uploaded]);
+      notifyClientStageEvent(project, stage, "photo_added");
+      toast.success("Photo added");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to upload photo");
+    } finally {
+      setUploadingPhoto(false);
+    }
+  };
+
   useEffect(() => { load(); }, [load]);
 
   const handleTransition = async (status: ProjectStage["status"]) => {
     if (!stage || !project || !userId) return;
     setActing(true);
     try {
-      const { updatedStages, projectCompleted, stoppedTimer, startedTimer } = await performStageTransition({
+      const { updatedStages, projectCompleted, stoppedTimer, startedTimer, approvalRequested } = await performStageTransition({
         stage,
         project,
         stages,
@@ -94,6 +117,13 @@ function StageActionInner() {
         canActOnAnyStage: isAdmin,
         activeTimer,
       });
+      if (approvalRequested) {
+        setStages(updatedStages);
+        setStage(updatedStages.find((s) => s.id === stage.id) || stage);
+        notifyClientStageEvent(project, stage, "approval_requested");
+        toast.success("Sent to the client for approval");
+        return;
+      }
       if (stoppedTimer) {
         setActiveTimer(null);
         toast.info(`Timer stopped: ${formatMinutes(stoppedTimer.duration_minutes || 0)} logged`);
@@ -104,8 +134,10 @@ function StageActionInner() {
       }
       setStages(updatedStages);
       setStage(updatedStages.find((s) => s.id === stage.id) || { ...stage, status });
+      notifyClientStageEvent(project, stage, status === "in_progress" ? "stage_started" : status === "completed" ? "stage_completed" : null);
       if (projectCompleted) {
         setProject({ ...project, status: "completed" });
+        notifyClientStageEvent(project, null, "project_completed");
         toast.success("Project completed!");
       } else {
         toast.success(status === "in_progress" ? "Stage started" : "Stage completed");
@@ -210,6 +242,56 @@ function StageActionInner() {
                   <p className="text-muted-foreground">{blockedBy.map((s) => s.name).join(", ")}</p>
                 </div>
               </div>
+            )}
+
+            {stage.on_hold && (
+              <div className="flex items-start gap-2 rounded-md border border-orange-500/40 bg-orange-500/10 p-3 text-sm">
+                <PauseCircle className="h-4 w-4 text-orange-500 shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-medium">On hold</p>
+                  {stage.hold_reason && <p className="text-muted-foreground">{stage.hold_reason}</p>}
+                </div>
+              </div>
+            )}
+
+            {stage.requires_client_approval && stage.approval_status === "pending" && (
+              <div className="flex items-start gap-2 rounded-md border border-blue-500/40 bg-blue-500/10 p-3 text-sm">
+                <ShieldCheck className="h-4 w-4 text-blue-500 shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-medium">Awaiting client approval</p>
+                  <p className="text-muted-foreground">The client needs to sign off before this stage completes.</p>
+                </div>
+              </div>
+            )}
+
+            {stage.approval_status === "changes_requested" && (
+              <div className="flex items-start gap-2 rounded-md border border-red-500/40 bg-red-500/10 p-3 text-sm">
+                <AlertTriangle className="h-4 w-4 text-red-500 shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-medium">Client requested changes</p>
+                  {stage.approval_note && <p className="text-muted-foreground">&ldquo;{stage.approval_note}&rdquo;</p>}
+                </div>
+              </div>
+            )}
+
+            {/* Progress photos */}
+            {photos.length > 0 && (
+              <div className="grid grid-cols-3 gap-2">
+                {photos.map((p) => (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img key={p.id} src={p.file_url} alt="Stage progress" className="aspect-square w-full rounded-md object-cover border" />
+                ))}
+              </div>
+            )}
+
+            {!isClient && stage.status !== "pending" && (
+              <>
+                <input id="stage-photo" type="file" accept="image/*" capture="environment" className="hidden" onChange={handlePhotoCapture} />
+                <Button variant="outline" className="w-full" onClick={() => document.getElementById("stage-photo")?.click()} disabled={uploadingPhoto}>
+                  {uploadingPhoto ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Camera className="h-4 w-4 mr-2" />}
+                  Add progress photo
+                </Button>
+              </>
             )}
 
             {isClient ? (
