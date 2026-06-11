@@ -220,6 +220,26 @@ export async function getTeamCompletedStages(orgId: string): Promise<ProjectStag
   return (data || []).map((d: any) => { const { projects: _p, ...rest } = d; return rest; }) as ProjectStage[];
 }
 
+/** All stages across the team (for analytics). */
+export async function getTeamStages(orgId: string): Promise<ProjectStage[]> {
+  const { data, error } = await supabase
+    .from("project_stages")
+    .select("*, projects!inner(team_id, status)")
+    .eq("projects.team_id", orgId);
+  if (error) throw new Error(error.message);
+  return (data || []).map((d: any) => { const { projects: _p, ...rest } = d; return rest; }) as ProjectStage[];
+}
+
+/** All time entries for the team (for utilization analytics). */
+export async function getTeamTimeEntries(orgId: string): Promise<TimeEntry[]> {
+  const { data, error } = await supabase
+    .from("time_entries")
+    .select("*")
+    .eq("team_id", orgId);
+  if (error) throw new Error(error.message);
+  return (data || []) as TimeEntry[];
+}
+
 export async function createProjectStage(
   stage: Omit<ProjectStage, "id">
 ): Promise<ProjectStage> {
