@@ -118,7 +118,7 @@ export function KanbanBoard({
     if (readOnly) return false;
     if (isAdmin) return true;
     if (isWorker) {
-      return !stage.assigned_to || stage.assigned_to === userId;
+      return stage.assigned_to === userId;
     }
     return false;
   }

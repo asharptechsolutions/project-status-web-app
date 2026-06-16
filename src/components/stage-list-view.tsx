@@ -208,8 +208,7 @@ function StageRow({
 }) {
   const canAct =
     isAdmin ||
-    (isWorker &&
-      (!stage.assigned_to || stage.assigned_to === userId));
+    (isWorker && stage.assigned_to === userId);
 
   const isClient = readOnly && !isAdmin && !isWorker;
 

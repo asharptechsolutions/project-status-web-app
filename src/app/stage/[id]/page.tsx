@@ -178,7 +178,7 @@ function StageActionInner() {
     .filter((d) => d.target_stage_id === stage.id)
     .map((d) => stages.find((s) => s.id === d.source_stage_id))
     .filter((s): s is ProjectStage => !!s && s.status !== "completed");
-  const canAct = !isClient && (isAdmin || !stage.assigned_to || stage.assigned_to === userId);
+  const canAct = !isClient && (isAdmin || stage.assigned_to === userId);
   const estimate = formatDate(stage.estimated_completion);
 
   return (
@@ -306,7 +306,9 @@ function StageActionInner() {
                 </Button>
                 {!canAct && (
                   <p className="text-xs text-center text-muted-foreground">
-                    This stage is assigned to {assignee?.name || "another worker"}.
+                    {assignee
+                      ? `This stage is assigned to ${assignee.name || assignee.email || "another worker"}.`
+                      : "This stage has no assigned worker — a project manager must start it."}
                   </p>
                 )}
               </>
@@ -318,7 +320,9 @@ function StageActionInner() {
                 </Button>
                 {!canAct && (
                   <p className="text-xs text-center text-muted-foreground">
-                    This stage is assigned to {assignee?.name || "another worker"}.
+                    {assignee
+                      ? `This stage is assigned to ${assignee.name || assignee.email || "another worker"}.`
+                      : "This stage has no assigned worker — a project manager must start it."}
                   </p>
                 )}
               </>

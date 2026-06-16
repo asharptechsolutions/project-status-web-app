@@ -651,7 +651,7 @@ export function GanttChart({
                 <Clock className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
               );
 
-            const canActOnStage = !readOnly && (isAdmin || (isWorker && (!stage.assigned_to || stage.assigned_to === userId)));
+            const canActOnStage = !readOnly && (isAdmin || (isWorker && stage.assigned_to === userId));
 
             return (
               <div

@@ -12,7 +12,7 @@ export interface StageTransitionParams {
   userId: string;
   actorName: string;
   status: ProjectStage["status"];
-  /** Admins can act on any stage; workers only on stages assigned to them or unassigned */
+  /** Admins can act on any stage; workers only on stages assigned to them */
   canActOnAnyStage: boolean;
   /** The caller's currently running timer, if any */
   activeTimer?: TimeEntry | null;
@@ -47,9 +47,13 @@ export async function performStageTransition({
   canActOnAnyStage,
   activeTimer = null,
 }: StageTransitionParams): Promise<StageTransitionResult> {
-  // Workers can only update unassigned stages or stages assigned to them
-  if (!canActOnAnyStage && stage.assigned_to && stage.assigned_to !== userId) {
-    throw new Error("You can only update stages assigned to you");
+  // Workers can only update stages assigned to them. Unassigned stages are PM-only.
+  if (!canActOnAnyStage && stage.assigned_to !== userId) {
+    throw new Error(
+      stage.assigned_to
+        ? "You can only update stages assigned to you"
+        : "This stage has no assigned worker — a project manager must start it or assign it to you first"
+    );
   }
 
   if (stage.on_hold) {
