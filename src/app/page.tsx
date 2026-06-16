@@ -276,7 +276,7 @@ function Dashboard() {
             <>
               <div className="space-y-2">
                 {paginatedActive.map((p) => (
-                  <Link key={p.id} href={`/projects/?id=${p.id}`}>
+                  <Link key={p.id} href={isClient ? `/track/?id=${p.id}` : `/projects/?id=${p.id}`}>
                     <Card className="cursor-pointer hover:shadow-md hover:border-primary/10 transition-all duration-200 group">
                       <CardContent className="pt-4 pb-4">
                         <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">

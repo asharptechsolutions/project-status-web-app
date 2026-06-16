@@ -19,20 +19,20 @@ function formatSlotTime(iso: string): string {
 function MeetInner() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
-  const { userId, isClient } = useAuth();
+  const { userId, orgId, isClient } = useAuth();
   const [appointment, setAppointment] = useState<Appointment | null>(null);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
-    if (!id || !userId) return;
+    if (!id || !userId || !orgId) return;
     try {
-      // RLS returns no row unless the caller is a member of the
-      // appointment's team — which includes its client contact
-      setAppointment(await getAppointment(id));
+      // Scoped to the caller's team both here and via RLS, so a user can only
+      // open an appointment (and its video room) within their own org.
+      setAppointment(await getAppointment(id, orgId));
     } finally {
       setLoading(false);
     }
-  }, [id, userId]);
+  }, [id, userId, orgId]);
 
   useEffect(() => { load(); }, [load]);
 
