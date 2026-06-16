@@ -447,8 +447,8 @@ function WorkflowCanvasInner({
   savedPositionsRef.current = savedPositions;
 
   const buildNodeData = useCallback((s: ProjectStage): StageNodeData => {
-    // Workers can act if: no one is assigned (open stage) OR they are the assigned worker
-    const canAct = isAdmin || (isWorker && (!s.assigned_to || s.assigned_to === userId));
+    // Workers can act only on stages assigned to them; unassigned stages are PM-only
+    const canAct = isAdmin || (isWorker && s.assigned_to === userId);
     return {
     label: s.name,
     status: s.status,
