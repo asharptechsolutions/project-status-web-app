@@ -1119,11 +1119,12 @@ export async function getAppointments(
   })) as Appointment[];
 }
 
-export async function getAppointment(id: string): Promise<Appointment | null> {
+export async function getAppointment(id: string, teamId: string): Promise<Appointment | null> {
   const { data, error } = await supabase
     .from("appointments")
     .select("*, slot:availability_slots(*), project:projects(name)")
     .eq("id", id)
+    .eq("team_id", teamId)
     .single();
   if (error) return null;
   const d = data as any;
