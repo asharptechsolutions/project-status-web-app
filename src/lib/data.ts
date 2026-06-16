@@ -32,7 +32,81 @@ import type {
   UserDeviceKey,
   ProjectKeyGrant,
   Subscription,
+  Invoice,
+  InvoiceLineItem,
+  ProjectFeedback,
 } from "./types";
+
+// ============ CLIENT FEEDBACK ============
+
+export async function getMyProjectFeedback(projectId: string, clientId: string): Promise<ProjectFeedback | null> {
+  const { data, error } = await supabase
+    .from("project_feedback")
+    .select("*")
+    .eq("project_id", projectId)
+    .eq("client_id", clientId)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return data as ProjectFeedback | null;
+}
+
+export async function submitProjectFeedback(feedback: Omit<ProjectFeedback, "id" | "created_at">): Promise<void> {
+  const { error } = await supabase
+    .from("project_feedback")
+    .upsert(feedback, { onConflict: "project_id,client_id" });
+  if (error) throw new Error(error.message);
+}
+
+// ============ INVOICES & QUOTES ============
+
+export function computeInvoiceTotals(lineItems: InvoiceLineItem[], taxRate: number): { subtotal: number; tax_amount: number; total: number } {
+  const subtotal = lineItems.reduce((sum, li) => sum + (li.quantity || 0) * (li.unit_price || 0), 0);
+  const tax_amount = +(subtotal * (taxRate || 0) / 100).toFixed(2);
+  return { subtotal: +subtotal.toFixed(2), tax_amount, total: +(subtotal + tax_amount).toFixed(2) };
+}
+
+export async function getProjectInvoices(projectId: string): Promise<Invoice[]> {
+  const { data, error } = await supabase
+    .from("invoices")
+    .select("*")
+    .eq("project_id", projectId)
+    .order("created_at", { ascending: false });
+  if (error) throw new Error(error.message);
+  return (data || []) as Invoice[];
+}
+
+export async function getTeamInvoices(orgId: string): Promise<Invoice[]> {
+  const { data, error } = await supabase
+    .from("invoices")
+    .select("*")
+    .eq("team_id", orgId)
+    .order("created_at", { ascending: false });
+  if (error) throw new Error(error.message);
+  return (data || []) as Invoice[];
+}
+
+export async function createInvoice(invoice: Omit<Invoice, "id" | "created_at" | "updated_at">): Promise<Invoice> {
+  const { data, error } = await supabase
+    .from("invoices")
+    .insert(invoice)
+    .select("*")
+    .single();
+  if (error) throw new Error(error.message);
+  return data as Invoice;
+}
+
+export async function updateInvoice(id: string, updates: Partial<Invoice>): Promise<void> {
+  const { error } = await supabase
+    .from("invoices")
+    .update({ ...updates, updated_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) throw new Error(error.message);
+}
+
+export async function deleteInvoice(id: string): Promise<void> {
+  const { error } = await supabase.from("invoices").delete().eq("id", id);
+  if (error) throw new Error(error.message);
+}
 
 // ============ PROJECT CLIENTS (junction) ============
 
@@ -167,6 +241,60 @@ export async function deleteProject(id: string): Promise<void> {
   if (error) throw new Error(error.message);
 }
 
+/** Clone a project's workflow (stages reset to pending) into a fresh project. */
+export async function duplicateProject(sourceId: string, createdBy: string): Promise<string> {
+  const source = await getProject(sourceId);
+  if (!source) throw new Error("Project not found");
+
+  const { data: created, error } = await supabase
+    .from("projects")
+    .insert({
+      team_id: source.team_id,
+      name: `${source.name} (copy)`,
+      description: source.description || null,
+      status: "active",
+      company_id: source.company_id || null,
+      created_by: createdBy,
+      time_tracking_enabled: source.time_tracking_enabled ?? false,
+      time_tracking_auto_start: source.time_tracking_auto_start ?? false,
+      time_tracking_default_billable: source.time_tracking_default_billable ?? true,
+      time_tracking_require_notes: source.time_tracking_require_notes ?? false,
+    })
+    .select("id")
+    .single();
+  if (error) throw new Error(error.message);
+  const newId = created.id as string;
+
+  const stages = await getProjectStages(sourceId);
+  if (stages.length > 0) {
+    const rows = stages.map((s) => ({
+      project_id: newId,
+      name: s.name,
+      status: "pending",
+      position: s.position,
+      started_at: null,
+      completed_at: null,
+      started_by: null,
+      assigned_to: s.assigned_to,
+      estimated_completion: null,
+      planned_start: null,
+      requires_client_approval: s.requires_client_approval ?? false,
+    }));
+    const { error: stageErr } = await supabase.from("project_stages").insert(rows);
+    if (stageErr) throw new Error(stageErr.message);
+  }
+
+  return newId;
+}
+
+export async function setProjectPriority(projectId: string, priority: "normal" | "rush"): Promise<void> {
+  const { error } = await supabase
+    .from("projects")
+    .update({ priority })
+    .eq("id", projectId);
+  if (error) throw new Error(error.message);
+}
+
 // ============ PROJECT STAGES ============
 
 export async function getProjectStages(projectId: string): Promise<ProjectStage[]> {
@@ -197,6 +325,39 @@ export async function getStagesForProjects(projectIds: string[]): Promise<Projec
     .in("project_id", projectIds);
   if (error) throw new Error(error.message);
   return (data || []) as ProjectStage[];
+}
+
+/** Completed stages across the team (for the predictive-ETA duration model). */
+export async function getTeamCompletedStages(orgId: string): Promise<ProjectStage[]> {
+  const { data, error } = await supabase
+    .from("project_stages")
+    .select("*, projects!inner(team_id)")
+    .eq("projects.team_id", orgId)
+    .eq("status", "completed")
+    .not("started_at", "is", null)
+    .not("completed_at", "is", null);
+  if (error) throw new Error(error.message);
+  return (data || []).map((d: any) => { const { projects: _p, ...rest } = d; return rest; }) as ProjectStage[];
+}
+
+/** All stages across the team (for analytics). */
+export async function getTeamStages(orgId: string): Promise<ProjectStage[]> {
+  const { data, error } = await supabase
+    .from("project_stages")
+    .select("*, projects!inner(team_id, status)")
+    .eq("projects.team_id", orgId);
+  if (error) throw new Error(error.message);
+  return (data || []).map((d: any) => { const { projects: _p, ...rest } = d; return rest; }) as ProjectStage[];
+}
+
+/** All time entries for the team (for utilization analytics). */
+export async function getTeamTimeEntries(orgId: string): Promise<TimeEntry[]> {
+  const { data, error } = await supabase
+    .from("time_entries")
+    .select("*")
+    .eq("team_id", orgId);
+  if (error) throw new Error(error.message);
+  return (data || []) as TimeEntry[];
 }
 
 export async function createProjectStage(
@@ -438,7 +599,8 @@ export async function uploadFile(
   projectId: string,
   file: File,
   uploadedBy: string,
-  encryption?: { iv: string; encryptedMetadata: string }
+  encryption?: { iv: string; encryptedMetadata: string },
+  stageId?: string
 ): Promise<ProjectFile> {
   const fileName = `${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
   const path = `project-files/${projectId}/${fileName}`;
@@ -464,7 +626,22 @@ export async function uploadFile(
     file_size: file.size,
     content_type: file.type,
     ...(encryption ? { iv: encryption.iv, encrypted: true, encrypted_metadata: encryption.encryptedMetadata } : {}),
+    ...(stageId ? { stage_id: stageId } : {}),
   });
+}
+
+/** Unencrypted progress photos for a project, keyed by stage */
+export async function getStagePhotos(projectId: string): Promise<ProjectFile[]> {
+  const { data, error } = await supabase
+    .from("files")
+    .select("*")
+    .eq("project_id", projectId)
+    .not("stage_id", "is", null)
+    .eq("encrypted", false)
+    .like("content_type", "image/%")
+    .order("created_at", { ascending: true });
+  if (error) throw new Error(error.message);
+  return (data || []) as ProjectFile[];
 }
 
 // ============ TEMPLATES ============

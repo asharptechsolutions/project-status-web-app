@@ -22,6 +22,7 @@ export function Navbar() {
     { href: "/projects/", label: "Projects" },
     ...(isAdmin ? [
       { href: "/calendar/", label: "Calendar" },
+      { href: "/analytics/", label: "Analytics" },
       { href: "/templates/", label: "Templates" },
       { href: "/crm/", label: "CRM" },
       { href: "/activity/", label: "Activity" },

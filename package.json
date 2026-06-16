@@ -37,6 +37,7 @@
     "react": "^19.0.0",
     "react-day-picker": "^9.13.2",
     "react-dom": "^19.0.0",
+    "recharts": "^3.8.1",
     "sonner": "^2.0.7",
     "stripe": "^22.2.0",
     "tailwind-merge": "^3.0.1",

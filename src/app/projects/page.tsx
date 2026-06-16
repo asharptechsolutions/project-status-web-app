@@ -5,14 +5,14 @@ import { Navbar } from "@/components/navbar";
 import { AuthGate } from "@/components/auth-gate";
 import { useAuth } from "@/lib/auth-context";
 import {
-  getProjects, createProject, updateProject, deleteProject,
+  getProjects, getProject, createProject, updateProject, deleteProject, duplicateProject,
   getProjectStages, getStagesForProjects, createProjectStage, updateProjectStage, deleteProjectStage,
   getTemplates, getPresetStages,
   getAssignedProjects, getClientProjects, getMembers, getCompanies, createCompany, createTemplate,
   setProjectClients, getProjectClients, addProjectClient, removeProjectClient,
   getStageDependencies, createStageDependency, deleteStageDependency, deleteStageDependenciesForStage,
   getAutomationSettings,
-  enableProjectShare, disableProjectShare, regenerateProjectShareToken,
+  enableProjectShare, disableProjectShare, regenerateProjectShareToken, setProjectPriority,
   registerDeviceKey, getDeviceKeysForUsers, createKeyGrants, enableProjectEncryption,
   getTimeEntriesForStage, getTimeEntriesForProject, getActiveTimer,
   startTimer, stopTimer, createManualTimeEntry, deleteTimeEntry,
@@ -22,6 +22,9 @@ import {
 import type { Project, ProjectStage, Template, PresetStage, Member, Company, StageDependency, AutomationSettings, TimeEntry } from "@/lib/types";
 import { runStageAutomations, runAssignmentAutomations, dispatchWebhookEvent, AUTOMATION_DEFAULTS } from "@/lib/automations";
 import { performStageTransition } from "@/lib/stage-actions";
+import { notifyClientStageEvent } from "@/lib/client-notify";
+import { useEtaModel } from "@/lib/use-eta-model";
+import { EtaBadge } from "@/components/eta-badge";
 import { getOrCreateDeviceKey, getDeviceLabel, generateProjectKey, wrapProjectKey } from "@/lib/crypto";
 import { trackActivity } from "@/lib/activity";
 import { Button } from "@/components/ui/button";
@@ -40,15 +43,18 @@ import {
   Clock, Loader2, GripVertical, UserPlus, Mail, Users, Building2, Save,
   AlertTriangle, TrendingUp, Link, FolderOpen, MoreHorizontal, BarChart3, Network,
   Timer, DollarSign, Square, Download, Columns3, List, QrCode, RefreshCw, Lock,
+  ShieldCheck, Zap, PauseCircle, Copy,
 } from "lucide-react";
 import { toast } from "sonner";
 import { DatePicker } from "@/components/ui/date-picker";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
 import { ProjectNotes } from "@/components/project-notes";
+import { InvoiceManager } from "@/components/invoice-manager";
 import { EmptyState } from "@/components/empty-state";
 import { generateCsv, downloadCsv } from "@/lib/csv";
 import { ChatBubble, type ChatBubbleHandle } from "@/components/chat-bubble";
 import { Pagination } from "@/components/pagination";
+import { Skeleton } from "@/components/ui/skeleton";
 import dynamic from "next/dynamic";
 
 const WorkflowCanvas = dynamic(
@@ -73,6 +79,7 @@ const StageListView = dynamic(
 
 function ProjectsList() {
   const { orgId, userId, isAdmin, isWorker, isClient, member } = useAuth();
+  const etaModel = useEtaModel(orgId);
   const searchParams = useSearchParams();
   const router = useRouter();
   const handledParams = useRef(false);
@@ -123,6 +130,9 @@ function ProjectsList() {
   const [stageModalWorker, setStageModalWorker] = useState<string | null>(null);
   const [stageModalEstDate, setStageModalEstDate] = useState<Date | undefined>(undefined);
   const [stageModalStatus, setStageModalStatus] = useState<ProjectStage["status"]>("pending");
+  const [stageModalRequiresApproval, setStageModalRequiresApproval] = useState(false);
+  const [stageModalOnHold, setStageModalOnHold] = useState(false);
+  const [stageModalHoldReason, setStageModalHoldReason] = useState("");
   const [showClientsModal, setShowClientsModal] = useState(false);
   const [projectProgress, setProjectProgress] = useState<Record<string, number>>({});
   const [projectSchedule, setProjectSchedule] = useState<Record<string, number | null>>({});
@@ -679,6 +689,9 @@ function ProjectsList() {
     setStageModalWorker(null);
     setStageModalEstDate(undefined);
     setStageModalPlannedStart(undefined);
+    setStageModalRequiresApproval(false);
+    setStageModalOnHold(false);
+    setStageModalHoldReason("");
     setShowStageModal(true);
   };
 
@@ -690,6 +703,9 @@ function ProjectsList() {
     setStageModalWorker(stage.assigned_to);
     setStageModalEstDate(stage.estimated_completion ? new Date(stage.estimated_completion + "T00:00:00") : undefined);
     setStageModalPlannedStart(stage.planned_start ? new Date(stage.planned_start + "T00:00:00") : undefined);
+    setStageModalRequiresApproval(!!stage.requires_client_approval);
+    setStageModalOnHold(!!stage.on_hold);
+    setStageModalHoldReason(stage.hold_reason || "");
     setStageModalStatus(stage.status);
     setShowManualEntry(false);
     setManualDuration("");
@@ -789,6 +805,9 @@ function ProjectsList() {
           estimated_completion: estDate,
           planned_start: plannedStart,
           status: stageModalStatus,
+          requires_client_approval: stageModalRequiresApproval,
+          on_hold: stageModalOnHold,
+          hold_reason: stageModalOnHold ? (stageModalHoldReason.trim() || null) : null,
         };
         // Handle timestamp changes when status changes
         if (currentStage && stageModalStatus !== currentStage.status) {
@@ -878,7 +897,8 @@ function ProjectsList() {
           assigned_to: stageModalWorker,
           estimated_completion: estDate,
           planned_start: plannedStart,
-        });
+          requires_client_approval: stageModalRequiresApproval,
+        } as Omit<ProjectStage, "id">);
         setStages((prev) => [...prev, stage]);
         // Notify worker if assigned on creation
         if (stageModalWorker) {
@@ -915,7 +935,7 @@ function ProjectsList() {
     const stage = currentStages.find((s) => s.id === stageId);
     if (!stage) return;
     try {
-      const { updatedStages, projectCompleted, stoppedTimer, startedTimer } = await performStageTransition({
+      const { updatedStages, projectCompleted, stoppedTimer, startedTimer, approvalRequested } = await performStageTransition({
         stage,
         project: selectedProject,
         stages: currentStages,
@@ -927,6 +947,12 @@ function ProjectsList() {
         canActOnAnyStage: isAdmin || !isWorker,
         activeTimer,
       });
+      if (approvalRequested) {
+        setStages(updatedStages);
+        notifyClientStageEvent(selectedProject, stage, "approval_requested");
+        toast.success("Sent to the client for approval");
+        return;
+      }
       if (stoppedTimer) {
         setProjectTimeEntries((prev) => prev.map((e) => e.id === stoppedTimer.id ? stoppedTimer : e).concat(prev.some((e) => e.id === stoppedTimer.id) ? [] : [stoppedTimer]));
         setActiveTimer(null);
@@ -937,12 +963,38 @@ function ProjectsList() {
         toast.info("Timer started");
       }
       setStages(updatedStages);
+      notifyClientStageEvent(selectedProject, stage, status === "in_progress" ? "stage_started" : status === "completed" ? "stage_completed" : null);
       if (projectCompleted) {
         setSelectedProjectRaw({ ...selectedProject, status: "completed" });
         load();
       }
     } catch (err: any) {
       toast.error(err.message || "Failed to update stage");
+    }
+  };
+
+  const handleDuplicateProject = async () => {
+    if (!selectedProject || !userId) return;
+    try {
+      const newId = await duplicateProject(selectedProject.id, userId);
+      toast.success("Project duplicated");
+      await load();
+      const fresh = await getProject(newId);
+      if (fresh) selectProject(fresh);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to duplicate project");
+    }
+  };
+
+  const handleTogglePriority = async () => {
+    if (!selectedProject) return;
+    const next = selectedProject.priority === "rush" ? "normal" : "rush";
+    try {
+      await setProjectPriority(selectedProject.id, next);
+      applyShareUpdate({ priority: next });
+      toast.success(next === "rush" ? "Marked as rush" : "Rush flag cleared");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to update priority");
     }
   };
 
@@ -1211,7 +1263,14 @@ function ProjectsList() {
     }
   };
 
-  if (loading) return <div className="flex items-center justify-center p-8"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" /></div>;
+  if (loading) return (
+    <div className="p-4 max-w-7xl mx-auto w-full space-y-3">
+      <Skeleton className="h-9 w-40 mb-4" />
+      {[0, 1, 2, 3].map((i) => (
+        <Skeleton key={i} className="h-20 w-full" />
+      ))}
+    </div>
+  );
 
   // Project detail view
   if (selectedProject) {
@@ -1239,8 +1298,24 @@ function ProjectsList() {
             <Badge className={selectedProject.status === "completed" ? "bg-green-600 text-white hover:bg-green-700" : selectedProject.status === "active" ? "bg-blue-600 text-white hover:bg-blue-700" : ""} variant={selectedProject.status === "completed" || selectedProject.status === "active" ? "default" : "secondary"}>
               {selectedProject.status}
             </Badge>
+            {selectedProject.priority === "rush" && (
+              <Badge className="bg-orange-600 text-white hover:bg-orange-700 gap-1">
+                <Zap className="h-3 w-3" /> Rush
+              </Badge>
+            )}
           </div>
           <div className="flex items-center gap-2">
+            {isAdmin && (
+              <Button
+                variant={selectedProject.priority === "rush" ? "default" : "outline"}
+                size="sm"
+                className={selectedProject.priority === "rush" ? "bg-orange-600 hover:bg-orange-700" : ""}
+                onClick={handleTogglePriority}
+                title={selectedProject.priority === "rush" ? "Clear rush flag" : "Mark as rush"}
+              >
+                <Zap className="h-4 w-4 mr-1" /> {selectedProject.priority === "rush" ? "Rush" : "Mark Rush"}
+              </Button>
+            )}
             {isAdmin && (
               <Button variant="outline" size="sm" onClick={openEdit}>
                 <Pencil className="h-4 w-4 mr-1" /> Edit
@@ -1279,6 +1354,11 @@ function ProjectsList() {
                 {isAdmin && stages.length > 0 && (
                   <DropdownMenuItem onClick={() => router.push(`/projects/qr/?id=${selectedProject.id}`)}>
                     <QrCode className="h-4 w-4" /> Print QR Codes
+                  </DropdownMenuItem>
+                )}
+                {isAdmin && (
+                  <DropdownMenuItem onClick={() => handleDuplicateProject()}>
+                    <Copy className="h-4 w-4" /> Duplicate Project
                   </DropdownMenuItem>
                 )}
                 {isAdmin && (
@@ -1368,6 +1448,11 @@ function ProjectsList() {
             </Dialog>
           </div>
         </div>
+
+        {/* Predicted ETA */}
+        {selectedProject.status !== "completed" && stages.length > 0 && (
+          <EtaBadge stages={stages} dependencies={dependencies} model={etaModel} variant="card" className="mb-4" />
+        )}
 
         {/* Schedule status */}
         {scheduleDays !== null && (
@@ -1618,6 +1703,18 @@ function ProjectsList() {
               </CardContent>
             )}
           </Card>
+        )}
+
+        {/* Quotes & Invoices (admin only) */}
+        {isAdmin && userId && (
+          <div className="mt-8">
+            <InvoiceManager
+              projectId={selectedProject.id}
+              teamId={selectedProject.team_id}
+              userId={userId}
+              billableMinutes={timeSummary.billableMinutes}
+            />
+          </div>
         )}
 
         {/* Notes (internal, hidden from clients) */}
@@ -1963,6 +2060,33 @@ function ProjectsList() {
                   onChangeEnd={setStageModalEstDate}
                   placeholder="Click a start date, drag to end"
                 />
+              </div>
+
+              <div className="flex items-center justify-between rounded-md border p-3">
+                <div className="flex items-center gap-2">
+                  <ShieldCheck className="h-4 w-4 text-muted-foreground" />
+                  <div>
+                    <Label htmlFor="stage-approval" className="text-sm cursor-pointer">Require client approval</Label>
+                    <p className="text-xs text-muted-foreground">Stage waits for the client to sign off before it can complete</p>
+                  </div>
+                </div>
+                <Switch id="stage-approval" checked={stageModalRequiresApproval} onCheckedChange={setStageModalRequiresApproval} />
+              </div>
+
+              <div className="rounded-md border p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <PauseCircle className="h-4 w-4 text-muted-foreground" />
+                    <div>
+                      <Label htmlFor="stage-hold" className="text-sm cursor-pointer">Place on hold</Label>
+                      <p className="text-xs text-muted-foreground">Blocks start/complete (e.g. waiting on materials)</p>
+                    </div>
+                  </div>
+                  <Switch id="stage-hold" checked={stageModalOnHold} onCheckedChange={setStageModalOnHold} />
+                </div>
+                {stageModalOnHold && (
+                  <Input value={stageModalHoldReason} onChange={(e) => setStageModalHoldReason(e.target.value)} placeholder="Reason (e.g. waiting on steel delivery)" />
+                )}
               </div>
 
               {/* Time Tracking Section — only shown when editing an existing stage with time tracking enabled */}

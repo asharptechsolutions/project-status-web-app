@@ -39,6 +39,7 @@ export interface Project {
   share_token?: string | null;
   share_enabled?: boolean;
   encryption_enabled?: boolean;
+  priority?: "normal" | "rush";
   created_at: string;
   updated_at: string;
 }
@@ -55,6 +56,13 @@ export interface ProjectStage {
   assigned_to: string | null;
   estimated_completion: string | null;
   planned_start: string | null;
+  requires_client_approval?: boolean;
+  approval_status?: "pending" | "approved" | "changes_requested" | null;
+  approved_by?: string | null;
+  approved_at?: string | null;
+  approval_note?: string | null;
+  on_hold?: boolean;
+  hold_reason?: string | null;
 }
 
 export interface ProjectAssignment {
@@ -96,6 +104,7 @@ export interface ProjectFile {
   iv?: string | null;
   encrypted?: boolean;
   encrypted_metadata?: string | null;
+  stage_id?: string | null;
   created_at: string;
 }
 
@@ -390,6 +399,48 @@ export interface ActivityLog {
   project_id: string | null;
   metadata: Record<string, unknown>;
   created_at: string;
+}
+
+// ============ CLIENT FEEDBACK ============
+
+export interface ProjectFeedback {
+  id: string;
+  team_id: string;
+  project_id: string;
+  client_id: string;
+  rating: number;
+  comment: string | null;
+  created_at: string;
+}
+
+// ============ QUOTES & INVOICES ============
+
+export interface InvoiceLineItem {
+  description: string;
+  quantity: number;
+  unit_price: number;
+}
+
+export interface Invoice {
+  id: string;
+  team_id: string;
+  project_id: string | null;
+  kind: "quote" | "invoice";
+  status: "draft" | "sent" | "accepted" | "paid" | "void";
+  line_items: InvoiceLineItem[];
+  subtotal: number;
+  tax_rate: number;
+  tax_amount: number;
+  total: number;
+  currency: string;
+  notes: string | null;
+  payment_url: string | null;
+  created_by: string | null;
+  issued_at: string | null;
+  due_at: string | null;
+  paid_at: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 // ============ BILLING ============

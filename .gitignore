@@ -5,3 +5,7 @@ out
 ./docs
 .claude/settings.local.json
 tmp-screenshots/
+.playwright-mcp/
+supabase/.temp/
+tsconfig.tsbuildinfo
+*.mjs.tmp

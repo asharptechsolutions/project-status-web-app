@@ -25,6 +25,8 @@ export interface StageTransitionResult {
   stoppedTimer: TimeEntry | null;
   /** Timer that was auto-started */
   startedTimer: TimeEntry | null;
+  /** Completion was intercepted by a client approval gate — stage now awaits sign-off */
+  approvalRequested?: boolean;
 }
 
 /**
@@ -48,6 +50,34 @@ export async function performStageTransition({
   // Workers can only update unassigned stages or stages assigned to them
   if (!canActOnAnyStage && stage.assigned_to && stage.assigned_to !== userId) {
     throw new Error("You can only update stages assigned to you");
+  }
+
+  if (stage.on_hold) {
+    throw new Error(`This stage is on hold${stage.hold_reason ? ` — ${stage.hold_reason}` : ""}. Clear the hold first.`);
+  }
+
+  // Approval gate: completing a gated stage routes through client sign-off instead
+  if (status === "completed" && stage.requires_client_approval && stage.approval_status !== "approved") {
+    const gateUpdates: Partial<ProjectStage> = { approval_status: "pending" };
+    await updateProjectStage(stage.id, gateUpdates);
+    trackActivity({
+      teamId: project.team_id,
+      actorId: userId,
+      actorName,
+      action: "updated",
+      entityType: "stage",
+      entityId: stage.id,
+      entityName: stage.name,
+      projectId: project.id,
+      metadata: { approvalRequested: true, project_name: project.name },
+    });
+    return {
+      updatedStages: stages.map((s) => (s.id === stage.id ? { ...s, ...gateUpdates } : s)),
+      projectCompleted: false,
+      stoppedTimer: null,
+      startedTimer: null,
+      approvalRequested: true,
+    };
   }
 
   const now = new Date().toISOString();

@@ -4,9 +4,20 @@ import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { renderEmail, getDefaultTemplate } from "@/lib/email-renderer";
 import type { BrandingConfig, EmailLayout } from "@/lib/email-renderer";
 
+// Maps a client_event to its email template type and the per-event
+// opt-out column on client_notification_preferences.
+const CLIENT_EVENT_MAP: Record<string, { template: string; prefColumn: string }> = {
+  stage_started: { template: "stage_started", prefColumn: "notify_stage_started" },
+  stage_completed: { template: "stage_complete", prefColumn: "notify_stage_complete" },
+  approval_requested: { template: "approval_requested", prefColumn: "notify_approval_requested" },
+  photo_added: { template: "photo_added", prefColumn: "notify_photo_added" },
+  project_completed: { template: "project_completed", prefColumn: "notify_project_completed" },
+};
+
 export async function POST(request: NextRequest) {
   try {
-    const { type, projectId, projectName, stageName, workerId, teamId } = await request.json();
+    const body = await request.json();
+    const { type, projectId, projectName, stageName, workerId, teamId } = body;
 
     if (!type || !projectId) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
@@ -26,6 +37,13 @@ export async function POST(request: NextRequest) {
 
     const adminClient = createAdminClient();
 
+    // For client_event, the template type is derived from the event kind
+    const clientEvent = type === "client_event" ? CLIENT_EVENT_MAP[body.event] : null;
+    if (type === "client_event" && !clientEvent) {
+      return NextResponse.json({ error: "Unknown client event" }, { status: 400 });
+    }
+    const templateType = clientEvent ? clientEvent.template : type;
+
     // Load org branding and custom email template
     const resolvedTeamId = teamId || null;
     let branding: BrandingConfig = { primary_color: "#2563eb", org_name: "ProjectStatus" };
@@ -36,7 +54,7 @@ export async function POST(request: NextRequest) {
     if (resolvedTeamId) {
       const [brandingRow, templateRow, teamRow] = await Promise.all([
         adminClient.from("org_branding").select("*").eq("team_id", resolvedTeamId).single(),
-        adminClient.from("email_templates").select("*").eq("team_id", resolvedTeamId).eq("template_type", type).eq("is_active", true).single(),
+        adminClient.from("email_templates").select("*").eq("team_id", resolvedTeamId).eq("template_type", templateType).eq("is_active", true).single(),
         adminClient.from("teams").select("name").eq("id", resolvedTeamId).single(),
       ]);
 
@@ -57,11 +75,69 @@ export async function POST(request: NextRequest) {
     }
 
     // Use custom template or fall back to defaults
-    const defaults = getDefaultTemplate(type);
+    const defaults = getDefaultTemplate(templateType);
     const emailSubject = customSubject || defaults?.subject || "Notification";
     const emailBody = customBody || defaults?.body || "";
 
-    if (type === "stage_complete") {
+    if (type === "client_event" && clientEvent) {
+      // Resolve assigned clients, minus per-event opt-outs
+      const { data: clientRows } = await adminClient
+        .from("project_clients")
+        .select("client_id")
+        .eq("project_id", projectId);
+
+      if (!clientRows || clientRows.length === 0) {
+        return NextResponse.json({ success: true, skipped: true, reason: "No clients on project" });
+      }
+      let clientIds = clientRows.map((r: any) => r.client_id);
+
+      const { data: optOutRows } = await adminClient
+        .from("client_notification_preferences")
+        .select("client_id")
+        .eq("project_id", projectId)
+        .eq(clientEvent.prefColumn, false)
+        .in("client_id", clientIds);
+
+      if (optOutRows && optOutRows.length > 0) {
+        const optedOut = new Set(optOutRows.map((r: any) => r.client_id));
+        clientIds = clientIds.filter((id: string) => !optedOut.has(id));
+      }
+      if (clientIds.length === 0) {
+        return NextResponse.json({ success: true, skipped: true, reason: "All clients opted out" });
+      }
+
+      const { data: profiles } = await adminClient
+        .from("profiles")
+        .select("email, display_name")
+        .in("id", clientIds);
+      const recipients = (profiles || []).filter((p: any) => p.email);
+      if (recipients.length === 0) {
+        return NextResponse.json({ success: true, skipped: true, reason: "No client emails found" });
+      }
+
+      for (const recipient of recipients) {
+        const variables: Record<string, string> = {
+          recipient_name: (recipient as any).display_name || "",
+          org_name: branding.org_name,
+          project_name: projectName || "",
+          stage_name: stageName || "",
+          eta: body.eta || "in progress",
+        };
+        const { subject, html } = renderEmail(emailSubject, emailBody, variables, branding, layout);
+        await fetch("https://api.resend.com/emails", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            from: `${branding.org_name} <noreply@projectstatus.app>`,
+            to: (recipient as any).email,
+            subject,
+            html,
+          }),
+        });
+      }
+      return NextResponse.json({ success: true, emailed: recipients.length });
+
+    } else if (type === "stage_complete") {
       // Get project clients' emails
       const { data: clientRows } = await adminClient
         .from("project_clients")

@@ -25,8 +25,8 @@ export function EmptyState({
   return (
     <Card>
       <CardContent className="flex flex-col items-center justify-center py-16 px-6 text-center">
-        <div className="h-14 w-14 rounded-2xl bg-muted/50 flex items-center justify-center mb-4">
-          <Icon className="h-7 w-7 text-muted-foreground/60" />
+        <div className="h-16 w-16 rounded-2xl bg-gradient-to-br from-primary/15 to-primary/5 ring-1 ring-primary/10 flex items-center justify-center mb-4">
+          <Icon className="h-8 w-8 text-primary/70" />
         </div>
         <h3 className="text-lg font-semibold mb-1">{title}</h3>
         <p className="text-sm text-muted-foreground max-w-sm mb-6">{description}</p>
