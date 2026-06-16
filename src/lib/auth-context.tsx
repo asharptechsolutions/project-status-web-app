@@ -1,5 +1,5 @@
 "use client";
-import { createContext, useContext, useEffect, useState, ReactNode, useCallback } from "react";
+import { createContext, useContext, useEffect, useState, useRef, ReactNode, useCallback } from "react";
 import { createClient } from "./supabase";
 import type { UserRole } from "./types";
 import type { User, Session } from "@supabase/supabase-js";
@@ -60,6 +60,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [orgName, setOrgName] = useState<string | null>(null);
   const [isPlatformAdmin, setIsPlatformAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
+  // Tracks the last user id we reacted to, so auth events that don't change the
+  // identity (e.g. periodic token refreshes) don't retrigger the member fetch.
+  const lastUserIdRef = useRef<string | null>(null);
 
   const supabase = createClient();
 
@@ -72,6 +75,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLoading(false);
       return;
     }
+
+    // We have a user but haven't resolved their org/role yet. Keep loading=true
+    // for the duration of the fetch so AuthGate shows the spinner instead of
+    // briefly flashing OrgSetup (orgId is still null until the fetch lands).
+    setLoading(true);
 
     try {
       // Get profile (includes platform admin flag)
@@ -130,6 +138,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Get initial session
     supabase.auth.getSession().then(({ data: { session: s } }) => {
       setSession(s);
+      lastUserIdRef.current = s?.user?.id ?? null;
       setUser(s?.user ?? null);
       // Only stop loading here if there's no user — if there IS a user,
       // refreshMember will set loading=false after fetching member data.
@@ -141,6 +150,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, s) => {
       setSession(s);
+      const nextId = s?.user?.id ?? null;
+      // Ignore events that don't change the user identity (token refreshes fire
+      // periodically with the same user) — avoids a needless member refetch.
+      if (nextId === lastUserIdRef.current) return;
+      lastUserIdRef.current = nextId;
+      // On sign-in we have a user but not their org/role yet. Flip loading on in
+      // the SAME render as setUser so AuthGate shows the spinner instead of
+      // briefly flashing OrgSetup before refreshMember resolves orgId.
+      if (nextId) setLoading(true);
       setUser(s?.user ?? null);
     });
 

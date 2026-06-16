@@ -245,40 +245,26 @@ export async function POST() {
           const { error: stageError } = await admin.from("project_stages").insert(stageData);
           if (stageError) throw new Error(`Failed to create stage "${sDef.name}": ${stageError.message}`);
         }
-
-        // Assign worker and client to project
-        const { data: workerMember } = await admin
-          .from("team_members")
-          .select("id")
-          .eq("team_id", orgId)
-          .eq("user_id", workerUserId)
-          .single();
-
-        const { data: clientMember } = await admin
-          .from("team_members")
-          .select("id")
-          .eq("team_id", orgId)
-          .eq("user_id", clientUserId)
-          .single();
-
-        if (workerMember) {
-          await admin
-            .from("project_assignments")
-            .upsert(
-              { project_id: projectId, member_id: workerMember.id },
-              { onConflict: "project_id,member_id" }
-            );
-        }
-
-        if (clientMember) {
-          await admin
-            .from("project_clients")
-            .upsert(
-              { project_id: projectId, client_id: clientMember.id },
-              { onConflict: "project_id,client_id" }
-            );
-        }
       }
+
+      // Assign worker + client to the project. Runs for BOTH newly-created and
+      // pre-existing projects, so re-seeding repairs any missing assignments.
+      // These junctions key off the auth user id (see addProjectClient /
+      // getClientProjects / assignProject). NOTE: team_members has no `id`
+      // column — its PK is composite (team_id, user_id) — so we use the user
+      // ids directly. The old `.select("id")` lookup silently errored, which is
+      // why the client was never actually assigned and saw an empty dashboard.
+      const { error: waError } = await admin
+        .from("project_assignments")
+        .upsert({ project_id: projectId, member_id: workerUserId }, { onConflict: "project_id,member_id" });
+      if (waError) throw new Error(`Failed to assign worker to "${pDef.name}": ${waError.message}`);
+
+      const { error: caError } = await admin
+        .from("project_clients")
+        .upsert({ project_id: projectId, client_id: clientUserId }, { onConflict: "project_id,client_id" });
+      if (caError) throw new Error(`Failed to assign client to "${pDef.name}": ${caError.message}`);
+
+      results.push(`Ensured worker + client assigned to "${pDef.name}"`);
     }
 
     // ── 7. Create a sample template ─────────────────────────────
