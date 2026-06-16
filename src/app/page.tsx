@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { FolderOpen, Clock, CheckCircle2, CalendarDays, AlertTriangle, TrendingUp, ChevronRight, Building2, Plus } from "lucide-react";
 import { GettingStartedChecklist } from "@/components/getting-started-checklist";
+import { JoinCallButton } from "@/components/join-call-button";
 import { EmptyState } from "@/components/empty-state";
 import { Pagination } from "@/components/pagination";
 import Link from "next/link";
@@ -251,6 +252,8 @@ function Dashboard() {
                             {appt.notes && (
                               <p className="text-xs text-muted-foreground mt-1 italic truncate">{appt.notes}</p>
                             )}
+                            {/* Renders only inside the join window (10 min before → 30 min after) */}
+                            <JoinCallButton appointment={appt} className="mt-2" />
                           </CardContent>
                         </Card>
                       ))}

@@ -1195,12 +1195,15 @@ export async function getUpcomingAppointments(
     .eq("team_id", orgId)
     .eq("status", "confirmed");
   if (error) throw new Error(error.message);
-  // Filter client-side by slot start_time (Supabase doesn't support filtering on joined fields reliably)
+  // Filter client-side by slot time (Supabase doesn't support filtering on joined fields reliably).
+  // Keep calls that are still in progress (end in the future) so an ongoing,
+  // joinable call doesn't disappear from the dashboard the moment it starts.
   return (data || [])
     .filter((d: any) => {
       if (!d.slot) return false;
       const slotStart = new Date(d.slot.start_time);
-      return slotStart >= now && slotStart <= end;
+      const slotEnd = new Date(d.slot.end_time);
+      return slotEnd >= now && slotStart <= end;
     })
     .sort((a: any, b: any) => new Date(a.slot.start_time).getTime() - new Date(b.slot.start_time).getTime())
     .map((d: any) => ({
