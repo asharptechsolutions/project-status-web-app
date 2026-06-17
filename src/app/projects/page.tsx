@@ -162,7 +162,8 @@ function ProjectsList() {
   const [encryptBusy, setEncryptBusy] = useState(false);
   const chatBubbleRef = useRef<ChatBubbleHandle>(null);
   const workflowLocked = selectedProject?.workflow_locked ?? false;
-  const [viewMode, setViewMode] = useState<"canvas" | "kanban" | "gantt" | "list">("canvas");
+  const [viewMode, setViewMode] = useState<"canvas" | "kanban" | "gantt" | "list">("list");
+  const [detailTab, setDetailTab] = useState<"workflow" | "quotes" | "notes">("workflow");
   const [dependencies, setDependencies] = useState<StageDependency[]>([]);
   const [automationSettings, setAutomationSettings] = useState<AutomationSettings | null>(null);
   const [stageModalPlannedStart, setStageModalPlannedStart] = useState<Date | undefined>(undefined);
@@ -1449,30 +1450,58 @@ function ProjectsList() {
           </div>
         </div>
 
-        {/* Predicted ETA */}
-        {selectedProject.status !== "completed" && stages.length > 0 && (
-          <EtaBadge stages={stages} dependencies={dependencies} model={etaModel} variant="card" className="mb-4" />
-        )}
-
-        {/* Schedule status */}
-        {scheduleDays !== null && (
-          <div className={`flex items-center gap-2 mb-4 px-3 py-2 rounded-lg border text-sm ${
-            scheduleDays < 0
-              ? "border-red-500/30 bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-400"
-              : scheduleDays === 0
-                ? "border-green-500/30 bg-green-50 text-green-700 dark:bg-green-950/30 dark:text-green-400"
-                : "border-green-500/30 bg-green-50 text-green-700 dark:bg-green-950/30 dark:text-green-400"
-          }`}>
-            {scheduleDays < 0 ? (
-              <><AlertTriangle className="h-4 w-4 shrink-0" /> {Math.abs(scheduleDays)} day{Math.abs(scheduleDays) !== 1 ? "s" : ""} behind schedule</>
-            ) : scheduleDays === 0 ? (
-              <><Clock className="h-4 w-4 shrink-0" /> On schedule</>
-            ) : (
-              <><TrendingUp className="h-4 w-4 shrink-0" /> {scheduleDays} day{scheduleDays !== 1 ? "s" : ""} ahead of schedule</>
+        {/* Compact status summary — ready date · schedule · progress on one line */}
+        {stages.length > 0 && (
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-2 mb-5 text-sm">
+            {selectedProject.status !== "completed" && (
+              <EtaBadge stages={stages} dependencies={dependencies} model={etaModel} variant="inline" />
             )}
+            {scheduleDays !== null && (
+              <span className={`flex items-center gap-1 font-medium ${
+                scheduleDays < 0 ? "text-red-600 dark:text-red-400" : "text-emerald-600 dark:text-emerald-400"
+              }`}>
+                {scheduleDays < 0 ? (
+                  <><AlertTriangle className="h-3.5 w-3.5 shrink-0" /> {Math.abs(scheduleDays)}d behind</>
+                ) : scheduleDays === 0 ? (
+                  <><Clock className="h-3.5 w-3.5 shrink-0" /> On schedule</>
+                ) : (
+                  <><TrendingUp className="h-3.5 w-3.5 shrink-0" /> {scheduleDays}d ahead</>
+                )}
+              </span>
+            )}
+            <span className="flex items-center gap-2 text-muted-foreground">
+              <span className="h-1.5 w-24 overflow-hidden rounded-full bg-secondary">
+                <span className="block h-full rounded-full bg-primary" style={{ width: `${progress}%` }} />
+              </span>
+              {progress}% complete
+            </span>
           </div>
         )}
 
+        {/* Section tabs */}
+        <div className="flex items-center gap-1 border-b mb-4 overflow-x-auto">
+          {[
+            { key: "workflow" as const, label: "Workflow", show: true },
+            { key: "quotes" as const, label: "Quotes & Invoices", show: isAdmin },
+            { key: "notes" as const, label: "Notes", show: isAdmin || isWorker },
+          ].filter((t) => t.show).map((t) => (
+            <button
+              key={t.key}
+              onClick={() => setDetailTab(t.key)}
+              className={`-mb-px whitespace-nowrap border-b-2 px-3 py-2 text-sm font-medium transition-colors ${
+                detailTab === t.key
+                  ? "border-primary text-foreground"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Workflow tab */}
+        {detailTab === "workflow" && (
+        <>
         {/* View toggle */}
         <div className="flex items-center gap-1 mb-3">
           <Button size="sm" variant={viewMode === "canvas" ? "default" : "outline"} onClick={() => setViewMode("canvas")}>
@@ -1704,10 +1733,12 @@ function ProjectsList() {
             )}
           </Card>
         )}
+        </>
+        )}
 
-        {/* Quotes & Invoices (admin only) */}
-        {isAdmin && userId && (
-          <div className="mt-8">
+        {/* Quotes & Invoices tab */}
+        {detailTab === "quotes" && isAdmin && userId && (
+          <div>
             <InvoiceManager
               projectId={selectedProject.id}
               teamId={selectedProject.team_id}
@@ -1717,9 +1748,9 @@ function ProjectsList() {
           </div>
         )}
 
-        {/* Notes (internal, hidden from clients) */}
-        {(isAdmin || isWorker) && (
-          <div className="mt-8">
+        {/* Notes tab (internal, hidden from clients) */}
+        {detailTab === "notes" && (isAdmin || isWorker) && (
+          <div>
             <ProjectNotes projectId={selectedProject.id} />
           </div>
         )}
