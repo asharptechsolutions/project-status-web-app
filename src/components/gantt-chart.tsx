@@ -141,6 +141,10 @@ export function GanttChart({
   } | null>(null);
   const [linkHoverTarget, setLinkHoverTarget] = useState<string | null>(null);
 
+  // Dependency arrows are the biggest source of visual noise; off by default
+  // (the sequence is already obvious left-to-right). Toggle to reveal them.
+  const [showDeps, setShowDeps] = useState(false);
+
   // Visibility flags
   const hideWorkerName = visibilitySettings?.show_worker_names === false;
   const hideEstCompletion = visibilitySettings?.show_estimated_completion === false;
@@ -213,13 +217,12 @@ export function GanttChart({
     for (let i = 0; i < totalDays; i++) {
       const d = addDays(timelineStart, i);
       const isToday = isSameDay(d, today);
-      let showLabel = true;
-      if (useWeeks) {
-        showLabel = isMonday(d) || i === 0;
-      }
+      // Label only at week starts — a tick per week reads far calmer than a
+      // number on every single day.
+      const showLabel = isMonday(d) || i === 0;
       cols.push({
         date: d,
-        label: format(d, useWeeks ? "MMM d" : "d"),
+        label: format(d, "MMM d"),
         isToday,
         showLabel,
       });
@@ -615,13 +618,29 @@ export function GanttChart({
 
   return (
     <div className="border rounded-lg overflow-hidden bg-background">
-      {/* Progress bar */}
-      {progress !== undefined && !hideProgress && (
-        <div className="px-3 py-2 border-b flex items-center gap-2">
-          <div className="flex-1 bg-secondary rounded-full h-2 max-w-[200px]">
-            <div className="bg-primary rounded-full h-2 transition-all" style={{ width: `${progress}%` }} />
-          </div>
-          <span className="text-xs text-muted-foreground font-medium">{progress}%</span>
+      {/* Top bar: progress + controls */}
+      {((progress !== undefined && !hideProgress) || dependencies.length > 0) && (
+        <div className="px-3 py-2 border-b flex items-center gap-3">
+          {progress !== undefined && !hideProgress && (
+            <>
+              <div className="flex-1 bg-secondary rounded-full h-2 max-w-[200px]">
+                <div className="bg-primary rounded-full h-2 transition-all" style={{ width: `${progress}%` }} />
+              </div>
+              <span className="text-xs text-muted-foreground font-medium">{progress}%</span>
+            </>
+          )}
+          {dependencies.length > 0 && (
+            <button
+              onClick={() => setShowDeps((s) => !s)}
+              className={`ml-auto text-xs px-2 py-1 rounded-md border transition-colors ${
+                showDeps
+                  ? "border-primary/40 bg-primary/5 text-primary"
+                  : "border-transparent text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+              }`}
+            >
+              {showDeps ? "Hide dependencies" : "Show dependencies"}
+            </button>
+          )}
         </div>
       )}
 
@@ -728,7 +747,7 @@ export function GanttChart({
               {monthHeaders.map((mh) => (
                 <div
                   key={`${mh.label}-${mh.startCol}`}
-                  className="text-[10px] font-medium text-muted-foreground flex items-center justify-center border-r"
+                  className="text-[11px] font-semibold text-muted-foreground flex items-center pl-2"
                   style={{ width: mh.span * colWidth, marginLeft: mh.startCol === 0 ? 0 : undefined }}
                 >
                   {mh.label}
@@ -740,11 +759,7 @@ export function GanttChart({
               {dateColumns.map((col, i) => (
                 <div
                   key={i}
-                  className={`text-[10px] text-center border-r flex items-center justify-center ${
-                    col.isToday
-                      ? "bg-primary/10 font-bold text-primary"
-                      : "text-muted-foreground"
-                  }`}
+                  className="text-[10px] flex items-center whitespace-nowrap overflow-visible text-muted-foreground"
                   style={{ width: colWidth }}
                 >
                   {col.showLabel ? col.label : ""}
@@ -779,18 +794,18 @@ export function GanttChart({
               {scheduled.map((_, i) => (
                 <div
                   key={i}
-                  className={`absolute w-full border-b ${i % 2 === 0 ? "bg-transparent" : "bg-muted/20"}`}
+                  className={`absolute w-full ${i % 2 === 0 ? "bg-transparent" : "bg-muted/20"}`}
                   style={{ top: i * ROW_HEIGHT, height: ROW_HEIGHT }}
                 />
               ))}
 
-              {/* Today marker */}
+              {/* Today marker — label sits up in the header band, not over row 1 */}
               {todayOffset !== null && (
                 <div
                   className="absolute top-0 w-0.5 bg-primary/60 z-10"
                   style={{ left: todayOffset, height: chartHeight }}
                 >
-                  <div className="absolute -top-0.5 left-1/2 -translate-x-1/2 bg-primary text-primary-foreground text-[9px] font-medium px-1.5 py-0.5 rounded-b-sm whitespace-nowrap">
+                  <div className="absolute left-1/2 -translate-x-1/2 -translate-y-full bg-primary text-primary-foreground text-[9px] font-medium px-1.5 py-0.5 rounded-t-sm whitespace-nowrap">
                     Today
                   </div>
                 </div>
@@ -803,13 +818,13 @@ export function GanttChart({
                     <path d="M 0 0 L 8 3 L 0 6 Z" className="fill-muted-foreground/40" />
                   </marker>
                 </defs>
-                {depArrows.map((arrow) => (
+                {showDeps && depArrows.map((arrow) => (
                   <path
                     key={arrow.id}
                     d={arrow.path}
                     fill="none"
-                    className="stroke-muted-foreground/40"
-                    strokeWidth={1.25}
+                    className="stroke-muted-foreground/50"
+                    strokeWidth={1.5}
                     markerEnd="url(#gantt-arrow)"
                   />
                 ))}
