@@ -18,6 +18,15 @@ export async function POST(request: NextRequest) {
         { status: 503 }
       );
     }
+    // Surface a clear message instead of the cryptic "supabaseKey is required"
+    // that createAdminClient() throws when this env var is missing (common on a
+    // fresh Vercel environment).
+    if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      return NextResponse.json(
+        { error: "Server misconfigured: SUPABASE_SERVICE_ROLE_KEY is not set in this environment." },
+        { status: 503 }
+      );
+    }
 
     const { appointmentId } = await request.json();
     if (!appointmentId) {
@@ -101,13 +110,23 @@ export async function POST(request: NextRequest) {
           properties: { exp, eject_at_room_exp: true, enable_screenshare: true },
         }),
       });
-      if (!createRoom.ok) {
-        return NextResponse.json(
-          { error: `Failed to create room: ${await createRoom.text()}` },
-          { status: 502 }
-        );
+      if (createRoom.ok) {
+        roomUrl = (await createRoom.json()).url;
+      } else {
+        // A concurrent request (e.g. PM and client joining together) may have
+        // created the room between our GET and POST — Daily then returns 400
+        // "already exists". Re-fetch instead of failing.
+        const retry = await fetch(`${DAILY_API}/rooms/${roomName}`, {
+          headers: { Authorization: `Bearer ${apiKey}` },
+        });
+        if (!retry.ok) {
+          return NextResponse.json(
+            { error: `Failed to create room: ${await createRoom.text()}` },
+            { status: 502 }
+          );
+        }
+        roomUrl = (await retry.json()).url;
       }
-      roomUrl = (await createRoom.json()).url;
     } else {
       return NextResponse.json(
         { error: `Daily error: ${await getRoom.text()}` },
