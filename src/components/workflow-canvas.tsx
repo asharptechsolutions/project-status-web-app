@@ -678,7 +678,14 @@ function WorkflowCanvasInner({
       savePositions();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stages.map((s) => `${s.id}:${s.status}:${s.assigned_to}:${s.estimated_completion}`).join(","), direction]);
+  }, [
+    stages.map((s) => `${s.id}:${s.status}:${s.assigned_to}:${s.estimated_completion}`).join(","),
+    // Re-sync when dependencies change or finish loading — otherwise edges can
+    // render stale/missing (e.g. deps arrive after the canvas mounts) until a
+    // full page refresh.
+    (dependencies || []).map((d) => `${d.id}:${d.source_stage_id}:${d.target_stage_id}`).join(","),
+    direction,
+  ]);
 
   // Update node draggable when locked changes
   useEffect(() => {
