@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, Fragment } from "react";
 import {
   differenceInDays,
   addDays,
@@ -7,6 +7,7 @@ import {
   format,
   isMonday,
   isSameDay,
+  isWeekend,
   parseISO,
 } from "date-fns";
 import type { ProjectStage, StageDependency, ClientVisibilitySettings } from "@/lib/types";
@@ -753,15 +754,25 @@ export function GanttChart({
 
             {/* Chart area */}
             <div className="relative" style={{ height: chartHeight }} ref={chartAreaRef}>
-              {/* Grid lines */}
+              {/* Weekend shading (day view only) — calmer than a line per day */}
+              {!useWeeks && dateColumns.map((col, i) => (
+                isWeekend(col.date) ? (
+                  <div
+                    key={`wknd-${i}`}
+                    className="absolute top-0 bg-muted/40"
+                    style={{ left: i * colWidth, width: colWidth, height: chartHeight }}
+                  />
+                ) : null
+              ))}
+              {/* Subtle separators only at week starts */}
               {dateColumns.map((col, i) => (
-                <div
-                  key={i}
-                  className={`absolute top-0 ${
-                    col.isToday ? "border-r border-primary/30" : "border-r border-dashed border-border/50"
-                  }`}
-                  style={{ left: i * colWidth + colWidth, height: chartHeight, width: 0 }}
-                />
+                isMonday(col.date) && i > 0 ? (
+                  <div
+                    key={`wk-${i}`}
+                    className="absolute top-0 border-l border-border/60"
+                    style={{ left: i * colWidth, height: chartHeight, width: 0 }}
+                  />
+                ) : null
               ))}
 
               {/* Row backgrounds */}
@@ -789,7 +800,7 @@ export function GanttChart({
               <svg className="absolute inset-0 pointer-events-none z-20" style={{ width: chartWidth, height: chartHeight }}>
                 <defs>
                   <marker id="gantt-arrow" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
-                    <path d="M 0 0 L 8 3 L 0 6 Z" className="fill-muted-foreground" />
+                    <path d="M 0 0 L 8 3 L 0 6 Z" className="fill-muted-foreground/40" />
                   </marker>
                 </defs>
                 {depArrows.map((arrow) => (
@@ -797,8 +808,8 @@ export function GanttChart({
                     key={arrow.id}
                     d={arrow.path}
                     fill="none"
-                    className="stroke-muted-foreground"
-                    strokeWidth={1.5}
+                    className="stroke-muted-foreground/40"
+                    strokeWidth={1.25}
                     markerEnd="url(#gantt-arrow)"
                   />
                 ))}
@@ -861,9 +872,11 @@ export function GanttChart({
                   }
                 }
 
+                const narrow = barWidth < 72;
+
                 return (
+                  <Fragment key={stage.id}>
                   <div
-                    key={stage.id}
                     className={`absolute rounded-md shadow-sm border group/bar ${
                       isDragging ? "ring-2 ring-primary shadow-md z-30" : "z-10"
                     } ${isLinkTarget ? "ring-2 ring-blue-400 shadow-lg z-30" : ""} ${canDrag ? "cursor-grab" : ""}`}
@@ -889,17 +902,19 @@ export function GanttChart({
                       />
                     )}
 
-                    {/* Bar label */}
-                    <div className="absolute inset-0 flex items-center px-2 overflow-hidden">
-                      <span className="text-[11px] font-medium text-white truncate drop-shadow-sm">
-                        {stage.name}
-                        {!hideEstCompletion && stage.estimated_completion && barWidth > 120 && (
-                          <span className="opacity-75 ml-1">
-                            {format(parseDate(stage.estimated_completion)!, "MMM d")}
-                          </span>
-                        )}
-                      </span>
-                    </div>
+                    {/* Bar label inside — only when the bar is wide enough to read */}
+                    {!narrow && (
+                      <div className="absolute inset-0 flex items-center px-2 overflow-hidden">
+                        <span className="text-[11px] font-medium text-white truncate drop-shadow-sm">
+                          {stage.name}
+                          {!hideEstCompletion && stage.estimated_completion && barWidth > 120 && (
+                            <span className="opacity-75 ml-1">
+                              {format(parseDate(stage.estimated_completion)!, "MMM d")}
+                            </span>
+                          )}
+                        </span>
+                      </div>
+                    )}
 
                     {/* Drag handles for start and end edges */}
                     {canDrag && (
@@ -935,6 +950,16 @@ export function GanttChart({
                       </div>
                     )}
                   </div>
+                  {/* Narrow bars: show the name beside the bar instead of clipping it */}
+                  {narrow && (
+                    <div
+                      className="absolute z-10 flex items-center text-[11px] font-medium text-foreground whitespace-nowrap pointer-events-none"
+                      style={{ left: barX + barWidth + 6, top: y, height: BAR_HEIGHT }}
+                    >
+                      {stage.name}
+                    </div>
+                  )}
+                  </Fragment>
                 );
               })}
             </div>
