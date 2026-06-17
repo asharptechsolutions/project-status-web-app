@@ -46,30 +46,47 @@ function ParticipantTile({
   const audioOn = participant.tracks?.audio?.state === "playable";
   const name = participant.user_name || (isLocal ? "You" : "Guest");
 
+  // Attach the video track and explicitly play(). Depends on videoOn too so it
+  // re-runs whenever the tile flips between video and the avatar. autoplay of an
+  // *unmuted* video is blocked by browsers, so the tile is always muted and the
+  // participant's audio is played through the separate <audio> element below.
   useEffect(() => {
     const el = videoRef.current;
-    if (el && videoTrack) el.srcObject = new MediaStream([videoTrack]);
-    else if (el) el.srcObject = null;
-  }, [videoTrack]);
+    if (!el) return;
+    if (videoTrack) {
+      el.srcObject = new MediaStream([videoTrack]);
+      el.play?.().catch(() => {});
+    } else {
+      el.srcObject = null;
+    }
+  }, [videoTrack, videoOn]);
 
-  // Never play local audio back (echo). Remote audio plays through its element.
+  // Remote audio plays through its own element; never play local audio (echo).
   useEffect(() => {
     const el = audioRef.current;
-    if (!isLocal && el && audioTrack) el.srcObject = new MediaStream([audioTrack]);
+    if (isLocal || !el) return;
+    if (audioTrack) {
+      el.srcObject = new MediaStream([audioTrack]);
+      el.play?.().catch(() => {});
+    } else {
+      el.srcObject = null;
+    }
   }, [audioTrack, isLocal]);
 
   return (
     <div className="relative aspect-video overflow-hidden rounded-xl border bg-muted">
-      {videoOn ? (
-        <video
-          ref={videoRef}
-          autoPlay
-          playsInline
-          muted={isLocal}
-          className={cn("h-full w-full object-cover", isLocal && "-scale-x-100")}
-        />
-      ) : (
-        <div className="flex h-full w-full items-center justify-center">
+      {/* Always mounted so the ref is stable as video toggles on/off. Always
+          muted — audio comes from the <audio> element; an unmuted video tile
+          would be blocked from autoplaying and render blank. */}
+      <video
+        ref={videoRef}
+        autoPlay
+        playsInline
+        muted
+        className={cn("h-full w-full object-cover", isLocal && "-scale-x-100", !videoOn && "invisible")}
+      />
+      {!videoOn && (
+        <div className="absolute inset-0 flex items-center justify-center">
           <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary/15 text-lg font-semibold text-primary">
             {initials(name)}
           </div>
