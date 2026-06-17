@@ -23,6 +23,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
 
+    // Link clients to their project's tracking page. If they're already signed
+    // in they land on the project; otherwise /track shows the sign-in form and
+    // returns them here afterward.
+    const origin = request.headers.get("origin")
+      || `${request.headers.get("x-forwarded-proto") || "https"}://${request.headers.get("host") || "projectstatus.app"}`;
+    const trackLink = `${origin}/track/?id=${projectId}`;
+
     // Verify the caller is authenticated
     const supabase = await createServerSupabaseClient();
     const { data: { user } } = await supabase.auth.getUser();
@@ -122,6 +129,7 @@ export async function POST(request: NextRequest) {
           project_name: projectName || "",
           stage_name: stageName || "",
           eta: body.eta || "in progress",
+          track_link: trackLink,
         };
         const { subject, html } = renderEmail(emailSubject, emailBody, variables, branding, layout);
         await fetch("https://api.resend.com/emails", {
@@ -185,6 +193,7 @@ export async function POST(request: NextRequest) {
           org_name: branding.org_name,
           project_name: projectName || "",
           stage_name: stageName || "",
+          track_link: trackLink,
         };
 
         const { subject, html } = renderEmail(emailSubject, emailBody, variables, branding, layout);
