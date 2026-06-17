@@ -138,7 +138,15 @@ function MeetInner() {
   const [joinInfo, setJoinInfo] = useState<{ url: string; token: string; isOwner: boolean } | null>(null);
 
   const callRef = useRef<DailyCall | null>(null);
-  const backTo = isClient ? "/track/" : "/calendar/";
+  // Where "Go back" / the header back arrow returns to. Clients go to their
+  // project's tracking page — which needs the project id, so fall back to the
+  // dashboard if the appointment isn't loaded (e.g. the error state). Admins go
+  // to the calendar.
+  const backTo = !isClient
+    ? "/calendar/"
+    : appointment?.project_id
+      ? `/track/?id=${appointment.project_id}`
+      : "/";
 
   // 1. Load the appointment (for the header) and request join credentials.
   const load = useCallback(async () => {
