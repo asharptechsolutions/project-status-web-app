@@ -3,7 +3,7 @@ import { useEffect, useState, useCallback } from "react";
 import { Navbar } from "@/components/navbar";
 import { AuthGate } from "@/components/auth-gate";
 import { useAuth } from "@/lib/auth-context";
-import { getProjects, getAssignedProjects, getClientProjects, getUpcomingAppointments, getClientUpcomingAppointments, getStagesForProjects, getCompanies } from "@/lib/data";
+import { getProjects, getAssignedProjects, getClientProjects, getUpcomingAppointments, getClientUpcomingAppointments, getStagesForProjects, getCompanies, getProjectsUnread, type ProjectUnread } from "@/lib/data";
 import { useEtaModel } from "@/lib/use-eta-model";
 import { EtaBadge } from "@/components/eta-badge";
 import { createClient } from "@/lib/supabase";
@@ -11,7 +11,7 @@ import type { Project, ProjectStage, Appointment } from "@/lib/types";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { FolderOpen, Clock, CheckCircle2, CalendarDays, AlertTriangle, TrendingUp, ChevronRight, Building2, Plus } from "lucide-react";
+import { FolderOpen, Clock, CheckCircle2, CalendarDays, AlertTriangle, TrendingUp, ChevronRight, Building2, Plus, MessageSquare, Paperclip } from "lucide-react";
 import { GettingStartedChecklist } from "@/components/getting-started-checklist";
 import { JoinCallButton } from "@/components/join-call-button";
 import { EmptyState } from "@/components/empty-state";
@@ -77,9 +77,10 @@ function groupAppointmentsByDay(appts: Appointment[]): { label: string; appointm
 }
 
 function Dashboard() {
-  const { orgId, isAdmin, isWorker, isClient, member } = useAuth();
+  const { orgId, userId, isAdmin, isWorker, isClient, member } = useAuth();
   const etaModel = useEtaModel(orgId);
   const [projects, setProjects] = useState<Project[]>([]);
+  const [unreadByProject, setUnreadByProject] = useState<Record<string, ProjectUnread>>({});
   const [companyMap, setCompanyMap] = useState<Record<string, string>>({});
   const [projectProgress, setProjectProgress] = useState<Record<string, number>>({});
   const [projectSchedule, setProjectSchedule] = useState<Record<string, number | null>>({});
@@ -109,6 +110,9 @@ function Dashboard() {
           getCompanies(orgId),
         ]);
         setProjects(p);
+        if (userId && p.length > 0) {
+          getProjectsUnread(userId, p.map((proj) => proj.id)).then(setUnreadByProject).catch(() => {});
+        }
         const cMap: Record<string, string> = {};
         companies.forEach((c) => { cMap[c.id] = c.name; });
         setCompanyMap(cMap);
@@ -160,7 +164,7 @@ function Dashboard() {
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, [orgId, isClient, isAdmin, member]);
+  }, [orgId, userId, isClient, isAdmin, member]);
 
   const active = projects.filter((p) => p.status === "active");
   const completed = projects.filter((p) => p.status === "completed");
@@ -295,7 +299,19 @@ function Dashboard() {
                       <CardContent className="pt-4 pb-4">
                         <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
                           <div className="min-w-0 flex-1">
-                            <p className="font-medium group-hover:text-primary transition-colors">{p.name}</p>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <p className="font-medium group-hover:text-primary transition-colors">{p.name}</p>
+                              {unreadByProject[p.id]?.chat && (
+                                <span className="inline-flex items-center gap-1 rounded-full bg-blue-500/10 px-2 py-0.5 text-[11px] font-medium text-blue-600 dark:text-blue-400">
+                                  <MessageSquare className="h-3 w-3" /> New message
+                                </span>
+                              )}
+                              {unreadByProject[p.id]?.files && (
+                                <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-600 dark:text-amber-400">
+                                  <Paperclip className="h-3 w-3" /> New file
+                                </span>
+                              )}
+                            </div>
                             {p.company_id && companyMap[p.company_id] && (
                               <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
                                 <Building2 className="h-3 w-3" /> {companyMap[p.company_id]}

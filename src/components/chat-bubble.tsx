@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState, useRef, useCallback, forwardRef, useImperativeHandle } from "react";
 import {
-  getProjectMessages, sendProjectMessage, sendFileMessage, deleteFileRecord, getProjectFiles, getMessageReadStatus, markMessagesRead,
+  getProjectMessages, sendProjectMessage, sendFileMessage, deleteFileRecord, getProjectFiles, getMessageReadStatus, markMessagesRead, markFilesRead,
   registerDeviceKey, getMyKeyGrant, getProjectKeyGrants, getDeviceKeysForUsers, createKeyGrants, getMembers, getProjectClients,
 } from "@/lib/data";
 import {
@@ -350,6 +350,14 @@ export const ChatBubble = forwardRef<ChatBubbleHandle, ChatBubbleProps>(function
       });
     }
   }, [open, messages.length, userId, projectId]);
+
+  // Mark files seen when the files view is open, so the dashboard's "new file"
+  // indicator clears once the user has looked at them.
+  useEffect(() => {
+    if (open && view === "files" && userId && !filesDisabled) {
+      markFilesRead(userId, projectId).catch(console.error);
+    }
+  }, [open, view, userId, projectId, filesDisabled, files.length]);
 
   // Auto-scroll to bottom when new messages arrive or panel opens
   useEffect(() => {

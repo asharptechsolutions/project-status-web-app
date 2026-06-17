@@ -903,6 +903,67 @@ export async function markMessagesRead(
   if (error) throw new Error(error.message);
 }
 
+export async function markFilesRead(
+  userId: string,
+  projectId: string
+): Promise<void> {
+  const { error } = await supabase
+    .from("file_read_status")
+    .upsert(
+      { user_id: userId, project_id: projectId, last_read_at: new Date().toISOString() },
+      { onConflict: "user_id,project_id" }
+    );
+  if (error) throw new Error(error.message);
+}
+
+export interface ProjectUnread {
+  chat: boolean;
+  files: boolean;
+}
+
+/**
+ * For a set of projects, whether the user has unread chat messages and/or newly
+ * received files — i.e. items from someone else, created since the user last
+ * viewed that project's chat / files. Used for dashboard indicators.
+ */
+export async function getProjectsUnread(
+  userId: string,
+  projectIds: string[]
+): Promise<Record<string, ProjectUnread>> {
+  const result: Record<string, ProjectUnread> = {};
+  if (projectIds.length === 0) return result;
+  for (const pid of projectIds) result[pid] = { chat: false, files: false };
+
+  const [readRes, fileReadRes, msgRes, fileRes] = await Promise.all([
+    supabase.from("message_read_status").select("project_id, last_read_at").eq("user_id", userId).in("project_id", projectIds),
+    supabase.from("file_read_status").select("project_id, last_read_at").eq("user_id", userId).in("project_id", projectIds),
+    supabase.from("messages").select("project_id, created_at").in("project_id", projectIds).neq("sender_id", userId),
+    supabase.from("files").select("project_id, created_at").in("project_id", projectIds).neq("uploaded_by", userId),
+  ]);
+
+  const chatReadAt = new Map<string, number>();
+  for (const r of readRes.data || []) chatReadAt.set(r.project_id, new Date(r.last_read_at).getTime());
+  const fileReadAt = new Map<string, number>();
+  for (const r of fileReadRes.data || []) fileReadAt.set(r.project_id, new Date(r.last_read_at).getTime());
+
+  for (const m of msgRes.data || []) {
+    if (result[m.project_id] && new Date(m.created_at).getTime() > (chatReadAt.get(m.project_id) ?? 0)) {
+      result[m.project_id].chat = true;
+    }
+  }
+  // Only flag files if we could read the file-view timestamps. If that query
+  // errored (e.g. the file_read_status table isn't migrated yet), skip file
+  // flagging entirely rather than marking every existing file as "new".
+  if (!fileReadRes.error) {
+    for (const f of fileRes.data || []) {
+      if (result[f.project_id] && new Date(f.created_at).getTime() > (fileReadAt.get(f.project_id) ?? 0)) {
+        result[f.project_id].files = true;
+      }
+    }
+  }
+  return result;
+}
+
 // ============ ASSIGNED PROJECTS FOR CLIENT ============
 
 export async function getAssignedProjects(
