@@ -110,6 +110,7 @@ See you inside!`,
       ...GLOBAL_PLACEHOLDERS,
       { key: "project_name", label: "Project Name", example: "Kitchen Renovation" },
       { key: "stage_name", label: "Stage Name", example: "Demolition" },
+      { key: "track_link", label: "Tracking Link", example: "https://projectstatus.app/track/?id=..." },
     ],
     presets: [
       {
@@ -120,7 +121,7 @@ See you inside!`,
 
 The stage **{{stage_name}}** in your project **{{project_name}}** has been marked as completed.
 
-Log in to your dashboard to see the latest progress.`,
+[Log in]({{track_link}}) to your dashboard to see the latest progress.`,
       },
       {
         id: "friendly",
@@ -130,7 +131,7 @@ Log in to your dashboard to see the latest progress.`,
 
 We're happy to let you know that **{{stage_name}}** on your **{{project_name}}** project has been completed!
 
-Things are moving along nicely. Check your dashboard to see how everything is progressing.
+Things are moving along nicely. [Check your dashboard]({{track_link}}) to see how everything is progressing.
 
 Thanks for your patience!`,
       },
@@ -144,7 +145,7 @@ This is a progress update from **{{org_name}}** regarding your project **{{proje
 
 **Completed stage:** {{stage_name}}
 
-Our team has finished this phase and the project is moving to the next step. You can view the full project timeline and status by logging in to your dashboard.
+Our team has finished this phase and the project is moving to the next step. You can view the full project timeline and status by [logging in to your dashboard]({{track_link}}).
 
 If you have any questions, don't hesitate to reach out.
 
@@ -162,6 +163,7 @@ The {{org_name}} Team`,
       { key: "project_name", label: "Project Name", example: "Kitchen Renovation" },
       { key: "stage_name", label: "Stage Name", example: "Finishing" },
       { key: "eta", label: "Estimated Completion", example: "Jun 18–20" },
+      { key: "track_link", label: "Tracking Link", example: "https://projectstatus.app/track/?id=..." },
     ],
     presets: [
       {
@@ -174,7 +176,7 @@ Good news — your project **{{project_name}}** just moved into **{{stage_name}}
 
 **Estimated completion:** {{eta}}
 
-You can follow along live any time from your tracking page.`,
+You can [follow along live any time]({{track_link}}) from your tracking page.`,
       },
       {
         id: "professional",
@@ -186,7 +188,7 @@ Your project **{{project_name}}** has advanced to **{{stage_name}}**.
 
 **Estimated completion:** {{eta}}
 
-Log in to your tracking page for the full status.`,
+[Log in]({{track_link}}) to your tracking page for the full status.`,
       },
     ],
   },
@@ -330,8 +332,13 @@ export function interpolate(template: string, variables: Record<string, string>)
  * Convert simple markdown-like formatting to HTML.
  * Supports **bold** and line breaks.
  */
-function markdownToHtml(text: string): string {
+function markdownToHtml(text: string, linkColor: string = "#2563eb"): string {
   return text
+    // [label](url) → anchor. Done before bold so the URL isn't touched.
+    .replace(
+      /\[([^\]]+)\]\(([^)\s]+)\)/g,
+      `<a href="$2" style="color:${linkColor};text-decoration:underline;">$1</a>`
+    )
     .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
     .split("\n")
     .map((line) => (line.trim() === "" ? "<br/>" : `<p style="margin:0 0 8px 0;">${line}</p>`))
@@ -517,9 +524,8 @@ export function renderEmail(
   layout: EmailLayout = "classic"
 ): { subject: string; html: string } {
   const renderedSubject = interpolate(subject, variables);
-  const renderedBody = markdownToHtml(interpolate(body, variables));
-
   const color = branding.primary_color || "#2563eb";
+  const renderedBody = markdownToHtml(interpolate(body, variables), color);
   const finalBody = processBody(renderedBody, variables, color);
 
   const layoutRenderer = LAYOUT_RENDERERS[layout] || LAYOUT_RENDERERS.classic;
