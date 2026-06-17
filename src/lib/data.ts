@@ -1267,9 +1267,35 @@ export async function getClientAppointments(
     .eq("client_id", clientId)
     .eq("status", "confirmed");
   if (error) throw new Error(error.message);
-  const now = new Date();
+  // Keep calls until 30 min past their end — matching the join window — so the
+  // card doesn't disappear while the call is still joinable.
+  const cutoff = Date.now() - 30 * 60 * 1000;
   return (data || [])
-    .filter((d: any) => d.slot && new Date(d.slot.end_time) > now)
+    .filter((d: any) => d.slot && new Date(d.slot.end_time).getTime() > cutoff)
+    .sort((a: any, b: any) => new Date(a.slot.start_time).getTime() - new Date(b.slot.start_time).getTime())
+    .map((d: any) => ({
+      ...d,
+      slot: d.slot || undefined,
+      project_name: d.project?.name || undefined,
+      project: undefined,
+    })) as Appointment[];
+}
+
+/** Upcoming/joinable confirmed calls for this client across ALL their projects. */
+export async function getClientUpcomingAppointments(
+  teamId: string,
+  clientId: string
+): Promise<Appointment[]> {
+  const { data, error } = await supabase
+    .from("appointments")
+    .select("*, slot:availability_slots(*), project:projects(name)")
+    .eq("team_id", teamId)
+    .eq("client_id", clientId)
+    .eq("status", "confirmed");
+  if (error) throw new Error(error.message);
+  const cutoff = Date.now() - 30 * 60 * 1000; // keep until 30 min past end
+  return (data || [])
+    .filter((d: any) => d.slot && new Date(d.slot.end_time).getTime() > cutoff)
     .sort((a: any, b: any) => new Date(a.slot.start_time).getTime() - new Date(b.slot.start_time).getTime())
     .map((d: any) => ({
       ...d,

@@ -43,11 +43,20 @@ export async function POST(request: NextRequest) {
     const admin = createAdminClient();
 
     // Load the appointment (with its slot for call timing).
-    const { data: appt } = await admin
+    const { data: appt, error: apptErr } = await admin
       .from("appointments")
       .select("*, slot:availability_slots(*)")
       .eq("id", appointmentId)
       .single();
+    // PGRST116 = "no rows" (genuinely missing). Any other error means the admin
+    // client couldn't run the query — almost always a bad SUPABASE_SERVICE_ROLE_KEY
+    // (e.g. copied with surrounding quotes, or the anon/publishable key by mistake).
+    if (apptErr && apptErr.code !== "PGRST116") {
+      return NextResponse.json(
+        { error: `Appointment lookup failed: ${apptErr.message}. Check SUPABASE_SERVICE_ROLE_KEY in this environment.` },
+        { status: 500 }
+      );
+    }
     if (!appt || appt.status === "cancelled") {
       return NextResponse.json({ error: "Appointment not available" }, { status: 404 });
     }

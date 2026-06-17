@@ -3,7 +3,7 @@ import { useEffect, useState, useCallback } from "react";
 import { Navbar } from "@/components/navbar";
 import { AuthGate } from "@/components/auth-gate";
 import { useAuth } from "@/lib/auth-context";
-import { getProjects, getAssignedProjects, getClientProjects, getUpcomingAppointments, getStagesForProjects, getCompanies } from "@/lib/data";
+import { getProjects, getAssignedProjects, getClientProjects, getUpcomingAppointments, getClientUpcomingAppointments, getStagesForProjects, getCompanies } from "@/lib/data";
 import { useEtaModel } from "@/lib/use-eta-model";
 import { EtaBadge } from "@/components/eta-badge";
 import { createClient } from "@/lib/supabase";
@@ -132,6 +132,8 @@ function Dashboard() {
 
         if (isAdmin) {
           setUpcomingAppts(await getUpcomingAppointments(orgId));
+        } else if (isClient && member) {
+          setUpcomingAppts(await getClientUpcomingAppointments(orgId, member.id));
         }
       } catch (err: any) {
         toast.error(err.message || "Failed to load projects");
@@ -139,14 +141,21 @@ function Dashboard() {
     };
     load();
 
-    if (!isAdmin) return;
+    // Live-update appointments for admins (all org) and clients (their own).
+    if (!(isAdmin || (isClient && member))) return;
+    const reloadAppts = () => {
+      const p = isAdmin
+        ? getUpcomingAppointments(orgId)
+        : getClientUpcomingAppointments(orgId, member!.id);
+      p.then(setUpcomingAppts).catch(console.error);
+    };
     const supabase = createClient();
     const channel = supabase
       .channel(`dashboard-appts:${orgId}`)
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "appointments", filter: `team_id=eq.${orgId}` },
-        () => { getUpcomingAppointments(orgId).then(setUpcomingAppts).catch(console.error); }
+        reloadAppts
       )
       .subscribe();
 
@@ -205,21 +214,23 @@ function Dashboard() {
           </div>
         )}
 
-        {isAdmin && (
+        {(isAdmin || (isClient && upcomingAppts.length > 0)) && (
           <div className="mb-8 opacity-0 animate-fade-up stagger-3">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2.5">
                 <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center">
                   <CalendarDays className="h-4 w-4 text-primary" />
                 </div>
-                <h2 className="text-lg font-semibold tracking-tight">Upcoming Appointments</h2>
+                <h2 className="text-lg font-semibold tracking-tight">{isClient ? "Upcoming Calls" : "Upcoming Appointments"}</h2>
                 {upcomingAppts.length > 0 && (
                   <Badge variant="secondary" className="rounded-full">{upcomingAppts.length}</Badge>
                 )}
               </div>
-              <Link href="/calendar/">
-                <Button variant="ghost" size="sm" className="rounded-full text-muted-foreground">View Calendar</Button>
-              </Link>
+              {isAdmin && (
+                <Link href="/calendar/">
+                  <Button variant="ghost" size="sm" className="rounded-full text-muted-foreground">View Calendar</Button>
+                </Link>
+              )}
             </div>
             {upcomingAppts.length === 0 ? (
               <Card>
@@ -237,7 +248,7 @@ function Dashboard() {
                         <Card key={appt.id} className="hover:shadow-md hover:border-primary/10 transition-all duration-200">
                           <CardContent className="pt-4 pb-4">
                             <div className="flex items-center justify-between mb-1">
-                              <span className="font-medium text-sm">{appt.client_name}</span>
+                              <span className="font-medium text-sm">{isClient ? (appt.project_name || "Video call") : appt.client_name}</span>
                               {appt.slot && (
                                 <span className="text-xs text-muted-foreground font-mono">
                                   {new Date(appt.slot.start_time).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
@@ -246,7 +257,7 @@ function Dashboard() {
                                 </span>
                               )}
                             </div>
-                            {appt.project_name && (
+                            {!isClient && appt.project_name && (
                               <p className="text-xs text-muted-foreground">{appt.project_name}</p>
                             )}
                             {appt.notes && (
