@@ -232,7 +232,11 @@ function MeetInner() {
   const toggleCam = () => callRef.current?.setLocalVideo(!camOn);
   const toggleShare = () =>
     sharing ? callRef.current?.stopScreenShare() : callRef.current?.startScreenShare();
-  const leave = () => callRef.current?.leave();
+  // Ending the call returns to the dashboard. Navigating away unmounts this
+  // page, and the join effect's cleanup leaves + destroys the call — so we skip
+  // the intermediate "you left" screen for a voluntary exit. (That screen still
+  // shows if Daily ends the call on us, e.g. the host removes a participant.)
+  const endCall = () => router.push("/");
   const muteParticipant = (sid: string) => callRef.current?.updateParticipant(sid, { setAudio: false });
   const removeParticipant = (sid: string) => callRef.current?.updateParticipant(sid, { eject: true });
 
@@ -291,7 +295,7 @@ function MeetInner() {
     <div className="flex h-[100dvh] flex-col bg-background">
       <header className="flex items-center justify-between gap-3 border-b bg-background px-4 py-2.5">
         <div className="flex min-w-0 items-center gap-3">
-          <Button variant="ghost" size="sm" onClick={leave}>
+          <Button variant="ghost" size="sm" onClick={endCall}>
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <Video className="h-5 w-5 shrink-0 text-primary" />
@@ -362,7 +366,7 @@ function MeetInner() {
         </Button>
         <Button
           variant="destructive" size="icon" className="h-11 w-11 rounded-full"
-          onClick={leave} title="Leave call"
+          onClick={endCall} title="Leave call"
         >
           <PhoneOff className="h-5 w-5" />
         </Button>
