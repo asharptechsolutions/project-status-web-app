@@ -100,13 +100,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .single();
 
       if (memberData) {
-        // Mark as joined if not already
+        // Mark as joined if not already. Goes through a server route with the
+        // admin client — RLS won't let a member update their own team_members
+        // row, so a client-side update silently no-ops and they stay "pending".
         if (!memberData.joined_at) {
-          await supabase
-            .from("team_members")
-            .update({ joined_at: new Date().toISOString() })
-            .eq("user_id", user.id)
-            .eq("team_id", memberData.team_id);
+          fetch("/api/member/mark-joined", { method: "POST" }).catch(() => {});
           memberData.joined_at = new Date().toISOString();
         }
 
