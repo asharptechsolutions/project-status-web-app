@@ -162,7 +162,7 @@ function ProjectsList() {
   const [encryptBusy, setEncryptBusy] = useState(false);
   const chatBubbleRef = useRef<ChatBubbleHandle>(null);
   const workflowLocked = selectedProject?.workflow_locked ?? false;
-  const [viewMode, setViewMode] = useState<"canvas" | "kanban" | "gantt" | "list">("list");
+  const [viewMode, setViewMode] = useState<"canvas" | "kanban" | "gantt" | "list">("canvas");
   const [detailTab, setDetailTab] = useState<"workflow" | "quotes" | "notes">("workflow");
   const [dependencies, setDependencies] = useState<StageDependency[]>([]);
   const [automationSettings, setAutomationSettings] = useState<AutomationSettings | null>(null);
